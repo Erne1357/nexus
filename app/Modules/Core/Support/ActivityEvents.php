@@ -14,6 +14,13 @@ final class ActivityEvents
     /** @var array<string, string> */
     private const array LABELS = [
         'created' => 'Alta',
+        'selection_created' => 'Selección creada',
+        'selection_csv_imported' => 'CSV de la selección importado',
+        'selection_entry_resolved' => 'Renglón resuelto',
+        'selection_entry_discarded' => 'Renglón descartado',
+        'selection_scheduled' => 'Turnos programados',
+        'selection_published' => 'Selección publicada',
+        'selection_cancelled' => 'Selección cancelada',
         'updated' => 'Cambio',
         'deleted' => 'Borrado',
         'restored' => 'Restaurado',

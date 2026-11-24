@@ -1,0 +1,90 @@
+<?php
+
+use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Models\HistoricalGroup;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherPosition;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
+use Livewire\Livewire;
+
+/*
+| Pestaña «Carga» de la ficha del docente (D-03, tarea 1.33): la semana del periodo en curso (del SII si Nexus no tiene
+| grupos en él) y la del siguiente periodo cuando ya tiene grupos en Nexus, con salón y horas contra la base. La ve
+| quien ve la ficha (TeacherPolicy).
+*/
+
+beforeEach(function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-24 10:00', 'America/Ciudad_Juarez'));
+    $this->running = Term::factory()->create(['code' => '20263', 'name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
+    $this->next = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
+    $this->campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $this->dept = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
+    $this->teacher = Teacher::factory()->adscribedTo($this->dept)->create(['rfc' => 'AAAA800101AA1', 'name' => 'Ana Pérez']);
+    TeacherPosition::factory()->for($this->teacher)->tiempoCompleto()->create();
+    $this->subject = Subject::factory()->create(['department_id' => $this->dept->id, 'code' => 'AED-1026', 'name' => 'Estructura de Datos', 'theory_hours' => 4, 'practice_hours' => 0]);
+    $this->room = Room::factory()->create(['building_id' => Building::factory()->for($this->campus)->create()->id, 'code' => '701']);
+    $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->dept->id])->create();
+});
+
+function loadTabSiiGroup(): void
+{
+    $group = HistoricalGroup::factory()->fromSii()->create(['term_code' => '20263', 'campus_id' => test()->campus->id, 'subject_id' => test()->subject->id, 'group_code' => '3A']);
+    DB::table('historical_group_sessions')->insert([
+        'historical_group_id' => $group->id, 'day' => 1, 'starts_at' => '11:00', 'ends_at' => '13:00', 'room_code' => '701',
+        'teacher_rfc' => 'AAAA800101AA1', 'created_at' => now(), 'updated_at' => now(),
+    ]);
+}
+
+function loadTabNexusGroup(): void
+{
+    $group = Group::factory()->create(['term_id' => test()->next->id, 'campus_id' => test()->campus->id, 'subject_id' => test()->subject->id, 'code' => 'C', 'teacher_id' => test()->teacher->id]);
+    GroupSession::factory()->on(2, '09:00', '11:00')->create(['group_id' => $group->id, 'room_id' => test()->room->id]);
+}
+
+it('la ficha muestra la carga del semestre en curso desde el SII con salón y horas contra la base', function () {
+    loadTabSiiGroup();
+
+    Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertSee('Ago-Dic 2026')
+        ->assertSee('En curso')
+        ->assertSee('Del SII')
+        ->assertSee('AED-1026')
+        ->assertSee('701')
+        ->assertSeeHtml('data-testid="load-hours-current"')
+        ->assertSee('h de base 40')
+        ->assertSee('Dentro de su margen')
+        ->assertSee('Todavía no tiene grupos de Ene-Jun 2027');
+});
+
+it('la ficha muestra la carga del siguiente semestre cuando tiene grupos en Nexus', function () {
+    loadTabSiiGroup();
+    loadTabNexusGroup();
+
+    Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertSee('Ago-Dic 2026')
+        ->assertSee('Ene-Jun 2027')
+        ->assertSee('De la selección')
+        ->assertSeeHtml('data-testid="load-hours-next"')
+        ->assertDontSee('Todavía no tiene grupos');
+});
+
+it('quien no puede ver la ficha no ve la pestaña Carga', function () {
+    $otro = Department::factory()->create(['code' => 'CB']);
+    $jefeOtro = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $otro->id])->create();
+
+    Livewire::actingAs($jefeOtro)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertForbidden();
+
+    Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id])
+        ->assertSeeHtml('data-testid="tab-carga"');
+});

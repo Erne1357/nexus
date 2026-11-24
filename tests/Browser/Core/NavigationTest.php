@@ -140,6 +140,9 @@ it('el menú no brinca: lo que espera para moverse sale de su lugar inicial, la 
 });
 
 it('cambia el periodo activo desde la credencial y lo confirma con un toast', function () {
+    // La credencial muestra el periodo de consulta, el en curso por omisión (TP-03, TP-04): el día cae en Ene-Jun 2027.
+    $this->travelTo('2027-02-01 10:00:00');
+
     signInFromBrowser('admin')
         ->assertSeeIn('@credential', 'Administración · Ene-Jun 2027')
         ->click('@credential')

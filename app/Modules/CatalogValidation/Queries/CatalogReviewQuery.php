@@ -170,7 +170,7 @@ final class CatalogReviewQuery
      */
     public function departmentsFor(Actor $context): Collection
     {
-        $termId = $context->activeTerm()?->getKey();
+        $termId = $context->loadTerm()?->getKey();
 
         return Department::query()
             ->where(fn ($query) => $query

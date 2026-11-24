@@ -1,6 +1,6 @@
 # ADR-0013 — Despliegue on-premise en el ITCJ
 
-**Estado:** Aceptada; hay puntos por confirmar con el ITCJ (ver el final) · **Fecha:** 2026-10-27
+**Estado:** Aceptada; hay puntos por confirmar con el ITCJ (ver el final). Las filas «Versión desplegada» y «Migraciones» las reemplaza el [ADR-0033](0033-despliegue-continuo.md) (23 de noviembre de 2026) · **Fecha:** 2026-10-27
 
 ## Contexto
 `PROJECT.md` dejaba como supuesto un servidor "por confirmar: on-premise del ITCJ o un VPS", y la tarea 0.14 pide cerrarlo antes del piloto (fase 4, tarea 4.7). La imagen `prod` ya existía (inmutable, con `optimize` y migraciones opcionales al arrancar), pero el stack base solo ofrecía nginx en el puerto 80 sin cifrado, sin respaldos y sin un lugar compartido para los archivos que escriben `app` y `queue`.
@@ -16,9 +16,9 @@ El 2026-10-27 se acordó:
 |---|---|
 | Orquestación | Docker Compose en un solo servidor. `compose.yaml` queda como base y `compose.prod.yaml` es un overlay: `docker compose -f compose.yaml -f compose.prod.yaml up -d`. No se usa `compose.override.yaml` (solo desarrollo). |
 | HTTPS | **Caddy** como único punto de entrada público, con certificados de Let's Encrypt obtenidos y renovados por él mismo. Reemplaza a nginx en producción. |
-| Versión desplegada | Se construye en el servidor desde un tag de git (`v1.0.0`) y la imagen se etiqueta con `APP_IMAGE_TAG`. Volver atrás es cambiar el tag. |
+| Versión desplegada | ~~Se construye en el servidor desde un tag de git (`v1.0.0`) y la imagen se etiqueta con `APP_IMAGE_TAG`. Volver atrás es cambiar el tag.~~ Reemplazada por el [ADR-0033](0033-despliegue-continuo.md): las imágenes se construyen una vez en GitHub Actions y llegan al servidor en un paquete por release; el deployer despliega en blue/green y vuelve atrás a las imágenes exactas. |
 | Secretos | Un `.env` en el servidor con permisos `600`, fuera de git, a partir de `.env.production.example`. |
-| Migraciones | Las corre el contenedor `app` al arrancar (`RUN_MIGRATIONS=true`); `queue` espera a que `app` esté sano. |
+| Migraciones | ~~Las corre el contenedor `app` al arrancar (`RUN_MIGRATIONS=true`); `queue` espera a que `app` esté sano.~~ Reemplazada por el [ADR-0033](0033-despliegue-continuo.md): las corre el servicio `migrate`, de un solo uso, antes de arrancar el color nuevo, y deben ser expand/contract. |
 | Respaldos | Servicio `backup` con `pg_dump -Fc` diario hacia `BACKUP_DIR`: 14 diarios y 8 semanales. |
 | Registros | Laravel escribe a `stderr`; Docker rota 5 archivos de 10 MB por servicio. |
 

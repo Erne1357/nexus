@@ -6,7 +6,7 @@ use App\Modules\Core\Authorization\Actor;
 
 /**
  * La credencial de quien trabaja: su nombre, su usuario, las iniciales del avatar, el puesto activo con el nombre que
- * le da su unidad (RoleTitleQuery, AZ-02) y el periodo activo, con el resumen «Puesto · Periodo». La leen la banda
+ * le da su unidad (RoleTitleQuery, AZ-02) y el periodo de consulta (y, para quien trabaja la carga, el de carga, TP-04), con el resumen «Puesto · Periodo». La leen la banda
  * (core::components.band) y la respuesta del login en JSON (LoginResponse), que llena la credencial de la pantalla de
  * acceso antes de llevarla a la banda: así las dos dicen lo mismo.
  */
@@ -15,14 +15,14 @@ final class CredentialQuery
     public function __construct(private readonly RoleTitleQuery $titles) {}
 
     /**
-     * @return array{name: string, username: string, initials: string, role: ?string, term: ?string, summary: string}
+     * @return array{name: string, username: string, initials: string, role: ?string, term: ?string, loadTerm: ?string, summary: string}
      */
     public function of(Actor $context): array
     {
         $user = $context->user();
         $role = $context->activeRole();
         $roleLabel = $role === null ? null : $this->titles->of($context, $role)['title'];
-        $term = $context->activeTerm()?->name;
+        $term = $context->viewTerm()?->name;
 
         return [
             'name' => $user->name ?? '',
@@ -30,6 +30,7 @@ final class CredentialQuery
             'initials' => $this->initials($user->name ?? ''),
             'role' => $roleLabel,
             'term' => $term,
+            'loadTerm' => $context->worksLoad() ? $context->loadTerm()?->name : null,
             'summary' => implode(' · ', array_filter([$roleLabel, $term])),
         ];
     }

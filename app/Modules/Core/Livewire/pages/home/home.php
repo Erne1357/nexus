@@ -39,7 +39,7 @@ new #[Title('Resumen')] class extends Component
     {
         $active = $context->activeRole();
         $roles = $active === null ? [] : [$active];
-        $term = $active === null || ! $active->seesTermCalendarOnHome() ? null : $context->activeTerm();
+        $term = $active === null || ! $active->seesTermCalendarOnHome() ? null : $context->loadTerm();
         $modalities = $context->modalities();
         $windows = $term === null ? [] : $calendar->upcoming($term, $modalities->count() === 1 ? $modalities->first() : null);
         $cards = [];

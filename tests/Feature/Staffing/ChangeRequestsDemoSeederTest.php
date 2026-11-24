@@ -1,55 +1,29 @@
 <?php
 
-use App\Modules\Academic\Models\CareerCampus;
-use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Database\Seeders\ReanalysisDemoSeeder;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
-use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Target;
-use App\Modules\Core\Demo\DemoCheck;
-use App\Modules\Core\Demo\DemoContext;
-use App\Modules\Core\Demo\DemoPlan;
-use App\Modules\Core\Demo\DemoRunner;
-use App\Modules\Core\Demo\DemoStep;
-use App\Modules\Core\Enums\DemoCheckpoint;
-use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\Term;
-use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\RecipientsQuery;
-use App\Modules\Facilities\Enums\RoomType;
-use App\Modules\Facilities\Models\Building;
-use App\Modules\Facilities\Models\Room;
-use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Faculty\Enums\AvailabilityKind;
 use App\Modules\Faculty\Models\TeacherAvailability;
-use App\Modules\Scheduling\Actions\AssignGroupCode;
-use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
-use App\Modules\Scheduling\Enums\ConflictSeverity;
-use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
-use App\Modules\Scheduling\Validation\ScheduleValidator;
-use App\Modules\Scheduling\Validation\SessionCandidate;
-use App\Modules\Scheduling\Validation\Violation;
 use App\Modules\Staffing\Actions\ChangeRequests\ApplyChosenAlternative;
 use App\Modules\Staffing\Actions\ChangeRequests\ChooseChangeAlternative;
-use App\Modules\Staffing\Actions\ChangeRequests\ProposeChangeAlternatives;
 use App\Modules\Staffing\Database\Seeders\ChangeRequestsDemoSeeder;
 use App\Modules\Staffing\Enums\ChangeAlternativesStatus;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Jobs\ComputeChangeAlternatives;
 use App\Modules\Staffing\Models\ChangeRequest;
-use App\Modules\Staffing\Models\TeacherTermLoad;
 use App\Modules\Staffing\Notifications\ChangeRequestMovedTeacherGroups;
 use App\Modules\Staffing\Support\ChangeAlternatives;
 use Database\Seeders\DemoSeeder;
 use Database\Seeders\MassiveSeeder;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Tests\Support\Staffing\ChangeRequestsWorld;
 
 /*
 | Las solicitudes de cambio de la fase 8 (8.6 y 8.7) en el punto `reanalisis-casos`: el paso de Staffing reabre a ajustes
@@ -58,143 +32,24 @@ use Illuminate\Support\Facades\Event;
 | como en el masivo: publica las cargas sin grupos de EE y MM y SC queda sexta, la reservada. Como con el masivo hay
 | docentes con clases en los dos campus (lo que da el aviso de traslado, SC-09), un docente de SC da además una hora en
 | Campus I en un grupo de otro departamento, sin choques. Corre la demo real hasta `reanalisis` y solo el paso nuevo.
+|
+| Este archivo: la solicitud en cada estado y la siembra mezclada. Las pruebas van en cuatro archivos (ChangeRequestsDemo*Test) porque cada una corre la demo hasta `reanalisis`: juntas tardaban unos 8 minutos en un proceso (docs/arquitectura/testing.md, «Shards»). Los atajos están en tests/Support/Staffing/ChangeRequestsWorld.php.
 */
 
-/**
- * Un docente de SC con horas libres da una hora en Campus I, en un grupo de Ciencias Básicas sin choques (su carrera se
- * ofrece ahí), justo antes de una hora en que uno de sus grupos de SC podría ir sin chocar: su salón está libre, nadie de
- * su semestre tiene clase y el docente está libre y disponible. Así mover ahí esa sesión deja solo el aviso de traslado.
- */
-function crossCampusTeacherForChangeRequests(Term $term): void
-{
-    $sc = Department::query()->where('code', 'SC')->sole();
-    $teacherId = TeacherTermLoad::query()->where('term_id', $term->id)->where('remaining_hours', '>=', 4)
-        ->whereIn('teacher_id', Group::query()->active()->where('term_id', $term->id)->where('department_id', $sc->id)->select('teacher_id'))
-        ->join('teachers', 'teachers.id', '=', 'teacher_term_loads.teacher_id')->whereNotNull('teachers.user_id')
-        ->orderBy('teachers.rfc')->value('teacher_term_loads.teacher_id');
-    $group = Group::query()->active()->with('sessions')->where('term_id', $term->id)->where('department_id', $sc->id)->where('teacher_id', $teacherId)->orderBy('code')->first();
-    $session = $group->sessions->sortBy([['day', 'asc'], ['starts_at', 'asc']])->first();
-    $length = (strtotime((string) $session->ends_at) - strtotime((string) $session->starts_at)) / 3600;
-    $sessions = GroupSession::query()->with('group')->whereHas('group', fn ($query) => $query->active()->where('term_id', $term->id))->get();
-    $unavailable = TeacherAvailability::query()->where('teacher_id', $teacherId)->where('term_id', $term->id)->where('kind', AvailabilityKind::Unavailable->value)->get();
-    $overlaps = fn (int $day, int $from, int $to, $rows): bool => $rows->contains(fn ($row): bool => (int) $row->day === $day
-        && (int) substr((string) $row->starts_at, 0, 2) < $to && $from < (int) substr((string) $row->ends_at, 0, 2));
-    $slot = collect([1, 2, 3, 4, 5])->crossJoin(range(8, 21 - $length))->first(fn (array $slot): bool => ! $overlaps($slot[0], $slot[1] - 1, $slot[1] + $length, $sessions->where('group.teacher_id', $teacherId))
-        && ! $overlaps($slot[0], $slot[1] - 1, $slot[1] + $length, $unavailable)
-        && ! $overlaps($slot[0], $slot[1], $slot[1] + $length, $sessions->where('room_id', $session->room_id))
-        && ! $overlaps($slot[0], $slot[1], $slot[1] + $length, $sessions->filter(fn (GroupSession $other): bool => $other->group->campus_id === $group->campus_id
-            && $other->group->study_plan_id === $group->study_plan_id && $other->group->semester === $group->semester)));
-    $cb = Department::query()->where('code', 'CB')->sole();
-    $c1 = Campus::query()->where('code', 'C1')->value('id');
-    $away = Group::factory()->create([
-        'term_id' => $term->id, 'campus_id' => $c1, 'modality_id' => modalityOf('PRES')->id,
-        'department_id' => $cb->id, 'subject_id' => Subject::factory()->create(['department_id' => $cb->id, 'theory_hours' => 1, 'practice_hours' => 0])->id,
-        'teacher_id' => $teacherId, 'code' => 'T1',
-    ]);
-    CareerCampus::factory()->create(['career_id' => $away->owner_career_id, 'campus_id' => $c1]);
-    GroupSession::factory()->for($away)->on($slot[0], sprintf('%02d:00', $slot[1] - 1), sprintf('%02d:00', $slot[1]))->create();
-}
-
-/**
- * La demo real hasta `reanalisis` con SC como carga reservada y el docente con clases en los dos campus.
- *
- * @return object{term: Term, sc: AcademicLoad, demo: DemoContext, plan: DemoPlan, step: DemoStep, check: DemoCheck, cases: Closure(): array<string, string>, run: Closure(): void, request: Closure(string): ?ChangeRequest}
- */
-function changeRequestsWorld(): object
-{
-    $failures = [];
-
-    app(DemoRunner::class)->run(DemoCheckpoint::Reanalysis, DemoContext::for(DemoVolume::Demo), function (DemoCheckpoint $checkpoint, array $results) use (&$failures): void {
-        foreach ($results as $result) {
-            if (! $result['passed']) {
-                $failures[] = "{$checkpoint->value}: {$result['label']} ({$result['reason']})";
-            }
-        }
-    });
-
-    expect($failures)->toBe([]);
-
-    $term = Term::query()->where('code', '20271')->sole();
-    $modality = modalityOf('PRES');
-    $department = fn (string $code): string => Department::query()->where('code', $code)->value('id');
-    AcademicLoad::query()->where('term_id', $term->id)->where('modality_id', $modality->id)->whereIn('department_id', [$department('EE'), $department('MM')])
-        ->update(['status' => LoadStatus::Published->value, 'current_version' => 1]);
-    crossCampusTeacherForChangeRequests($term);
-    test()->actingAs(User::query()->where('username', 'admin')->sole());
-
-    $sc = AcademicLoad::query()->ofDepartment($term->id, $modality->id, $department('SC'))->sole();
-    $demo = DemoContext::for(DemoVolume::Demo);
-    $plan = app(DemoPlan::class);
-    $step = collect($plan->stepsFor(DemoCheckpoint::ReanalysisCases))->last();
-
-    return (object) [
-        'term' => $term,
-        'sc' => $sc,
-        'demo' => $demo,
-        'plan' => $plan,
-        'step' => $step,
-        'check' => collect($plan->checksAt(DemoCheckpoint::ReanalysisCases))->first(fn (DemoCheck $check): bool => str_contains($check->label, 'solicitudes de cambio')),
-        'cases' => fn (): array => collect(ReanalysisDemoSeeder::plan($term->id, $modality->id))
-            ->mapWithKeys(fn (string $case, string $id): array => [AcademicLoad::query()->with('department')->find($id)->department->code => $case])->sortKeys()->all(),
-        // Como DemoRunner: sin eventos de modelo y con los eventos silenciados de la demo.
-        'run' => fn () => Model::withoutEvents(fn () => Event::fakeFor(fn () => ($step->run)($demo), $plan->quietEvents())),
-        'request' => fn (string $key): ?ChangeRequest => ChangeRequest::query()->where('department_id', $sc->department_id)->where('reason', ChangeRequestsDemoSeeder::SCENARIOS[$key]['reason'])->first(),
-    ];
-}
-
-/**
- * Los grupos que la demo movió de hora: el de la aplicada como se pidió con horario, y los de las alternativas escritas
- * (la aplicada y la acomodada a mano).
- *
- * @param  Closure(string): ?ChangeRequest  $request
- * @return list<string>
- */
-function movedByChangeRequests(Closure $request): array
-{
-    return [$request('ap1')->group_id, ...array_column(ChangeAlternatives::chosen($request('y')->alternatives)['groups'], 'group_id'),
-        ...array_column(ChangeAlternatives::chosen($request('m')->alternatives)['groups'], 'group_id')];
-}
-
-/**
- * Lo que dejaría el oyente de GroupScheduleChanged: las claves de los grupos movidos ya siguen su hora y los choques de
- * la modalidad están al día (un recálculo no abre ni resuelve nada).
- *
- * @param  Closure(string): ?ChangeRequest  $request
- */
-function expectChangeRequestsSettled(Closure $request, Term $term): void
-{
-    $groups = Group::query()->whereKey(movedByChangeRequests($request))->orderBy('id')->get();
-    $codes = $groups->pluck('code', 'id')->all();
-
-    foreach ($groups as $group) {
-        app(AssignGroupCode::class)->handle($group);
-    }
-
-    $synced = app(SyncScheduleConflicts::class)->handle($term, modalityOf('PRES'));
-
-    expect(Group::query()->whereKey(array_keys($codes))->pluck('code', 'id')->all())->toEqual($codes)
-        ->and([$synced['opened'], $synced['resolved']])->toBe([0, 0]);
-}
-
-$expectedCases = fn (): array => [
-    'CB' => ReanalysisDemoSeeder::CASE_CORRECTED, 'CEA' => ReanalysisDemoSeeder::CASE_CHANGED, 'EE' => ReanalysisDemoSeeder::CASE_RESTARTED,
-    'II' => ReanalysisDemoSeeder::CASE_AVAILABLE, 'MM' => ReanalysisDemoSeeder::CASE_REPUBLISHED, 'SC' => ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS,
-];
-
-it('deja en la carga reservada una solicitud de cambio en cada estado de la pantalla, con sus alternativas vigentes, y repetirlo no duplica nada', function () use ($expectedCases) {
-    $w = changeRequestsWorld();
+it('deja en la carga reservada una solicitud de cambio en cada estado de la pantalla, con sus alternativas vigentes, y repetirlo no duplica nada', function () {
+    $w = ChangeRequestsWorld::world();
     $request = $w->request;
     $status = fn (string $key): ?ChangeRequestStatus => $request($key)?->status;
     $alternatives = fn (string $key): ?ChangeAlternativesStatus => ChangeAlternativesStatus::of($request($key)->alternatives);
 
-    expect(($w->cases)())->toBe($expectedCases())
+    expect(($w->cases)())->toBe(ChangeRequestsWorld::expectedCases())
         ->and($w->step->label)->toContain('Solicitudes de cambio')
         ->and(($w->check->passes)($w->demo))->toStartWith('SC en PRES: la carga está en Publicada, r1 sin pedir');
 
     ($w->run)();
 
     expect(($w->check->passes)($w->demo))->toBeTrue()
-        ->and(($w->cases)())->toBe($expectedCases());
+        ->and(($w->cases)())->toBe(ChangeRequestsWorld::expectedCases());
 
     // La carga: reabierta a ajustes por Subdirección, de vuelta a asignación al aplicar `y` y otra vez en ajustes al aprobar.
     expect($w->sc->fresh()->status)->toBe(LoadStatus::Adjusting)
@@ -258,7 +113,7 @@ it('deja en la carga reservada una solicitud de cambio en cada estado de la pant
         ->and($sessions($request('ap1')->group_id))->toBe(collect($request('ap1')->proposed['sessions'])->sortBy([['day', 'asc'], ['starts_at', 'asc']])
         ->map(fn (array $session): string => $session['day'].' '.$session['starts_at'])->values()->all());
 
-    expectChangeRequestsSettled($request, $w->term);
+    ChangeRequestsWorld::expectSettled($request, $w->term);
 
     $counts = fn (): array => [
         ChangeRequest::query()->count(), ChangeRequest::query()->where('status', ChangeRequestStatus::Approved)->count(),
@@ -279,101 +134,6 @@ it('deja en la carga reservada una solicitud de cambio en cada estado de la pant
     $applied = app(ApplyChosenAlternative::class)->handle($z, $coordinator);
 
     expect($applied->request->status)->toBe(ChangeRequestStatus::Applied);
-});
-
-it('retoma tras caerse a la mitad y deja lo mismo: claves, choques y alternativas al día', function () use ($expectedCases) {
-    $w = changeRequestsWorld();
-    $request = $w->request;
-    $status = fn (string $key): ?ChangeRequestStatus => $request($key)?->status;
-    $crash = fn (string $class) => app()->bind($class, fn () => throw new RuntimeException("caída en {$class}"));
-    $recover = fn (string $class) => app()->offsetUnset($class);
-
-    // Se cae al aplicar la alternativa: ya rechazó, aplicó lo pedido, acomodó a mano `m` y aprobó `y` con una alternativa.
-    $crash(ApplyChosenAlternative::class);
-    expect(fn () => ($w->run)())->toThrow(RuntimeException::class, 'caída');
-    expect($w->sc->fresh()->status)->toBe(LoadStatus::Adjusting)
-        ->and(collect(['r1', 'r2', 'r3', 'r4'])->map($status)->all())->toBe(array_fill(0, 4, ChangeRequestStatus::Rejected))
-        ->and(collect(['ap1', 'ap2', 'ap3', 'ap4', 'm'])->map($status)->all())->toBe(array_fill(0, 5, ChangeRequestStatus::Applied))
-        ->and($status('y'))->toBe(ChangeRequestStatus::Approved)
-        ->and($status('n'))->toBeNull();
-    $recover(ApplyChosenAlternative::class);
-
-    // Aplica `y` (la carga regresa a asignación), pide lo de después y se cae al pedir las primeras alternativas.
-    $crash(ProposeChangeAlternatives::class);
-    expect(fn () => ($w->run)())->toThrow(RuntimeException::class, 'caída');
-    expect($status('y'))->toBe(ChangeRequestStatus::Applied)
-        ->and($w->sc->fresh()->status)->toBe(LoadStatus::Staffing)
-        ->and($status('p1'))->toBe(ChangeRequestStatus::Pending)
-        ->and($request('n')->alternatives)->toBeNull()
-        ->and($request('p4')->alternatives)->toBeNull()
-        ->and($status('a1'))->toBe(ChangeRequestStatus::Pending);
-    $recover(ProposeChangeAlternatives::class);
-
-    ($w->run)();
-
-    expect(($w->check->passes)($w->demo))->toBeTrue()
-        ->and(($w->cases)())->toBe($expectedCases());
-
-    expectChangeRequestsSettled($request, $w->term);
-});
-
-it('deja sin alternativa la de `n` aunque sobren salones libres a sus horas, como con el masivo: Subdirección los aparta en el periodo', function () {
-    $w = changeRequestsWorld();
-    $request = $w->request;
-
-    // Con el masivo sobran salones: a las horas del grupo de `n` queda otro libre del tipo que pide, y la misma hora en otro
-    // salón ya es otro acomodo (CR-02), así que el motor le encontraba alternativa. Aquí, uno libre de cada tipo y con cupo
-    // de sobra en cada campus de la carga.
-    $spare = Group::query()->active()->where('term_id', $w->term->id)->where('department_id', $w->sc->department_id)->distinct()->pluck('campus_id')
-        ->flatMap(fn (string $campusId) => collect([RoomType::Aula, RoomType::Laboratorio, RoomType::SalaComputo, RoomType::Taller])
-            ->map(fn (RoomType $type): Room => Room::factory()->ofType($type)->capacity(80)->create(['building_id' => Building::query()->where('campus_id', $campusId)->orderBy('code')->value('id')])));
-
-    ($w->run)();
-
-    $group = $request('n')->group()->with('sessions')->first();
-    $blocks = RoomBlock::query()->where('reason', ChangeRequestsDemoSeeder::ROOM_BLOCK_REASON)->get();
-    $hours = $group->sessions->map(fn (GroupSession $session): string => $session->day.' '.substr((string) $session->starts_at, 0, 5).'-'.substr((string) $session->ends_at, 0, 5));
-
-    expect(ChangeAlternativesStatus::of($request('n')->alternatives))->toBe(ChangeAlternativesStatus::None)
-        ->and(($w->check->passes)($w->demo))->toBeTrue()
-        ->and($blocks->pluck('room_id')->intersect($spare->where('campus_id', $group->campus_id)->pluck('id'))->all())->not->toBeEmpty()
-        ->and($blocks->every(fn (RoomBlock $block): bool => $block->term_id === $w->term->id
-            && $hours->contains($block->day.' '.substr((string) $block->starts_at, 0, 5).'-'.substr((string) $block->ends_at, 0, 5))))->toBeTrue();
-
-    // A sus horas ningún otro salón del campus le sirve sin agregar un choque duro (lo que revisa al final cada alternativa).
-    $validator = app(ScheduleValidator::class);
-    $validator->forget();
-    $had = collect($validator->validateGroup($group)->violations())->map(fn (Violation $violation): string => $violation->key())->flip();
-    $free = Room::query()->where('campus_id', $group->campus_id)->where('is_active', true)->orderBy('code')->get()
-        ->flatMap(fn (Room $room) => $group->sessions->reject(fn (GroupSession $session): bool => $session->room_id === $room->id)
-            ->filter(fn (GroupSession $session): bool => collect($validator->checkSession($group, new SessionCandidate($session->day, (string) $session->starts_at, (string) $session->ends_at, $room->id, $session->kind, $session->id))->violations())
-                ->every(fn (Violation $violation): bool => $violation->severity !== ConflictSeverity::Hard || $had->has($violation->key())))
-            ->map(fn (GroupSession $session): string => "{$room->code} el día {$session->day}"));
-
-    expect($free->values()->all())->toBe([]);
-
-    // Los salones apartados estaban libres: no abren choques; y volver a correrlo no aparta otra vez.
-    expectChangeRequestsSettled($request, $w->term);
-    $before = RoomBlock::query()->count();
-    Event::fakeFor(fn () => ($w->step->run)($w->demo), $w->plan->quietEvents());
-
-    expect(RoomBlock::query()->count())->toBe($before);
-});
-
-it('en la demo mezclada agrega una pendiente con choque duro y sus alternativas listas, una sola vez', function () {
-    app(DemoRunner::class)->run(DemoCheckpoint::Rooms, DemoContext::for(DemoVolume::Demo));
-    $this->actingAs(User::query()->where('username', 'admin')->sole());
-
-    $seed = fn () => app(ChangeRequestsDemoSeeder::class)->setContainer(app())->__invoke(['mode' => 'showcase']);
-    $seed();
-    $seed();
-
-    $requests = ChangeRequest::query()->where('reason', ChangeRequestsDemoSeeder::SHOWCASE_REASON)->get();
-
-    expect($requests)->toHaveCount(1)
-        ->and($requests->sole()->status)->toBe(ChangeRequestStatus::Pending)
-        ->and($requests->sole()->impact['hard'])->not->toBeEmpty()
-        ->and(ChangeAlternativesStatus::of($requests->sole()->alternatives))->toBe(ChangeAlternativesStatus::Ready);
 });
 
 it('DemoSeeder y MassiveSeeder siembran la pendiente con alternativas solo con demo.showcase', function () {
