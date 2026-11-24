@@ -141,8 +141,9 @@ traffic_log="$home/traffic.log"
 traffic_pid=""
 start_traffic() {
     local asset
+    # sed -n 1p lee toda la entrada: con `head`, pipefail cortaría el script por SIGPIPE.
     asset=$(curl -sk --resolve "$domain:$https_port:127.0.0.1" "https://$domain:$https_port/login" |
-        grep -o '/build/assets/[^"]*\.js' | head -n 1)
+        { grep -o '/build/assets/[^"]*\.js' || true; } | sed -n 1p)
     : >"$traffic_log"
     (
         while true; do
@@ -170,7 +171,7 @@ expect_no_downtime() {
     if [ "$total" -gt 20 ] && [ "$bad" = 0 ]; then
         pass "$what: $total peticiones sin ninguna falla"
     else
-        fail "$what: $bad de $total peticiones fallaron ($(grep -vE '^(2|3)[0-9][0-9] ' "$traffic_log" | sort | uniq -c | head -5 | tr '\n' ';'))"
+        fail "$what: $bad de $total peticiones fallaron ($(grep -vE '^(2|3)[0-9][0-9] ' "$traffic_log" | sort | uniq -c | sed -n 1,5p | tr '\n' ';'))"
     fi
 }
 

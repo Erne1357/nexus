@@ -56,7 +56,7 @@ other_color() {
 # Id del contenedor de un servicio del proyecto (corriendo o detenido); vacío si no existe.
 container_of() {
     docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" \
-        --filter "label=com.docker.compose.service=$1" | head -n 1
+        --filter "label=com.docker.compose.service=$1" | awk 'NR == 1'
 }
 
 container_running() {
