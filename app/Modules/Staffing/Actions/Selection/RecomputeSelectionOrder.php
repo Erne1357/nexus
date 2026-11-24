@@ -65,6 +65,7 @@ final class RecomputeSelectionOrder
             'key' => (string) $entry->getKey(),
             'source' => $entry->source->value,
             'tier' => $entry->tier,
+            'failed' => (int) $entry->failed_criteria,
             'seniority' => $entry->seniority_years === null ? null : (float) $entry->seniority_years,
             'hired_on' => ($entry->hired_on ?? $entry->teacher?->hired_on)?->toDateString(),
             'name' => (string) ($entry->teacher?->name ?? $entry->csv_name ?? ''),

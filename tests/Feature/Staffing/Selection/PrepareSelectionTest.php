@@ -224,3 +224,16 @@ it('resolver exige un docente activo y adscrito al departamento', function (stri
     expect(fn () => app(ResolveSelectionEntry::class)->handle($entry, $teacher, $this->actor))->toThrow(ValidationException::class);
     expect($entry->fresh()->teacher_id)->toBeNull();
 })->with(['otro departamento', 'inactivo']);
+
+it('el orden sigue el escalón y conserva los criterios fallidos de cada renglón', function () {
+    $selection = prepSelection();
+    prepTeacher($selection, 'Ana Pérez');
+    prepTeacher($selection, 'Luis Gómez');
+
+    app(ImportSelectionCsv::class)->handle($selection, PREP_HEADER."Luis Gómez;40;no;si;si;si;20\nAna Pérez;30;si;si;si;si;5\n", $this->actor);
+
+    $entries = $selection->entries()->orderBy('position')->get();
+    // Luis: plaza 0 + 1 falla = escalón 1; Ana: plaza 1 + 0 fallas = escalón 1; mismo escalón.
+    expect($entries->pluck('tier')->all())->toBe([1, 1])
+        ->and($entries->pluck('failed_criteria')->sort()->values()->all())->toBe([0, 1]);
+});
