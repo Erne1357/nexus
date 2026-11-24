@@ -1,9 +1,8 @@
 #!/bin/sh
 set -e
 
-# Un contenedor detenido conserva su /tmp: el archivo de drenado que dejó el deployer al apagar este color
-# (ADR-0033) no debe sobrevivir a un arranque nuevo, o /health respondería 503 para siempre.
-rm -f "${NEXUS_DRAIN_FILE:-/tmp/nexus-draining}"
+# El archivo de drenado (/tmp/nexus-draining, ADR-0033) lo maneja el deployer: un color que apagó vuelve drenado al
+# encenderlo, y el deployer lo saca de la rotación o lo pone en ella. No se borra aquí.
 
 # La config depende de variables de entorno del runtime: se cachea al arrancar, no en el build.
 php artisan optimize

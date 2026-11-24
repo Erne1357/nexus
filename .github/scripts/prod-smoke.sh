@@ -51,7 +51,7 @@ cleanup() {
         docker ps -aq --filter "name=^$project-deployer" | xargs -r docker rm -f >/dev/null
         docker volume ls -q --filter "label=com.docker.compose.project=$project" | xargs -r docker volume rm >/dev/null
         docker network ls -q --filter "label=com.docker.compose.project=$project" | xargs -r docker network rm >/dev/null
-        rm -rf -- "$home" 2>/dev/null || sudo rm -rf -- "$home" 2>/dev/null || true
+        rm_as_root "$home" 2>/dev/null || rm -rf -- "$home" 2>/dev/null || true
     fi
     printf '\nEscenarios del smoke (%ss):\n' "$((SECONDS - started))"
     printf '  %s\n' "${results[@]}"
@@ -64,6 +64,11 @@ cp "$bundle" "$bundle.sha256" "$home/bundles/"
 bundle="$home/bundles/$(basename "$bundle")"
 
 manifest() { tar --occurrence=1 -xOf "$bundle" manifest.json | jq -r "$1"; }
+
+# El deployer corre como root: lo que deja en $home (paquetes archivados, respaldos) se borra con un contenedor.
+rm_as_root() {
+    docker run --rm -v "$home:$home" --entrypoint rm "$deployer_ref" -rf -- "$@"
+}
 sha_a=$(manifest .sha)
 app_a=$(manifest .images.app.ref)
 solver_ref=$(manifest .images.solver.ref)
@@ -92,7 +97,7 @@ set_env MAIL_MAILER log
 set_env NEXUS_HOME "$home"
 set_env DEPLOY_INBOX "$home/inbox"
 set_env DEPLOY_POLL_SECONDS 3
-set_env DEPLOY_HEALTH_TIMEOUT 120
+set_env DEPLOY_HEALTH_TIMEOUT 90
 set_env BACKUP_DIR "$home/backups"
 set_env BACKUP_UID "$(id -u)"
 set_env BACKUP_GID "$(id -g)"
@@ -107,10 +112,12 @@ deployer_mounts=()
 if [ -n "$deployer_src" ]; then
     deployer_mounts=(-v "$deployer_src/lib:/usr/local/lib/nexus-deploy:ro" -v "$deployer_src/bin/nexus-deploy:/usr/local/bin/nexus-deploy:ro")
 fi
+touch "$home/deployer.env"
+chmod 600 "$home/deployer.env"
 deployer() {
     docker run --rm --name "$project-deployer-run-$RANDOM" "${deployer_mounts[@]}" \
         -v /var/run/docker.sock:/var/run/docker.sock -v "$home:$home" \
-        --env-file "$home/.env" -e NEXUS_HOME="$home" -e COMPOSE_PROJECT_NAME="$project" \
+        --env-file "$home/.env" --env-file "$home/deployer.env" -e NEXUS_HOME="$home" -e COMPOSE_PROJECT_NAME="$project" \
         "$deployer_ref" "$@"
 }
 
@@ -136,6 +143,13 @@ expect_release() {
     else
         fail "$what: esperaba $want, /health dijo: $(head -c 400 <<<"$body")"
     fi
+}
+
+# expect_asset <archivo de /build/assets> <descripción>: Caddy lo sirve (200).
+expect_asset() {
+    local code
+    code=$(curl -sk -o /dev/null -w '%{http_code}' --resolve "$domain:$https_port:127.0.0.1" "https://$domain:$https_port/build/assets/$1")
+    if [ "$code" = 200 ]; then pass "$2: /build/assets/$1 responde 200"; else fail "$2: /build/assets/$1 respondió $code"; fi
 }
 
 # --- Tráfico continuo: /login, un asset de /build y /health cada ~100 ms --------------------------------
@@ -206,6 +220,7 @@ start_traffic
 expect_code 0 "deploy B" -- deploy --bundle "$bundle_b"
 expect_no_downtime "deploy B"
 expect_release smokeb000001 "deploy B"
+expect_asset smoke-smokeb000001.js "assets de B"
 
 say "3. Una versión que no arranca no toca producción"
 bundle_broken=$(variant smokex000003 broken.Dockerfile)
@@ -237,11 +252,17 @@ start_traffic
 expect_code 0 "rollback a A" -- rollback previous
 expect_no_downtime "rollback a A"
 expect_release "$sha_a" "rollback a A"
+expect_asset smoke-smokeb000001.js "los assets de B siguen tras volver a A"
 
 say "7. Contracción: volver atrás exige restaurar el respaldo"
 bundle_c=$(variant smokec000007 expand.Dockerfile)
 expect_code 0 "deploy C (crea una tabla)" -- deploy --bundle "$bundle_c"
 drop "$bundle_c"
+bundle_dx=$(variant smokedx00007 contract-broken.Dockerfile)
+expect_code 6 "deploy de una contracción que no arranca" -- deploy --bundle "$bundle_dx"
+drop "$bundle_dx"
+expect_release smokec000007 "tras la contracción que no arrancó"
+expect_code 7 "rollback a A tras una contracción aplicada por un despliegue fallido" -- rollback "$sha_a"
 bundle_d=$(variant smoked000007 contract.Dockerfile)
 expect_code 0 "deploy D (contracción)" -- deploy --bundle "$bundle_d"
 drop "$bundle_d"
@@ -285,7 +306,7 @@ fi
 bundle_j=$(variant smokej000009 release.Dockerfile)
 sleep 1
 bundle_k=$(variant smokek000009 release.Dockerfile)
-rm -f "$home"/inbox/hechos/*.tar
+rm_as_root "$home"/inbox/hechos/nexus-smokei000009.tar
 mv "$bundle_j" "$bundle_j.sha256" "$bundle_k" "$bundle_k.sha256" "$home/inbox/"
 if wait_release smokek000009 300 && eventually 60 test -f "$home/inbox/omitidos/nexus-smokej000009.tar"; then
     pass "dos paquetes a la vez: solo el más nuevo (smokek000009); el otro quedó en omitidos/"
@@ -293,7 +314,7 @@ else
     fail "dos paquetes a la vez: $(public_health | jq -r .release 2>/dev/null); omitidos: $(ls "$home/inbox/omitidos" 2>/dev/null | tr '\n' ' ')"
 fi
 
-rm -f "$home"/inbox/hechos/*.tar "$home"/inbox/omitidos/*.tar
+rm_as_root "$home"/inbox/hechos/nexus-smokek000009.tar "$home"/inbox/omitidos/nexus-smokej000009.tar
 
 say "10. El agente con GitHub (API falsa)"
 # Tarball de la infraestructura como el de codeload (una carpeta de primer nivel) y la API falsa en la red del stack.
@@ -306,9 +327,9 @@ docker run -d --rm --name "$fake" --network "${project}_backend" -v "$smoke_dir/
     -v "$home/fixtures:/fixtures:ro" --entrypoint php "$app_a" -S 0.0.0.0:8080 /srv/fake-github.php >/dev/null
 drop "$(variant smokef000010 release.Dockerfile)" "$(variant smokeg000010 release.Dockerfile)"
 set_env DEPLOY_SOURCE github
-set_env DEPLOY_GITHUB_TOKEN smoke
-set_env DEPLOY_GITHUB_API "http://$fake:8080"
-set_env DEPLOY_GITHUB_CODELOAD "http://$fake:8080"
+# El token va en deployer.env, que solo lee el deployer. Las imágenes de las variantes son locales (por tag).
+printf 'DEPLOY_GITHUB_TOKEN=smoke\nDEPLOY_GITHUB_API=http://%s:8080\nDEPLOY_GITHUB_CODELOAD=http://%s:8080\nDEPLOY_ALLOW_TAG_REFS=true\n' \
+    "$fake" "$fake" >"$home/deployer.env"
 deployer compose up -d --no-deps deployer >/dev/null 2>&1
 fake_api() { docker exec "$fake" curl -fsS "$@"; }
 payload() {
@@ -332,6 +353,9 @@ deployer resume >/dev/null 2>&1
 if wait_release smokeg000010 300; then pass "GitHub tras resume: atiende smokeg000010"; else fail "GitHub tras resume: no se desplegó smokeg000010"; fi
 docker rm -f "$fake" >/dev/null 2>&1 || true
 last_release=smokeg000010
+# El agente termina (apaga el color viejo, registra el release) unos segundos después de que Caddy ya atiende el nuevo.
+active_is() { [ "$(deployer status --json 2>/dev/null | jq -r .active_sha)" = "$1" ]; }
+eventually 120 active_is "$last_release" || fail "el agente no registró $last_release como activo"
 
 if [ "$restart_daemon" = 1 ]; then
     say "8. Reinicio del daemon de Docker"

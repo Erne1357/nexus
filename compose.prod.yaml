@@ -197,7 +197,13 @@ services:
     image: ${DEPLOYER_IMAGE:-nexus-deployer}:${DEPLOYER_IMAGE_TAG:-latest}
     restart: unless-stopped
     command: ["agent"]
-    env_file: .env
+    # deployer.env (opcional, 600) guarda lo que solo el deployer debe ver, como DEPLOY_GITHUB_TOKEN: el .env lo leen
+    # también la app, la cola y el scheduler.
+    env_file:
+      - path: .env
+        required: true
+      - path: ${NEXUS_HOME:-/opt/nexus}/deployer.env
+        required: false
     environment:
       NEXUS_HOME: ${NEXUS_HOME:-/opt/nexus}
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-nexus}

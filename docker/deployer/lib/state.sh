@@ -2,7 +2,9 @@
 # Estado del deployer en $NEXUS_HOME/.deploy (ADR-0033):
 #   state         ACTIVE_COLOR=blue|green y ACTIVE_SHA=<sha>
 #   releases.log  historial, una línea por operación, separado por tabuladores:
-#                 fecha  acción(deploy|rollback)  sha  color  migró(0|1)  contracciones(0|1)  respaldo  resultado
+#                 fecha  acción  sha  color  migró(0|1)  contracciones(0|1)  respaldo  resultado
+#                 acción: deploy | rollback | migrate (antes y después de migrar) | restore (una restauración)
+#                 resultado: ok | failed | started
 #   paused        existe mientras el despliegue está en pausa; su contenido es el motivo
 #   deploy.lock   candado: un despliegue o rollback a la vez
 
@@ -50,7 +52,7 @@ resume_deploys() {
 
 # Releases desplegados con éxito, del más viejo al más nuevo, sin repetir (el último despliegue de cada uno).
 successful_releases() {
-    awk -F '\t' '$8 == "ok" { order[$3] = NR; } END { for (s in order) print order[s] "\t" s }' "$STATE_DIR/releases.log" |
+    awk -F '\t' '($2 == "deploy" || $2 == "rollback") && $8 == "ok" { order[$3] = NR; } END { for (s in order) print order[s] "\t" s }' "$STATE_DIR/releases.log" |
         sort -n | cut -f 2
 }
 

@@ -319,8 +319,10 @@ jobs:
             --repo . --out "$RUNNER_TEMP/bundle"
           ls -lh "$RUNNER_TEMP/bundle"
 
+      # `shell: bash` activa pipefail: sin él, `| tee` escondería un smoke fallido.
       - name: Smoke del stack de producción
         if: steps.scope.outputs.run == 'true'
+        shell: bash
         env:
           SHA: ${{ github.sha }}
         run: .github/scripts/prod-smoke.sh --bundle "$RUNNER_TEMP/bundle/nexus-$SHA.tar" --restart-daemon 2>&1 | tee "$RUNNER_TEMP/prod-smoke.log"

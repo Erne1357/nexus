@@ -55,6 +55,12 @@ agent_tick_bundle() {
     mv "$now" "$sizes"
 
     [ -n "$newest" ] || return 0
+    # Ya atiende ese release (p. ej. el agente se reinició antes de archivar el paquete): solo se archiva.
+    if [ "$(tar --occurrence=1 -xOf "$newest" manifest.json 2>/dev/null | jq -r '.sha // empty')" = "$(state_get ACTIVE_SHA)" ]; then
+        log "$(basename "$newest") ya es el release activo: lo archivo sin desplegar"
+        mv -f -- "$newest" "$newest.sha256" "$INBOX/hechos/"
+        return 0
+    fi
     log "paquete nuevo: $(basename "$newest")"
     agent_run "$newest" deploy --bundle "$newest"
 }
@@ -88,13 +94,21 @@ agent_run() {
 
 # DEPLOY_SOURCE=github (con salida a internet): los Deployments del ambiente `production` que crea deploy.yml. Toma
 # el más nuevo que siga en cola, marca como inactivos los anteriores que nadie atendió y publica el resultado.
+# Las cabeceras van en un archivo 600: el token nunca aparece en una línea de comandos (ps).
 github_api() {
     local method=$1 path=$2
     shift 2
-    curl -fsS -X "$method" --max-time 30 \
-        -H "Authorization: Bearer $DEPLOY_GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
+    curl -fsS -X "$method" --max-time 30 -H @"$GITHUB_HEADERS" \
         "${DEPLOY_GITHUB_API:-https://api.github.com}$path" "$@"
+}
+
+github_headers() {
+    GITHUB_HEADERS="$STATE_DIR/.github-headers"
+    (
+        umask 077
+        printf 'Authorization: Bearer %s\nAccept: application/vnd.github+json\nX-GitHub-Api-Version: 2022-11-28\n' \
+            "$DEPLOY_GITHUB_TOKEN" >"$GITHUB_HEADERS"
+    )
 }
 
 github_status() {
@@ -108,11 +122,15 @@ github_status() {
 
 agent_tick_github() {
     local deployments id state candidate="" payload code=0 log_file action
-    [ -n "${DEPLOY_GITHUB_TOKEN:-}" ] || die "$E_USAGE" "Falta DEPLOY_GITHUB_TOKEN para DEPLOY_SOURCE=github"
+    [ -n "${DEPLOY_GITHUB_TOKEN:-}" ] || die "$E_USAGE" "Falta DEPLOY_GITHUB_TOKEN (en $NEXUS_HOME/deployer.env) para DEPLOY_SOURCE=github"
     GITHUB_REPOSITORY_PATH=${DEPLOY_REPOSITORY:-Erne1357/nexus}
+    github_headers
 
     deployments=$(github_api GET "/repos/$GITHUB_REPOSITORY_PATH/deployments?environment=production&per_page=10")
+    touch "$STATE_DIR/github.handled"
     for id in $(jq -r '.[].id' <<<"$deployments"); do
+        # Uno que ya se atendió no se repite aunque su estado no haya llegado a GitHub.
+        grep -qxF "$id" "$STATE_DIR/github.handled" && continue
         state=$(github_api GET "/repos/$GITHUB_REPOSITORY_PATH/deployments/$id/statuses?per_page=1" | jq -r '.[0].state // "pending"')
         case "$state" in
             queued | pending)
@@ -136,7 +154,13 @@ agent_tick_github() {
     fi
 
     log "Deployment $candidate de GitHub: $action"
-    github_status "$candidate" in_progress "Desplegando en el servidor."
+    # Sin poder avisar que empezó (token sin permiso de escritura, red), no se despliega: se reintenta en la siguiente vuelta.
+    if ! github_status "$candidate" in_progress "Desplegando en el servidor."; then
+        rm -f "$payload"
+        log "aviso: GitHub no aceptó el estado in_progress del Deployment $candidate; no despliego"
+        return 1
+    fi
+    printf '%s\n' "$candidate" >>"$STATE_DIR/github.handled"
     log_file=$(mktemp)
     if [ "$action" = rollback ]; then
         "$NEXUS_DEPLOY_BIN" rollback "$(jq -r '.target // "previous"' "$payload")" >"$log_file" 2>&1 || code=$?

@@ -13,20 +13,44 @@ edge_up() {
     compose "$sha" up -d --no-deps backup caddy
 }
 
-# Copia la configuración de Caddy y de los respaldos del release a la carpeta estable que montan. Si cambió el
-# Caddyfile y Caddy ya corre, lo recarga sin cortar conexiones.
-sync_config() {
-    local sha=$1 dir="$RELEASES_DIR/$1/docker" changed=0
-    mkdir -p "$NEXUS_CONFIG_DIR/caddy" "$NEXUS_CONFIG_DIR/backup"
-    if ! cmp -s "$dir/caddy/Caddyfile" "$NEXUS_CONFIG_DIR/caddy/Caddyfile"; then
-        changed=1
+# El script de respaldos del release va a la carpeta estable que monta `backup` (lo necesita el respaldo previo).
+sync_backup_config() {
+    local sha=$1
+    mkdir -p "$NEXUS_CONFIG_DIR/backup"
+    cp -f "$RELEASES_DIR/$sha"/docker/backup/* "$NEXUS_CONFIG_DIR/backup/"
+}
+
+# Primer arranque: Caddy todavía no corre, así que su configuración se copia tal cual.
+install_caddy_config() {
+    local sha=$1
+    mkdir -p "$NEXUS_CONFIG_DIR/caddy"
+    cp -f "$RELEASES_DIR/$sha"/docker/caddy/* "$NEXUS_CONFIG_DIR/caddy/"
+}
+
+# Con Caddy corriendo y el release ya atendiendo: si su Caddyfile cambió, se valida con la imagen de Caddy y solo
+# entonces se pone en su lugar y se recarga, sin cortar conexiones. Si la validación o la recarga fallan, Caddy sigue
+# con la configuración anterior (también en disco, para el siguiente arranque) y queda un aviso.
+apply_caddy_config() {
+    local sha=$1 new="$RELEASES_DIR/$1/docker/caddy" live="$NEXUS_CONFIG_DIR/caddy" previous
+    if cmp -s "$new/Caddyfile" "$live/Caddyfile"; then
+        return 0
     fi
-    cp -f "$dir"/caddy/* "$NEXUS_CONFIG_DIR/caddy/"
-    cp -f "$dir"/backup/* "$NEXUS_CONFIG_DIR/backup/"
-    if [ "$changed" = 1 ] && container_running caddy; then
-        log "el Caddyfile cambió: recargando Caddy"
-        compose "$sha" exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+    if ! compose "$sha" run --rm --no-deps -T -v "$new:/etc/caddy-next:ro" --entrypoint caddy caddy \
+        validate --config /etc/caddy-next/Caddyfile --adapter caddyfile >/dev/null 2>&1; then
+        log "aviso: el Caddyfile de $(short "$sha") no es válido; Caddy sigue con el anterior"
+        return 0
     fi
+    previous=$(mktemp -d "$NEXUS_CONFIG_DIR/.caddy-anterior.XXXXXX")
+    cp -a "$live"/. "$previous"/
+    cp -f "$new"/* "$live/"
+    if compose "$sha" exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1; then
+        log "Caddyfile nuevo aplicado sin cortar conexiones"
+    else
+        log "aviso: Caddy no aceptó el Caddyfile de $(short "$sha"); vuelvo al anterior"
+        cp -f "$previous"/* "$live/"
+        compose "$sha" exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || true
+    fi
+    rm -rf -- "$previous"
 }
 
 # ¿La base ya tiene esquema? En el primer arranque no hay nada que respaldar.
@@ -63,8 +87,7 @@ predeploy_backup() {
 
 run_migrations() {
     local sha=$1
-    compose "$sha" run --rm --no-deps -T migrate ||
-        die "$E_MIGRATE" "las migraciones de $(short "$sha") fallaron; la versión anterior sigue atendiendo (las migraciones son compatibles con ella)"
+    compose "$sha" run --rm --no-deps -T migrate
 }
 
 # Volumen de los assets que sirve Caddy. `compose run -v <nombre>` no le pone el prefijo del proyecto, así que se usa
@@ -101,8 +124,10 @@ wait_color_ready() {
     local sha=$1 color=$2 deadline body code
     deadline=$((SECONDS + HEALTH_TIMEOUT))
     while [ "$SECONDS" -lt "$deadline" ]; do
-        body=$(compose "$sha" exec -T "app-$color" curl -s -o - -w '\n%{http_code}' \
-            -H "X-Health-Token: ${HEALTH_TOKEN:-}" http://127.0.0.1:8000/health 2>/dev/null) || body=""
+        # El token sale del entorno del contenedor y entra a curl por stdin: nunca en una línea de comandos (ps).
+        body=$(compose "$sha" exec -T "app-$color" sh -c \
+            'printf "X-Health-Token: %s\n" "${HEALTH_TOKEN:-}" | curl -s -o - -w "\n%{http_code}" -H @- http://127.0.0.1:8000/health' \
+            2>/dev/null) || body=""
         code=$(tail -n 1 <<<"$body")
         if [ "$code" = 200 ] && [ "$(sed '$d' <<<"$body" | jq -r '.release' 2>/dev/null)" = "$sha" ]; then
             return 0
@@ -113,9 +138,24 @@ wait_color_ready() {
     return 1
 }
 
+# Arranca el color drenado: su /health le dice «draining» a la sonda de Caddy, que no le manda tráfico hasta undrain.
+# Octane tarda segundos en arrancar, así que el archivo existe antes de que Caddy lo vea sano. Un contenedor detenido
+# conserva su /tmp: el que se drenó al apagarlo vuelve drenado.
 start_color() {
-    local sha=$1 color=$2
+    local sha=$1 color=$2 tries
     compose "$sha" up -d --no-deps "app-$color"
+    for tries in $(seq 1 30); do
+        compose "$sha" exec -T "app-$color" touch "$DRAIN_FILE" 2>/dev/null && return 0
+        sleep 1
+    done
+    log "aviso: no pude drenar app-$color al arrancar (intentos: $tries)"
+}
+
+# Pone el color en la rotación de Caddy y espera a que la sonda lo vea sano.
+undrain() {
+    local sha=$1 color=$2
+    compose "$sha" exec -T "app-$color" rm -f "$DRAIN_FILE"
+    sleep "$DRAIN_SECONDS"
 }
 
 # Saca un color de la rotación de Caddy (su /health pasa a 503), espera a que Caddy lo note y lo detiene con
@@ -158,8 +198,8 @@ solver_up() {
 verify_public() {
     local sha=$1 attempt body
     for attempt in 1 2 3 4 5; do
-        body=$(curl -sk --max-time 5 --connect-to "${APP_DOMAIN}:443:caddy:443" \
-            -H "X-Health-Token: ${HEALTH_TOKEN:-}" "https://${APP_DOMAIN}/health" 2>/dev/null) || body=""
+        body=$(printf 'X-Health-Token: %s\n' "${HEALTH_TOKEN:-}" | curl -sk --max-time 5 \
+            --connect-to "${APP_DOMAIN}:443:caddy:443" -H @- "https://${APP_DOMAIN}/health" 2>/dev/null) || body=""
         if [ "$(jq -r '.release' <<<"$body" 2>/dev/null)" = "$sha" ]; then
             return 0
         fi
