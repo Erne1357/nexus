@@ -264,11 +264,30 @@ function buildRoomLabels(){RL.forEach(r=>r.el.remove());RL=[];if(!S.open)return;
 const HL={focus:new Map(),sel:null,hover:null,hoverSet:null,hoverRoom:null};
 const OCC_LO=new THREE.Color('#EFE6D8'),OCC_MID=new THREE.Color('#D9A08A'),OCC_HI=new THREE.Color('#6E2234');
 const occOf=bid=>{const rs=spacesOf(bid).filter(s=>s.sched);if(!rs.length)return null;return rs.filter(r=>nowIn(r.id)).length/rs.length};
-function targetFor(id){const st=BLD[id];const any=HL.focus.size>0||HL.sel||S.occ;let col=st.base,em=0;
+function targetFor(id){const st=BLD[id];if(PK.on){const hv=HL.hover===id;return{col:PK.bAll.has(id)?(PK.bEl.has(id)?PK.acc:PK.grey):PALE,em:hv&&PK.bAll.has(id)?.2:PK.bEl.has(id)?.1:0}}const any=HL.focus.size>0||HL.sel||S.occ;let col=st.base,em=0;
   if(S.occ){const o=occOf(id);col=o==null?PALE:o<.5?OCC_LO.clone().lerp(OCC_MID,o*2):OCC_MID.clone().lerp(OCC_HI,(o-.5)*2)}
   else if(any){const f=HL.focus.get(id);if(f){col=new THREE.Color(f);em=.12}else if(HL.sel!==id)col=PALE}
   if(HL.sel===id){em=.22;if(!HL.focus.get(id)&&!S.occ)col=st.base}
   if(HL.hover===id||HL.hoverSet?.has(id)){em+=.18;if(col===PALE)col=st.base}return{col,em}}
+
+// ---------- elegir (modo pick, tarea 14) ----------
+// Solo se enciende con window.UbicaTec.enablePick({eligible:[map_key], rejected:{map_key:motivo}}): los salones elegibles se resaltan
+// con el acento, los demás se apagan (tocar o pasar el cursor sobre uno rechazado dice por qué) y tocar uno elegible emite
+// `room-picked` en window con {key} (la map_key). Sin enablePick el mapa se comporta como siempre.
+const PK={on:false,el:new Set(),rej:new Map(),bEl:new Set(),bAll:new Set(),acc:new THREE.Color('#c2201e'),grey:new THREE.Color('#C9C3BA')};
+const SID2KEY={},KEY2SID={};for(const s of D.SPACES){const k=s.building+'|'+s.raw;if(!(k in KEY2SID)){KEY2SID[k]=s.id;SID2KEY[s.id]=k}}
+const pickLegend=document.createElement('div');pickLegend.id='pklg';pickLegend.innerHTML='<span><i class="ut-pk-on"></i>Disponible</span><span><i class="ut-pk-off"></i>No disponible</span><small>Toca un edificio para ver sus salones</small>';rootEl.appendChild(pickLegend);
+function enablePick(o){const el=o?.eligible||[],rj=o?.rejected||{};
+  PK.el=new Set(el.map(k=>KEY2SID[k]).filter(Boolean));PK.rej=new Map(Object.entries(rj).filter(([k])=>KEY2SID[k]).map(([k,r])=>[KEY2SID[k],String(r)]));
+  PK.bEl=new Set([...PK.el].map(i=>SP[i].building));PK.bAll=new Set([...PK.bEl,...[...PK.rej.keys()].map(i=>SP[i].building)]);
+  const acc=getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim();if(acc)try{PK.acc.set(acc)}catch(e){}
+  if(!PK.on){PK.on=true;rootEl.classList.add('ut-pickmode');S.stack=[];HL.focus=new Map();HL.sel=null;S.roomFocus=null;if(S.open)closeInterior()}
+  if(S.selRoom&&!PK.el.has(S.selRoom))S.selRoom=null}
+function disablePick(){if(!PK.on)return;PK.on=false;PK.el=new Set();PK.rej=new Map();PK.bEl=new Set();PK.bAll=new Set();rootEl.classList.remove('ut-pickmode');S.selRoom=null;tip.style.opacity=0}
+function pickTap({bid,sid}){
+  if(sid){const s=SP[sid];if(PK.el.has(sid)){S.selRoom=sid;window.dispatchEvent(new CustomEvent('room-picked',{detail:{key:SID2KEY[sid]}}))}else toast(PK.rej.has(sid)?`${s.name}: ${PK.rej.get(sid)}`:`${s.name} no está entre los salones disponibles`);return}
+  if(bid){if(!PK.bAll.has(bid)){toast(`${B[bid].name}: sin salones para elegir`);return}
+    const fl=[...PK.el,...PK.rej.keys()].map(i=>SP[i]).filter(s=>s.building===bid).map(s=>s.floor).sort()[0]||1;openInterior(bid,fl)}}
 
 // ---------- cámara ----------
 let tw=null;
@@ -290,6 +309,7 @@ function loop(now){if(!alive)return;rafId=requestAnimationFrame(loop);
   const t=now/1000;
   for(const id in BLD){const st=BLD[id];const tg=targetFor(id);st.cur.col.lerp(tg.col,.12);st.cur.em+=(tg.em-st.cur.em)*.12;st.m.color.copy(st.cur.col);st.m.emissive.copy(st.cur.col).multiplyScalar(st.cur.em*(.75+.25*Math.sin(t*3)))}
   if(S.open){for(const me of INT[S.open].rooms){const s=SP[me.userData.sid];const top=me.userData.top;const sel=s.id===S.selRoom,hov=s.id===HL.hoverRoom;const f=S.roomFocus?.has(s.id);
+    if(PK.on){const el=PK.el.has(s.id),isRoom=s.kind===3||s.kind===12;top.color.lerp(sel?SELC:el?PK.acc:isRoom?PK.grey:me.userData.base,.15);top.emissive.copy(top.color).multiplyScalar(sel?.25:el?(hov?.35:.12+.08*Math.sin(t*3)):0);me.position.y=(s.floor-1)*FH+.5+(sel?.6:el&&hov?.4:0);continue}
     top.color.lerp(sel?SELC:f?new THREE.Color(AC(s.owner)):me.userData.base,.15);top.emissive.copy(top.color).multiplyScalar(sel?.25+.15*Math.sin(t*4):hov?.25:0);me.position.y=(s.floor-1)*FH+.5+(sel?.6+.3*Math.sin(t*4):hov?.3:0)}}
   if(HL.sel&&!S.open){const st=BLD[HL.sel];ring.visible=true;ring.position.x=st.center.x;ring.position.z=st.center.z;const p=(t*14)%12;ring.scale.setScalar(st.r+4+p);ring.material.opacity=.85*(1-p/12)}else ring.visible=false;
   if(routeCurve){const L=routeCurve.getLength();const n=Math.min(dots.length,Math.max(8,Math.round(L/4)));dots.forEach((d,i)=>{if(i>=n){d.visible=false;return}const u=((i/n)+t*(10/L))%1;routeCurve.getPointAt(u,d.position);d.position.y+=Math.abs(Math.sin(u*L/3+t*5))*.35;d.visible=true});goalM.rotation.z=t*2;}
@@ -309,13 +329,15 @@ const ray=new THREE.Raycaster(),mp=new THREE.Vector2();let down=null;const tip=$
 function setRay(e){const r=stage.getBoundingClientRect();mp.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mp,camera)}
 function hit(e){setRay(e);const objs=S.open?[...INT[S.open].floors[S.floor].children.filter(c=>c.userData.sid),...pickB]:pickB;const hh=ray.intersectObjects(objs,false).find(x=>x.object.visible&&(x.object.userData.sid||x.object.parent.visible));if(!hh)return{};return hh.object.userData.sid?{sid:hh.object.userData.sid}:{bid:hh.object.userData.bid}}
 stage.addEventListener('pointermove',e=>{if(e.pointerType==='touch')return;const {bid,sid}=hit(e);HL.hover=bid||null;HL.hoverRoom=sid||null;stage.style.cursor=bid||sid||S.picking?'pointer':'';
-  if(sid){const s=SP[sid];const c=nowIn(sid);tip.innerHTML=`<b>${esc(s.name)}</b>${KINDS[s.kind]} · P${s.floor}${c?` · En clase: ${esc(sOf(c))}`:''}`}
+  if(sid&&PK.on&&(PK.el.has(sid)||PK.rej.has(sid))){const s=SP[sid];tip.innerHTML=PK.el.has(sid)?`<b>${esc(s.name)}</b>Disponible · toca para elegirlo`:`<b>${esc(s.name)}</b>${esc(PK.rej.get(sid))}`}
+  else if(sid){const s=SP[sid];const c=nowIn(sid);tip.innerHTML=`<b>${esc(s.name)}</b>${KINDS[s.kind]} · P${s.floor}${c?` · En clase: ${esc(sOf(c))}`:''}`}
   else if(bid){const b=B[bid];const rs=spacesOf(bid).filter(s=>s.sched);const live=rs.filter(r=>nowIn(r.id)).length;tip.innerHTML=`<b>${esc(b.code)} · ${esc(b.name)}</b>${esc(b.cat)} · ${b.floors} ${b.floors>1?'plantas':'planta'}${rs.length?` · ${live}/${rs.length} en clase`:''}`}
   tip.style.opacity=bid||sid?1:0;{const rr=rootEl.getBoundingClientRect();tip.style.left=e.clientX-rr.left+14+'px';tip.style.top=e.clientY-rr.top+14+'px'}});
 stage.addEventListener('pointerleave',()=>{HL.hover=HL.hoverRoom=null;tip.style.opacity=0});
 stage.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
 stage.addEventListener('pointerup',e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;
   if(S.picking){setRay(e);const p=new THREE.Vector3();if(ray.ray.intersectPlane(gplane,p)){const [i,j]=freeNear([p.x,p.z]);S.origin=[cx2(i),cz2(j)];placePin();toast('Punto de partida actualizado')}S.picking=false;rootEl.classList.remove('ut-picking');rerouteCurrent();return}
+  if(PK.on){pickTap(hit(e));return}
   const {bid,sid}=hit(e);if(sid){const s=SP[sid];if(EK['s:'+sid])open('s:'+sid);else toast(`${s.name} · ${KINDS[s.kind]} · P${s.floor}`)}else if(bid)open('b:'+bid)});
 
 // ---------- entidades / búsqueda ----------
@@ -520,7 +542,10 @@ addEventListener('hashchange',()=>{const k=dec(location.hash.slice(1));if(EK[k]&
 // Liberación: corta el bucle, los oyentes de window y el renderer (un contexto WebGL por visita no se puede acumular).
 function destroy(){if(!alive)return;alive=false;cancelAnimationFrame(rafId);ac.abort();rootRO.disconnect();stage.removeEventListener('ubicatec:stage-dispose',destroy);if(window.UbicaTec===api)delete window.UbicaTec;stage.dispose?.()}
 stage.addEventListener('ubicatec:stage-dispose',destroy);
-const api={state:S,data:D,open,keys:()=>Object.keys(EK),destroy};
+// Sonda para las pruebas de navegador: abre el edificio del salón y da dónde está en pantalla (coordenadas de cliente).
+function probe(key){const sid=KEY2SID[key],s=sid&&SP[sid];if(!s)return null;if(S.open!==s.building||S.floor!==s.floor)openInterior(s.building,s.floor);
+  camera.updateMatrixWorld();const v=new THREE.Vector3(s.c[0],(s.floor-1)*FH+1.9,s.c[1]).project(camera);const r=stage.getBoundingClientRect();return{x:Math.round(r.left+(v.x*.5+.5)*r.width),y:Math.round(r.top+(-v.y*.5+.5)*r.height)}}
+const api={state:S,data:D,open,keys:()=>Object.keys(EK),enablePick,disablePick,probe,destroy};
 window.UbicaTec=api;
 addEventListener('ubicatec:focus',e=>{const k=e.detail?.key;if(k&&EK[k])open(k)},sig);
 rootEl.classList.add('ut-ready');
