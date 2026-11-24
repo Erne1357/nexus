@@ -2,9 +2,12 @@
 
 use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Actions\UpdateSetting;
+use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Scheduling\Models\GroupSession;
@@ -12,6 +15,7 @@ use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use Carbon\CarbonImmutable;
+use Illuminate\Testing\TestResponse;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\Support\Staffing\SelectionWorld;
@@ -45,6 +49,24 @@ function selectionOfferTeacher(Teacher $teacher): Teacher
 function selectionDrawer(User $user): Testable
 {
     return Livewire::actingAs($user)->test('staffing::components.selection-group-drawer', ['selectionId' => test()->world->selection->id]);
+}
+
+/**
+ * Llama métodos de un componente por el endpoint de Livewire de verdad, para que corran los middleware persistentes
+ * con la ruta de la página (EnsureAcademicLoadIsVisible). Devuelve la respuesta y el snapshot nuevo.
+ *
+ * @param  list<array{0: string, 1: list<mixed>}>  $calls
+ * @return array{0: TestResponse, 1: ?string}
+ */
+function selectionLivewireCall(string $snapshot, array $calls): array
+{
+    $response = test()->withHeaders(['X-Livewire' => 'true'])->postJson(app('livewire')->getUpdateUri(), ['components' => [[
+        'snapshot' => $snapshot,
+        'updates' => [],
+        'calls' => array_map(fn (array $call): array => ['path' => '', 'method' => $call[0], 'params' => $call[1]], $calls),
+    ]]]);
+
+    return [$response, $response->json('components.0.snapshot')];
 }
 
 it('fuera de su turno el horario es de solo lectura', function () {
@@ -232,4 +254,24 @@ it('el jefe de otro departamento no ve la selección ni asigna en ella', functio
     selectionDrawer($jefe)->assertForbidden();
 
     expect($this->group->fresh()->teacher_id)->toBeNull();
+});
+
+it('MN-05: con la carga académica oculta, el docente en su turno ve el horario y toma un grupo', function () {
+    app(UpdateSetting::class)->handle(app(SettingRegistry::class)->get(AcademicLoadVisibility::SETTING), false);
+    expect(app(AcademicLoadVisibility::class)->isHidden())->toBeTrue();
+
+    $page = $this->actingAs($this->uno->user)->get(route('staffing.offer'))->assertOk()->assertSee('Es tu turno');
+    preg_match_all('/wire:snapshot="([^"]+)"/', (string) $page->getContent(), $matches);
+    $snapshot = collect($matches[1])->map(fn (string $encoded): string => html_entity_decode($encoded, ENT_QUOTES | ENT_HTML5))
+        ->first(fn (string $snapshot): bool => (json_decode($snapshot, true)['memo']['name'] ?? null) === 'staffing::components.selection-group-drawer');
+
+    [$opened, $snapshot] = selectionLivewireCall($snapshot, [['open', [$this->group->id]]]);
+    $opened->assertOk();
+    [$taken] = selectionLivewireCall($snapshot, [['take', []]]);
+    $taken->assertOk();
+
+    expect($this->group->fresh()->teacher_id)->toBe($this->uno->id);
+
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id])->create();
+    $this->actingAs($jefe)->get(route('staffing.offer'))->assertOk()->assertSee('Asignas cualquier grupo, a cualquier hora.');
 });
