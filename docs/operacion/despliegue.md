@@ -221,7 +221,7 @@ Con un archivo de datos: usa el color activo (`nexus status`). Con `docker exec 
 
 ```bash
 C=nexus-app-<color>-1
-nexus compose run --rm --no-deps -T backup predeploy <etiqueta>     # 1. respaldo (imprime PREDEPLOY_FILE=…)
+nexus compose exec backup sh /opt/backup/backup.sh run              # 1. respaldo (daily/nexus-<fecha-hora>.dump; no toca predeploy/)
 docker exec -i $C sh -c 'mkdir -p storage/app/imports && cat > storage/app/imports/<archivo>' < <archivo>   # 2. subir el archivo
 nexus compose exec app-<color> php artisan <comando> storage/app/imports/<archivo> --dry-run --no-interaction   # 3. solo cuenta
 nexus compose exec app-<color> php artisan <comando> storage/app/imports/<archivo> --no-interaction             # 4. de verdad
