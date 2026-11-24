@@ -159,27 +159,29 @@ it('MP-01: cada periodo trae sus clases y uno sin clases sale vacío', function 
 
 it('MP-01: un periodo estable se guarda 30 días y uno reciente 10 minutos', function () {
     $ttls = [];
-    Cache::shouldReceive('remember')->andReturnUsing(function (string $key, int $ttl, Closure $callback) use (&$ttls) {
+    Cache::shouldReceive('remember')->andReturnUsing(fn (string $key, int $ttl, Closure $callback) => $callback());
+    Cache::shouldReceive('get')->andReturnNull();
+    Cache::shouldReceive('put')->andReturnUsing(function (string $key, mixed $value, int $ttl) use (&$ttls): bool {
         $ttls[$key] = $ttl;
 
-        return $callback();
+        return true;
     });
 
     $query = app(CampusMapQuery::class);
 
     $this->travelTo(CarbonImmutable::parse('2026-08-20 10:00', 'America/Ciudad_Juarez'));
     $query->forTerm($this->term);
-    $recent = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v2:'));
+    $recent = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v3:'));
 
     $this->travelTo(CarbonImmutable::parse('2026-08-24 10:00', 'America/Ciudad_Juarez'));
     $ttls = [];
     $query->forTerm($this->term);
-    $sevenDays = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v2:'));
+    $sevenDays = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v3:'));
 
     $this->travelTo(CarbonImmutable::parse('2027-01-10 10:00', 'America/Ciudad_Juarez'));
     $ttls = [];
     $query->forTerm($this->term);
-    $ended = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v2:'));
+    $ended = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v3:'));
 
     expect($recent)->toBe(CampusMapQuery::LIVE_TTL_SECONDS)
         ->and($sevenDays)->toBe(CampusMapQuery::STABLE_TTL_SECONDS)
@@ -209,4 +211,21 @@ it('MP-01: un cambio en una sesión de la carga publicada se ve pasada la ventan
 
     expect($query->fingerprint($this->term, $this->campus->id))->not->toBe($before)
         ->and($query->forTerm($this->term)['classes'][0]['room'])->toBe('Edificio Sistemas|702');
+});
+
+it('MP-01: una sola llave por periodo y campus guarda la huella con el mapa, y un cambio la sobrescribe', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-20 10:00', 'America/Ciudad_Juarez'));
+    $query = app(CampusMapQuery::class);
+    $key = 'scheduling:campus-map:v3:'.$this->term->code.':'.$this->campus->id;
+
+    $query->forTerm($this->term);
+    $first = Cache::get($key);
+    $this->room->update(['name' => 'Laboratorio nuevo']);
+    $this->travel(61)->seconds();
+    $query->forTerm($this->term);
+    $second = Cache::get($key);
+
+    expect($first['fp'])->not->toBe($second['fp'])
+        ->and($second['fp'])->toBe($query->fingerprint($this->term, (string) $this->campus->id))
+        ->and(collect($second['map']['rooms'])->firstWhere('code', '701')['name'])->toBe('Laboratorio nuevo');
 });

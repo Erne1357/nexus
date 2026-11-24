@@ -192,7 +192,7 @@ new #[Title('Mi carga')] class extends Component
      */
     private function inProgressTerm(Actor $context): ?Term
     {
-        return $context->viewTerm();
+        return $context->viewTerm() ?? $context->loadTerm();
     }
 
     /**

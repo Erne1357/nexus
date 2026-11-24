@@ -132,7 +132,7 @@ final class Actor
     /** @var array<string, Collection<int, Modality>> modalities() por perfil activo ('' sin perfil) */
     private array $modalities = [];
 
-    /** @var array<string, Term|null> periodo activo por elección de sesión ('' sin elección) */
+    /** @var array<string, Term|null> periodo por slot y elección de sesión ('load:' o 'view:' más el id elegido, vacío sin elección) */
     private array $terms = [];
 
     /** @var array<int|string, self> contextos de otros usuarios, por id */
@@ -553,7 +553,9 @@ final class Actor
             return null;
         }
 
-        $selected = $this->session?->get(self::ACTIVE_TERM);
+        // Quien no trabaja la carga (docente, alumno) no ve «Carga» ni la puede cambiar: siempre el vigente (TP-04), aunque
+        // la sesión traiga una elección de otro puesto o de un aviso.
+        $selected = $this->worksLoad() ? $this->session?->get(self::ACTIVE_TERM) : null;
         $key = 'load:'.$selected;
 
         if (! array_key_exists($key, $this->terms)) {
@@ -591,8 +593,11 @@ final class Actor
      */
     public function worksLoad(): bool
     {
+        $role = $this->activeRole();
+
         return $this->user() !== null
-            && ! in_array($this->activeRole(), [Role::Docente, Role::Alumno], true);
+            && $role !== null
+            && ! in_array($role, [Role::Docente, Role::Alumno], true);
     }
 
     /**

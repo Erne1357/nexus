@@ -405,7 +405,7 @@ describe('campus y periodo activos por omisión', function () {
         $inProgress = Term::factory()->create(['code' => '20263', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
         $current = Term::factory()->current()->create(['code' => '20271', 'starts_on' => '2027-01-25', 'ends_on' => '2027-05-28']);
         $other = Term::factory()->create(['code' => '20253', 'starts_on' => '2025-08-18', 'ends_on' => '2025-12-12']);
-        $context = actorOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
+        $context = actorOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
 
         // Una elección guardada antes del despliegue (llave vieja) sigue siendo el periodo de carga.
         session([Actor::ACTIVE_TERM => $other->id]);
@@ -435,10 +435,25 @@ describe('campus y periodo activos por omisión', function () {
         'admin' => [Role::Admin, true],
     ]);
 
+    it('TP-04: docente y alumno siempre tienen el periodo de carga vigente, aunque la sesión traiga otro', function (Role $role) {
+        $current = Term::factory()->current()->create(['code' => '20271']);
+        $other = Term::factory()->create(['code' => '20253']);
+        $context = actorOf(User::factory()->withRole($role, ['campus_id' => $this->c2->id])->create());
+
+        session([Actor::ACTIVE_TERM => $other->id]);
+
+        expect($context->worksLoad())->toBeFalse()
+            ->and($context->loadTerm()?->is($current))->toBeTrue();
+    })->with([Role::Docente, Role::Alumno]);
+
+    it('TP-04: el personal sin puesto no ve «Carga»', function () {
+        expect(actorOf(User::factory()->create())->worksLoad())->toBeFalse();
+    });
+
     it('recuerda el periodo activo en la petición, pero sigue una elección nueva', function () {
         $current = Term::factory()->current()->create();
         $previous = Term::factory()->create();
-        $context = actorOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
+        $context = actorOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
         $context->loadTerm();
 
         DB::enableQueryLog();

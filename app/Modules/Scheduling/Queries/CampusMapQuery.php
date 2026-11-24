@@ -58,19 +58,26 @@ final class CampusMapQuery
             return $this->build($term, $campusId, null);
         }
 
+        // Una sola llave por periodo y campus que guarda la huella con el mapa: si la huella cambió, se rehace y se
+        // sobrescribe, así las versiones viejas no se acumulan en Valkey.
         $fingerprint = $this->fingerprint($term, $campusId);
-        $key = 'scheduling:campus-map:v2:'.$term->code.':'.$campusId.':'.$fingerprint;
+        $key = 'scheduling:campus-map:v3:'.$term->code.':'.$campusId;
+        $cached = Cache::get($key);
 
-        return Cache::remember($key, $this->isStable($term) ? self::STABLE_TTL_SECONDS : self::LIVE_TTL_SECONDS, function () use ($term, $campusId): array {
-            $source = $this->hasPublishedLoad($term, $campusId) ? 'nexus' : 'sii';
+        if (is_array($cached) && ($cached['fp'] ?? null) === $fingerprint) {
+            return $cached['map'];
+        }
 
-            return $this->build($term, $campusId, $source);
-        });
+        $map = $this->build($term, $campusId, $this->hasPublishedLoad($term, $campusId) ? 'nexus' : 'sii');
+        Cache::put($key, ['fp' => $fingerprint, 'map' => $map], $this->isStable($term) ? self::STABLE_TTL_SECONDS : self::LIVE_TTL_SECONDS);
+
+        return $map;
     }
 
     /**
-     * Huella de todo lo que pinta el mapa del periodo en el campus: conteo y última modificación de cada tabla que
-     * lee (una sola consulta con subselects). Se guarda 60 segundos; pasado ese lapso un cambio ya cambia la llave de
+     * Huella de todo lo que pinta el mapa del periodo en el campus: conteo, última modificación y suma de las
+     * marcas de tiempo de cada tabla que lee, con el periodo y el campus (una sola consulta con subselects); la suma
+     * nota también dos cambios en el mismo segundo. Se guarda 60 segundos; pasado ese lapso un cambio ya cambia la llave de
      * la caché (MP-01).
      */
     public function fingerprint(Term $term, string $campusId): string
@@ -80,23 +87,25 @@ final class CampusMapQuery
             self::FINGERPRINT_TTL_SECONDS,
             function () use ($term, $campusId): string {
                 $parts = [
-                    'select count(*) c, max(updated_at) m from academic_loads where term_id = :term',
-                    'select count(*) c, max(updated_at) m from groups where term_id = :term and campus_id = :campus',
-                    'select count(*) c, max(s.updated_at) m from group_sessions s join groups g on g.id = s.group_id where g.term_id = :term and g.campus_id = :campus',
-                    "select count(*) c, max(updated_at) m from historical_groups where term_code = :code and source = 'sii' and campus_id = :campus",
-                    "select count(*) c, max(s.updated_at) m from historical_group_sessions s join historical_groups g on g.id = s.historical_group_id where g.term_code = :code and g.source = 'sii' and g.campus_id = :campus",
-                    'select count(*) c, max(updated_at) m from rooms where campus_id = :campus',
-                    'select count(*) c, max(updated_at) m from buildings where campus_id = :campus',
-                    'select count(*) c, max(updated_at) m from teachers',
-                    'select count(*) c, max(updated_at) m from teacher_departments',
-                    'select count(*) c, max(updated_at) m from departments',
-                    'select count(*) c, max(updated_at) m from subjects',
-                    'select count(*) c, max(updated_at) m from careers',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from academic_loads where term_id = :term',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from groups where term_id = :term and campus_id = :campus',
+                    'select count(*) c, max(s.updated_at) m, sum(extract(epoch from s.updated_at)) e from group_sessions s join groups g on g.id = s.group_id where g.term_id = :term and g.campus_id = :campus',
+                    "select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from historical_groups where term_code = :code and source = 'sii' and campus_id = :campus",
+                    "select count(*) c, max(s.updated_at) m, sum(extract(epoch from s.updated_at)) e from historical_group_sessions s join historical_groups g on g.id = s.historical_group_id where g.term_code = :code and g.source = 'sii' and g.campus_id = :campus",
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from rooms where campus_id = :campus',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from buildings where campus_id = :campus',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from teachers',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from teacher_departments',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from departments',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from subjects',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from careers',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from terms where id = :term',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from campuses where id = :campus',
                 ];
                 $select = [];
                 $from = [];
                 foreach ($parts as $i => $sql) {
-                    $select[] = "t{$i}.c as c{$i}, t{$i}.m as m{$i}";
+                    $select[] = "t{$i}.c as c{$i}, t{$i}.m as m{$i}, t{$i}.e as e{$i}";
                     $from[] = "($sql) t{$i}";
                 }
 

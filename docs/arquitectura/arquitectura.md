@@ -275,7 +275,7 @@ Lo que es de un campus declara campus, lo de un departamento declara unidad y lo
 | `activeRole()` | El perfil activo: la elección de la sesión (`ACTIVE_ROLE`) si aún lo tiene; si no, `users.last_role` si lo conserva; si no, el primero de `heldRoles()`. Nulo en `forUser()` de otra persona y sin puestos. |
 | `heldScopes(?Role $role = null)` | Los nombramientos de todos sus puestos (o solo de `$role`), sin importar el perfil activo: lo que muestra «Actuando como». |
 | `campuses()`, `loadTerm()`, `viewTerm()`, `worksLoad()` | `campuses()`: los campus activos (lugares) donde trabaja con sus puestos efectivos, por código, para el filtro de campus de una pantalla (`WithCampusFilter`); con un nombramiento sin campus, todos, y el admin efectivo, todos; se recuerda por perfil activo. `loadTerm()`: el periodo de carga de la credencial; `viewTerm()`: el de consulta (TP-04); `worksLoad()`: si el puesto activo ve el selector «Carga». |
-| `ACTIVE_TERM`, `ACTIVE_ROLE` | Claves de sesión del periodo y el perfil elegidos. |
+| `ACTIVE_TERM`, `VIEW_TERM`, `ACTIVE_ROLE` | Claves de sesión del periodo de carga, el periodo de consulta (TP-04) y el perfil elegidos. |
 
 ### Policies, menú y pantallas
 
