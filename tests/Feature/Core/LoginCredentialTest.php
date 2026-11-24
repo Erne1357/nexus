@@ -5,6 +5,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use Carbon\CarbonImmutable;
 
 /*
 | La credencial de la pantalla de acceso (tarea 1.23; DESIGN.md, "Pantalla de acceso"): el login manda el formulario
@@ -13,8 +14,9 @@ use App\Modules\Core\Models\User;
 */
 
 beforeEach(function () {
+    $this->travelTo(CarbonImmutable::parse('2027-02-01 10:00', 'America/Ciudad_Juarez'));
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
+    Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-05-28']);
 });
 
 it('con JSON entra y responde la ficha de la credencial, la misma de la banda, y a dónde ir con su ruta', function () {
@@ -34,6 +36,7 @@ it('con JSON entra y responde la ficha de la credencial, la misma de la banda, y
                 'initials' => 'CC',
                 'role' => 'Coordinador de carrera',
                 'term' => 'Ene-Jun 2027',
+                'loadTerm' => 'Ene-Jun 2027',
                 'summary' => 'Coordinador de carrera · Ene-Jun 2027',
             ],
         ]);

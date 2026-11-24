@@ -107,7 +107,7 @@ it('MN-02: el admin ve todo, y lo que los demás no ven lleva su motivo', functi
 it('MN-04: la condición de la carga se consulta una vez por menú, aunque la declaren tres módulos', function () {
     AcademicLoad::factory()->for($this->term)->create();
     $this->actingAs(subdireccion());
-    app(Actor::class)->activeTerm();
+    app(Actor::class)->loadTerm();
 
     $queries = 0;
     // Solo la de la carga en curso (`status`): «Re-análisis de la carga» tiene su propia condición (cargas publicadas).
@@ -128,7 +128,7 @@ it('MN-02: sin periodo elegido, lo que depende del periodo no está disponible y
 
     $condition = TermAvailability::of(static fn (Term $term): ?string => null);
 
-    expect(app(Actor::class)->activeTerm())->toBeNull()
+    expect(app(Actor::class)->loadTerm())->toBeNull()
         ->and($condition(app(Actor::class)))->toBe(TermAvailability::NO_TERM)
         ->and(TermAvailability::NO_TERM)->toBe('No hay un periodo elegido');
 });

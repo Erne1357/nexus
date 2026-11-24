@@ -31,7 +31,7 @@ it('fija el periodo activo del usuario', function () {
 
     app(SetActiveContext::class)->handle($this->previous);
 
-    expect(app(Actor::class)->activeTerm()?->is($this->previous))->toBeTrue()
+    expect(app(Actor::class)->loadTerm()?->is($this->previous))->toBeTrue()
         ->and(session(Actor::ACTIVE_TERM))->toBe($this->previous->id);
 });
 
@@ -41,7 +41,7 @@ it('con null olvida la elección y vuelve al periodo actual', function () {
 
     app(SetActiveContext::class)->handle(null);
 
-    expect(app(Actor::class)->activeTerm()?->is($this->current))->toBeTrue()
+    expect(app(Actor::class)->loadTerm()?->is($this->current))->toBeTrue()
         ->and(session(Actor::ACTIVE_TERM))->toBeNull();
 });
 

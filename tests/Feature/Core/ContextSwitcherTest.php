@@ -8,6 +8,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Testing\TestResponse;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -18,6 +19,7 @@ use Livewire\Livewire;
 */
 
 beforeEach(function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-23 10:00', 'America/Ciudad_Juarez'));
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
 
@@ -38,7 +40,7 @@ function applyFromPage(Testable $component, string $page): TestResponse
     return test()->withHeaders(['X-Livewire' => 'true', 'Referer' => $page])->postJson(app('livewire')->getUpdateUri(), ['components' => [[
         'snapshot' => json_encode($component->snapshot),
         'updates' => [],
-        'calls' => [['path' => '', 'method' => 'apply', 'params' => []]],
+        'calls' => [['path' => '', 'method' => 'applyLoad', 'params' => []]],
     ]]]);
 }
 
@@ -48,27 +50,29 @@ it('ofrece todos los periodos, del más reciente al más antiguo, y ningún camp
     Livewire::test('core::components.context-switcher')
         ->assertSeeInOrder(['Periodo', 'Ene-Jun 2027', 'Ago-Dic 2026'])
         ->assertSeeHtml('wire:model="termId"')
+        ->assertSeeHtml('wire:model="loadTermId"')
         ->assertDontSee('Campus I')
         ->assertDontSee('Campus II')
         ->assertDontSeeHtml('name="campus"')
-        ->assertSet('termId', $this->current->id);
+        ->assertSet('termId', $this->previous->id)
+        ->assertSet('loadTermId', $this->current->id);
 })->with(['de dos campus' => 'jefe', 'de un campus' => 'coordinador']);
 
-it('cambia el periodo activo con SetActiveContext y recarga la página', function () {
+it('cambia el periodo de carga con SetActiveContext y recarga la página', function () {
     $this->actingAs($this->jefe);
 
     Livewire::test('core::components.context-switcher')
-        ->set('termId', $this->previous->id)
-        ->call('apply')
+        ->set('loadTermId', $this->previous->id)
+        ->call('applyLoad')
         ->assertHasNoErrors()
         ->assertRedirect(Livewire::originalUrl());
 
-    expect(app(Actor::class)->activeTerm()?->is($this->previous))->toBeTrue();
+    expect(app(Actor::class)->loadTerm()?->is($this->previous))->toBeTrue();
 });
 
 it('al recargar conserva el campus que la página eligió, y nada más de su consulta', function () {
     $this->actingAs($this->jefe);
-    $component = Livewire::test('core::components.context-switcher')->set('termId', $this->previous->id);
+    $component = Livewire::test('core::components.context-switcher')->set('loadTermId', $this->previous->id);
 
     $redirect = applyFromPage($component, url('/scheduling/editor?grupo=abc&campus=C2'))->assertOk()->json('components.0.effects.redirect');
 
@@ -78,7 +82,7 @@ it('al recargar conserva el campus que la página eligió, y nada más de su con
 
 it('sin campus en la página recarga la misma ruta sin consulta', function () {
     $this->actingAs($this->jefe);
-    $component = Livewire::test('core::components.context-switcher')->set('termId', $this->previous->id);
+    $component = Livewire::test('core::components.context-switcher')->set('loadTermId', $this->previous->id);
 
     $redirect = applyFromPage($component, url('/scheduling/editor?grupo=abc'))->assertOk()->json('components.0.effects.redirect');
 
@@ -90,20 +94,20 @@ it('confirma con un toast que escapa el nombre del periodo, porque MaryUI lo pin
     $this->actingAs($this->jefe);
 
     Livewire::test('core::components.context-switcher')
-        ->set('termId', $this->previous->id)
-        ->call('apply');
+        ->set('loadTermId', $this->previous->id)
+        ->call('applyLoad');
 
-    expect(session('mary.toast.title'))->toBe('Periodo actualizado')
+    expect(session('mary.toast.title'))->toBe('Periodo de carga actualizado')
         ->and(session('mary.toast.description'))->toBe('&lt;img src=x onerror=alert(1)&gt;');
 });
 
-it('al elegir el periodo actual deja el de omisión, para seguirlo cuando cambie', function () {
+it('TP-04: al elegir el periodo vigente en «Carga» deja el de omisión, para seguirlo cuando cambie', function () {
     $this->actingAs($this->jefe);
     session([Actor::ACTIVE_TERM => $this->previous->id]);
 
     Livewire::test('core::components.context-switcher')
-        ->set('termId', $this->current->id)
-        ->call('apply');
+        ->set('loadTermId', $this->current->id)
+        ->call('applyLoad');
 
     expect(session(Actor::ACTIVE_TERM))->toBeNull();
 });
@@ -116,11 +120,11 @@ describe('elección rechazada', function () {
 
     it('con un periodo que no existe avisa con un toast, regresa la selección y no cambia el periodo', function (string $id) {
         $component = Livewire::test('core::components.context-switcher')
-            ->set('termId', $id)
-            ->call('apply')
+            ->set('loadTermId', $id)
+            ->call('applyLoad')
             ->assertOk()
             ->assertNoRedirect()
-            ->assertSet('termId', $this->previous->id);
+            ->assertSet('loadTermId', $this->previous->id);
 
         expect(lastToastOf($component))
             ->type->toBe('error')
@@ -133,7 +137,7 @@ describe('elección rechazada', function () {
     ]);
 });
 
-describe('sin periodo activo', function () {
+describe('sin periodo de carga vigente', function () {
     beforeEach(function () {
         $this->current->update(['is_current' => false]);
         $this->actingAs($this->jefe);
@@ -141,25 +145,84 @@ describe('sin periodo activo', function () {
 
     it('muestra una opción vacía "Sin periodo" en lugar de aparentar que el primero está activo', function () {
         Livewire::test('core::components.context-switcher')
-            ->assertSet('termId', null)
+            ->assertSet('loadTermId', null)
             ->assertSeeHtml('<option value="">Sin periodo</option>');
     });
 
     it('deja elegir cualquier periodo', function (string $term) {
         Livewire::test('core::components.context-switcher')
-            ->set('termId', $this->{$term}->id)
-            ->call('apply')
+            ->set('loadTermId', $this->{$term}->id)
+            ->call('applyLoad')
             ->assertRedirect(Livewire::originalUrl());
 
-        expect(app(Actor::class)->activeTerm()?->is($this->{$term}))->toBeTrue();
+        expect(app(Actor::class)->loadTerm()?->is($this->{$term}))->toBeTrue();
     })->with(['current', 'previous']);
 
     it('con un periodo activo no ofrece la opción vacía', function () {
         $this->current->update(['is_current' => true]);
 
         Livewire::test('core::components.context-switcher')
-            ->assertSet('termId', $this->current->id)
+            ->assertSet('loadTermId', $this->current->id)
             ->assertDontSeeHtml('Sin periodo');
+    });
+});
+
+describe('periodo de consulta (TP-04)', function () {
+    it('TP-04: «Periodo» guarda la elección en su llave y no toca la de carga', function () {
+        $this->actingAs($this->jefe);
+        session([Actor::ACTIVE_TERM => $this->previous->id]);
+
+        Livewire::test('core::components.context-switcher')
+            ->set('termId', $this->current->id)
+            ->call('applyView')
+            ->assertRedirect(Livewire::originalUrl());
+
+        expect(session(Actor::VIEW_TERM))->toBe($this->current->id)
+            ->and(session(Actor::ACTIVE_TERM))->toBe($this->previous->id)
+            ->and(app(Actor::class)->viewTerm()?->is($this->current))->toBeTrue()
+            ->and(session('mary.toast.title'))->toBe('Periodo actualizado');
+    });
+
+    it('TP-04: al elegir el periodo en curso deja el de omisión', function () {
+        $this->actingAs($this->jefe);
+        session([Actor::VIEW_TERM => $this->current->id]);
+
+        Livewire::test('core::components.context-switcher')
+            ->set('termId', $this->previous->id)
+            ->call('applyView');
+
+        expect(session(Actor::VIEW_TERM))->toBeNull();
+    });
+
+    it('TP-04: «Carga» solo la ven los puestos que trabajan la carga', function (string $who, bool $sees) {
+        $user = match ($who) {
+            'jefe' => $this->jefe,
+            'coordinador' => User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create(),
+            'docente' => User::factory()->withRole(Role::Docente)->create(),
+            'alumno' => User::factory()->withRole(Role::Alumno)->create(),
+        };
+        $this->actingAs($user);
+
+        $component = Livewire::test('core::components.context-switcher')->assertSeeHtml('name="term"');
+
+        $sees ? $component->assertSeeHtml('name="load_term"') : $component->assertDontSeeHtml('name="load_term"');
+    })->with([
+        'jefe' => ['jefe', true],
+        'coordinador' => ['coordinador', true],
+        'docente' => ['docente', false],
+        'alumno' => ['alumno', false],
+    ]);
+
+    it('TP-04: un docente que llama applyLoad no cambia la sesión y recibe un aviso', function () {
+        $this->actingAs(User::factory()->withRole(Role::Docente)->create());
+
+        $component = Livewire::test('core::components.context-switcher')
+            ->set('loadTermId', $this->previous->id)
+            ->call('applyLoad')
+            ->assertNoRedirect();
+
+        expect(lastToastOf($component))->type->toBe('error')
+            ->and(session(Actor::ACTIVE_TERM))->toBeNull();
     });
 });
 
@@ -238,7 +301,7 @@ it('rechaza un puesto que no tiene y deja el perfil como estaba', function () {
     expect(session(Actor::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value);
 });
 
-it('cambiar el periodo nunca cambia el perfil, aunque el perfil elegido en el selector sea otro', function () {
+it('cambiar el periodo de carga nunca cambia el perfil, aunque el perfil elegido en el selector sea otro', function () {
     $user = User::factory()
         ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
         ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
@@ -247,8 +310,8 @@ it('cambiar el periodo nunca cambia el perfil, aunque el perfil elegido en el se
 
     Livewire::test('core::components.context-switcher')
         ->set('roleValue', 'coordinador')
-        ->set('termId', $this->previous->id)
-        ->call('apply')
+        ->set('loadTermId', $this->previous->id)
+        ->call('applyLoad')
         ->assertRedirect(Livewire::originalUrl());
 
     expect(session(Actor::ACTIVE_ROLE))->toBe(Role::JefeProyectoDocente->value)

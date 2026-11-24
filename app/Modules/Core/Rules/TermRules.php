@@ -52,6 +52,14 @@ final class TermRules
     }
 
     /**
+     * Si el código es de un periodo regular, Ene-Jun (1) o Ago-Dic (3): el verano (2) no lo es (TP-03).
+     */
+    public function isRegular(string $code): bool
+    {
+        return preg_match('/^[0-9]{4}[13]$/', trim($code)) === 1;
+    }
+
+    /**
      * El nombre que se sugiere para un código válido; null si el código no tiene la forma.
      */
     public function suggestedName(string $code): ?string

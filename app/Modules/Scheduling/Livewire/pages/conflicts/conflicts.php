@@ -69,7 +69,7 @@ new #[Title('Choques y avance')] class extends Component
     {
         $this->authorizeView($context);
 
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
         $modality = $this->requiredModality();
         $campus = $this->campusFilter();
         $links = ['editor' => Route::has('scheduling.editor'), 'assign' => Route::has('staffing.assign')];
@@ -164,7 +164,7 @@ new #[Title('Choques y avance')] class extends Component
     {
         $this->authorizeView($context);
 
-        $term = $context->activeTerm() ?? abort(404);
+        $term = $context->loadTerm() ?? abort(404);
 
         abort_unless($board->hasDepartment($context, $term, $this->requiredModality(), $this->campusFilter(), $id), 404);
 
@@ -182,7 +182,7 @@ new #[Title('Choques y avance')] class extends Component
     {
         $this->authorizeView($context);
 
-        $term = $context->activeTerm() ?? abort(404);
+        $term = $context->loadTerm() ?? abort(404);
 
         RecomputeScheduleConflicts::dispatch($term->id, $this->requiredModality()->id);
         $this->pollUntil = now()->addSeconds(30)->getTimestamp();

@@ -193,7 +193,7 @@ it('abrirla deja la credencial en el periodo del aviso y abre la pantalla en su 
     $target = app(OpenNotification::class)->handle($admin, $admin->notifications()->value('id'));
 
     expect($target->url)->toBe(route('home', ['tab' => 'uno', 'campus' => 'C2']))
-        ->and(app(Actor::class)->activeTerm()?->id)->toBe($term->id)
+        ->and(app(Actor::class)->loadTerm()?->id)->toBe($term->id)
         ->and(array_filter(array_keys(session()->all()), fn (string $key): bool => str_contains($key, 'campus')))->toBe([]);
 });
 
@@ -207,7 +207,7 @@ it('abrirla deja la credencial en el periodo del aviso aunque no lleve campus ni
     $target = app(OpenNotification::class)->handle($admin, $admin->notifications()->value('id'));
 
     expect($target->url)->toBe(route('home'))
-        ->and(app(Actor::class)->activeTerm()?->id)->toBe($term->id);
+        ->and(app(Actor::class)->loadTerm()?->id)->toBe($term->id);
 });
 
 it('un parámetro campus guardado en el aviso gana al código de su campus', function () {

@@ -10,6 +10,8 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
+use App\Modules\Core\Rules\TermRules;
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -38,6 +40,29 @@ final class TermQuery
                 ->orWhere('is_current', true))
             ->orderByDesc('starts_on')
             ->get();
+    }
+
+    /**
+     * El periodo en curso el día `$day` (TP-03, confirmado el 23 de noviembre de 2026): el regular (Ene-Jun o Ago-Dic,
+     * `TermRules::isRegular`) cuyas fechas contienen el día; si hay dos, el de código mayor. Entre semestres y en
+     * verano, el regular que terminó más recientemente antes del día; si tampoco hay, null. Verano nunca es el de
+     * omisión.
+     */
+    public function inProgress(CarbonInterface $day): ?Term
+    {
+        $rules = new TermRules;
+        $date = $day->toDateString();
+
+        $regular = Term::query()->get()->filter(fn (Term $term): bool => $rules->isRegular($term->code));
+
+        return $regular
+            ->filter(fn (Term $term): bool => $term->starts_on->toDateString() <= $date && $term->ends_on->toDateString() >= $date)
+            ->sortByDesc('code')
+            ->first()
+            ?? $regular
+                ->filter(fn (Term $term): bool => $term->ends_on->toDateString() < $date)
+                ->sortByDesc('ends_on')
+                ->first();
     }
 
     /**
