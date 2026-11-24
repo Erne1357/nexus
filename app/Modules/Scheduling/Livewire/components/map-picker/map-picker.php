@@ -2,7 +2,6 @@
 
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Scheduling\Queries\CampusMapQuery;
-use Livewire\Attributes\Reactive;
 use Livewire\Component;
 
 /**
@@ -12,17 +11,15 @@ use Livewire\Component;
  * `{key}` (la `map_key` del salón). No sabe nada de quien lo usa: solo recibe llaves y motivos.
  *
  * Props: `eligible` (lista de map_key), `rejected` (map_key => motivo) y, opcional, `campusId` (hoy el mapa tiene un
- * solo campus, el de los edificios con map_key; se acepta para cuando haya más). Reactivas: al cambiar se vuelve a
- * llamar a `enablePick`. Una sola instancia por página (el mapa usa ids fijos).
+ * solo campus, el de los edificios con map_key; se acepta para cuando haya más). Se leen al montar (no son reactivas: el JSON del mapa pesa ~865 KB y no se reenvía): monta el selector solo
+ * mientras se ve y con `wire:key` por grupo. Una sola instancia por página (el mapa usa ids fijos).
  */
 new class extends Component
 {
     /** @var list<string> */
-    #[Reactive]
     public array $eligible = [];
 
     /** @var array<string, string> */
-    #[Reactive]
     public array $rejected = [];
 
     public ?string $campusId = null;

@@ -274,16 +274,19 @@ function targetFor(id){const st=BLD[id];if(PK.on){const hv=HL.hover===id;return{
 // Solo se enciende con window.UbicaTec.enablePick({eligible:[map_key], rejected:{map_key:motivo}}): los salones elegibles se resaltan
 // con el acento, los demás se apagan (tocar o pasar el cursor sobre uno rechazado dice por qué) y tocar uno elegible emite
 // `room-picked` en window con {key} (la map_key). Sin enablePick el mapa se comporta como siempre.
-const PK={on:false,el:new Set(),rej:new Map(),bEl:new Set(),bAll:new Set(),acc:new THREE.Color('#c2201e'),grey:new THREE.Color('#C9C3BA')};
+const PK={on:false,el:new Set(),rej:new Map(),bEl:new Set(),bAll:new Set(),acc:new THREE.Color('#1f6f4f'),grey:new THREE.Color('#B9B8B8')};
 const SID2KEY={},KEY2SID={};for(const s of D.SPACES){const k=s.building+'|'+s.raw;if(!(k in KEY2SID)){KEY2SID[k]=s.id;SID2KEY[s.id]=k}}
 const pickLegend=document.createElement('div');pickLegend.id='pklg';pickLegend.innerHTML='<span><i class="ut-pk-on"></i>Disponible</span><span><i class="ut-pk-off"></i>No disponible</span><small>Toca un edificio para ver sus salones</small>';rootEl.appendChild(pickLegend);
 function enablePick(o){const el=o?.eligible||[],rj=o?.rejected||{};
   PK.el=new Set(el.map(k=>KEY2SID[k]).filter(Boolean));PK.rej=new Map(Object.entries(rj).filter(([k])=>KEY2SID[k]).map(([k,r])=>[KEY2SID[k],String(r)]));
   PK.bEl=new Set([...PK.el].map(i=>SP[i].building));PK.bAll=new Set([...PK.bEl,...[...PK.rej.keys()].map(i=>SP[i].building)]);
-  const acc=getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim();if(acc)try{PK.acc.set(acc)}catch(e){}
+  {const cs=getComputedStyle(rootEl),tok=n=>{try{return new THREE.Color(cs.getPropertyValue(n).trim())}catch(e){return null}};
+    const ok=cs.getPropertyValue('--color-success').trim();if(ok)try{PK.acc.set(ok)}catch(e){}
+    const ne=cs.getPropertyValue('--color-neutral').trim(),bs=cs.getPropertyValue('--color-base-100').trim();
+    if(ne)try{PK.grey.set(ne);if(bs)PK.grey.lerp(new THREE.Color(bs),.55)}catch(e){}}
   if(!PK.on){PK.on=true;rootEl.classList.add('ut-pickmode');S.stack=[];HL.focus=new Map();HL.sel=null;S.roomFocus=null;if(S.open)closeInterior()}
   if(S.selRoom&&!PK.el.has(S.selRoom))S.selRoom=null}
-function disablePick(){if(!PK.on)return;PK.on=false;PK.el=new Set();PK.rej=new Map();PK.bEl=new Set();PK.bAll=new Set();rootEl.classList.remove('ut-pickmode');S.selRoom=null;tip.style.opacity=0}
+function disablePick(){if(!PK.on)return;PK.on=false;HL.hover=HL.hoverRoom=HL.hoverSet=null;PK.el=new Set();PK.rej=new Map();PK.bEl=new Set();PK.bAll=new Set();rootEl.classList.remove('ut-pickmode');S.selRoom=null;tip.style.opacity=0}
 function pickTap({bid,sid}){
   if(sid){const s=SP[sid];if(PK.el.has(sid)){S.selRoom=sid;window.dispatchEvent(new CustomEvent('room-picked',{detail:{key:SID2KEY[sid]}}))}else toast(PK.rej.has(sid)?`${s.name}: ${PK.rej.get(sid)}`:`${s.name} no está entre los salones disponibles`);return}
   if(bid){if(!PK.bAll.has(bid)){toast(`${B[bid].name}: sin salones para elegir`);return}
@@ -376,7 +379,7 @@ let FAV=LS.get('ubicatec.fav'),REC=LS.get('ubicatec.recent');
 const syncHash=()=>{const k=S.stack[S.stack.length-1];history.replaceState(history.state,'',k?'#'+encodeURIComponent(k):location.pathname+location.search)};
 function open(k){if(!EK[k]||S.stack[S.stack.length-1]===k)return;S.stack.push(k);window.dispatchEvent(new CustomEvent('ubicatec:open',{detail:{key:k}}));HL.hoverSet=null;REC=[k,...REC.filter(x=>x!==k)].slice(0,8);LS.set('ubicatec.recent',REC);syncHash();render();snap('half')}
 function back(){S.stack.pop();closeDrawer();syncHash();render()}
-function toast(msg){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';rootEl.appendChild(t)}t.textContent=msg;t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(()=>t.style.opacity=0,1800)}
+function toast(msg){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');t.setAttribute('aria-live','polite');rootEl.appendChild(t)}t.textContent=msg;t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(()=>t.style.opacity=0,1800)}
 
 function render(){panel.classList.toggle('ut-detail',S.stack.length>0);if(S.stack.length)return renderDetail(S.stack[S.stack.length-1]);
   HL.sel=null;S.selRoom=null;S.roomFocus=null;computeRoute(null);if(S.open)closeInterior();
