@@ -42,8 +42,8 @@ use Mary\Traits\Toast;
  *   que deja el historial y la bitácora; el grupo queda libre y sus salones no cambian.
  *
  * También abre los grupos de una selección ya terminada (decisión 8: lo que siga sin resolver lo asignan a mano el jefe
- * o el JPD): para el docente es solo consulta; para la jefatura, «Asignar a…» y «Quitar docente» con las reglas de
- * siempre (sin selección viva, AssignTeacher vuelve a exigir HC-16 y HC-08).
+ * o el JPD): para el docente es solo consulta; para la jefatura, «Asignar a…» y «Quitar docente» (ya terminada,
+ * AssignTeacher sigue sin pedir el motivo de HC-16 y vuelve a exigir HC-08).
  *
  * Al tomar, soltar, asignar o quitar avisa `selection-changed` para que la página se vuelva a pintar.
  */
