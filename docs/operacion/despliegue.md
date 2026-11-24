@@ -1,55 +1,82 @@
 # Despliegue y operación en producción
 
-Runbook del servidor on-premise del ITCJ. La decisión y sus alternativas están en [ADR-0013](../decisiones/0013-despliegue-on-premise-itcj.md).
+Runbook del servidor on-premise del ITCJ. Las decisiones y sus alternativas están en el [ADR-0013](../decisiones/0013-despliegue-on-premise-itcj.md) (el servidor, HTTPS y respaldos) y el [ADR-0033](../decisiones/0033-despliegue-continuo.md) (despliegue continuo sin caídas).
 
-**Estado:** el stack se validó en una máquina de desarrollo el 2026-10-27 y se **ensayó completo, desde cero y siguiendo este runbook, el 2026-11-10** (ver [Ensayo local](#ensayo-local-2026-11-10)). **Falta ejecutarlo en el servidor real** y confirmar con el ITCJ los puntos de la sección [Por confirmar](#por-confirmar-con-el-itcj). Mientras tanto, los comandos de abajo son los que se probaron; las rutas del servidor (`/opt/nexus`, `/var/backups/nexus`) son una sugerencia.
+**Estado:** el stack de producción se ensayó desde cero el 2026-11-10 ([Ensayo local](#ensayo-local-2026-11-10)), y desde el 23 de noviembre de 2026 el despliegue continuo se prueba solo en cada PR hacia `main` (job `prod-smoke`: primer arranque, despliegue y rollback con tráfico continuo, versión rota, paquete alterado, contracción y reinicio de Docker). **Falta ejecutarlo en el servidor real** y confirmar con el ITCJ los puntos de [Por confirmar](#por-confirmar-con-el-itcj). El servidor ya existe, pero hoy **no tiene salida a internet**: cada versión llega en un paquete que se copia a mano (decisión del usuario del 23 de noviembre de 2026).
+
+## Cómo llega una versión
+
+1. Un PR de `develop` a `main` pasa `lint`, `tests`, `browser` y `prod-smoke`, y se mezcla.
+2. `deploy.yml` construye una vez las imágenes (app, motor y deployer), las publica en GHCR con el tag `sha-<sha>`, corre el smoke con esas mismas imágenes y deja el **paquete del release** como artefacto del workflow: `nexus-<sha>.tar` y `nexus-<sha>.tar.sha256` (30 días).
+3. **Sin internet (hoy):** alguien descarga el artefacto en una máquina con acceso, lo copia a `/opt/nexus/inbox/` del servidor, y el deployer lo despliega solo en menos de un minuto ([Actualizar](#actualizar-a-una-versión-nueva)).
+   **Con internet:** el deployer toma el despliegue de GitHub, descarga por digest y publica el resultado; el workflow falla si el despliegue falló, y GitHub avisa por correo.
+4. El despliegue es **blue/green**: la versión nueva arranca junto a la vieja, se espera a que su `/health` esté sano y Caddy cambia todo el tráfico de un paso. Si la nueva no arranca, la vieja sigue atendiendo sin cambios.
 
 ## Qué corre
 
-`docker compose` con dos archivos: `compose.yaml` (base) y `compose.prod.yaml` (producción). La plantilla del `.env` define `COMPOSE_FILE=compose.yaml:compose.prod.yaml`, así que en el servidor basta escribir `docker compose ...` sin `-f`.
+El deployer corre `docker compose` desde la carpeta de cada release (`/opt/nexus/releases/<sha>/`), con `compose.yaml`, `compose.prod.yaml` y un `compose.release.yaml` que fija la imagen exacta de cada servicio. No hay que escribir comandos de Compose a mano: el deployer los da con `nexus compose …` (ver [Operación cotidiana](#operación-cotidiana)).
 
 | Servicio | Qué hace | Se ve desde fuera |
 |---|---|---|
-| `caddy` | HTTPS con Let's Encrypt (obtiene y renueva solo), redirige 80 a 443 y reenvía a `app` | Sí: puertos 80, 443 TCP y 443 UDP |
-| `app` | Laravel + Octane; ejecuta las migraciones al arrancar | No |
-| `queue` | Worker de colas (misma imagen que `app`) | No |
+| `caddy` | HTTPS (obtiene y renueva el certificado), redirige 80 a 443, sirve los assets compilados y reenvía al color sano | Sí: puertos 80, 443 TCP y 443 UDP |
+| `app-blue`, `app-green` | Laravel + Octane, dos colores idénticos; uno atiende y el otro queda detenido con la versión anterior | No |
+| `migrate` | Migraciones, de un solo uso, antes de arrancar el color nuevo | No |
+| `queue` | Worker de colas (misma imagen que la app) | No |
+| `scheduler` | Lo programado (`schedule:work`): la limpieza de exportes y los latidos de `/health` | No |
+| `solver` | Motor de horarios | No |
 | `postgres` | Base de datos (volumen `postgres-data`) | No |
 | `valkey` | Caché, sesiones y colas (volumen `valkey-data`) | No |
-| `backup` | `pg_dump` diario hacia `BACKUP_DIR` con retención | No |
-
-El servicio `scheduler` corre `php artisan schedule:work` con la misma imagen y el mismo `.env` que `queue`: lo programado en `routes/console.php` (la primera tarea es la limpieza diaria de los exportes de lo publicado, `academic-load:prune-exports`, 3:30). En desarrollo no arranca, porque `compose.yaml` lo pone en el perfil `scheduler` y solo `compose.prod.yaml` se lo quita; ahí se corre a mano con `php artisan schedule:run`. Los recálculos pesados (`scheduling:recompute-conflicts`, `staffing:refresh-teacher-loads`) siguen por eventos y colas, o a mano.
+| `backup` | `pg_dump` diario hacia `BACKUP_DIR` con retención, y el respaldo previo a cada migración | No |
+| `deployer` | Despliega, vuelve atrás, pausa y reporta; revisa la carpeta de entrada cada minuto | No |
 
 Los exportes de lo publicado (PDF, Excel y SII) viven en `storage/app/exports`, dentro del volumen `app-storage`. No hace falta respaldarlos: se vuelven a armar desde las versiones publicadas.
 
 **Cabeceras de seguridad:** las pone la aplicación (middleware de Core, tarea 4.8), con o sin proxy. Caddy solo agrega HSTS, porque termina TLS, y quita `Server`.
 
-Volúmenes de Docker: `postgres-data`, `valkey-data`, `app-storage` (archivos compartidos entre `app` y `queue`), `caddy-data` (certificados) y `caddy-config`. **Nunca ejecutes `docker compose down -v` en producción**: borra la base de datos y los certificados.
+Volúmenes de Docker: `postgres-data`, `valkey-data`, `app-storage` (archivos compartidos entre los colores, la cola y el scheduler), `build-assets` (los assets de los últimos releases), `caddy-data` (certificados) y `caddy-config`. **Nunca ejecutes `docker compose down -v` en producción**: borra la base de datos y los certificados.
+
+Carpetas del servidor (`NEXUS_HOME=/opt/nexus`):
+
+```
+/opt/nexus/
+├── .env                 secretos y ajustes (600)
+├── inbox/               los paquetes se copian aquí; hechos/, fallidos/ y omitidos/ guardan lo procesado con su registro
+├── releases/<sha>/      la infraestructura de cada release (se conservan DEPLOY_KEEP_RELEASES, 5)
+├── config/              la configuración de Caddy y de los respaldos del release activo
+└── .deploy/             estado del deployer: color activo, historial (releases.log), pausa, candado
+```
 
 ## Requisitos del servidor
 
-- Linux con Docker Engine y el plugin de Compose v2 (probado con Docker 29 y Compose 5.0), `git` y `openssl`. El usuario que despliega pertenece al grupo `docker`.
-- Un nombre público (`APP_DOMAIN`) con registro DNS hacia la IP del servidor.
-- Puertos **80 y 443** abiertos desde internet hacia el servidor. Sin ellos Let's Encrypt no emite el certificado.
-- Salida a internet hacia Docker Hub, GitHub, Packagist, npm y `acme-v02.api.letsencrypt.org`.
-- Reloj sincronizado (NTP): con el reloj desfasado falla la emisión del certificado.
-- Docker arranca con el sistema (`sudo systemctl enable docker`). Los contenedores tienen `restart: unless-stopped`, así que vuelven solos tras un reinicio.
-- Espacio: la base, 22 respaldos (14 diarios y 8 semanales), las imágenes (cada versión pesa cerca de 1 GB) y los registros (hasta 50 MB por servicio).
+- Linux con Docker Engine y el plugin de Compose v2 (probado con Docker 29 y Compose 5). Nada más: el servidor no construye, no usa `git` ni necesita `jq`. El usuario que opera pertenece al grupo `docker`.
+- Un nombre (`APP_DOMAIN`, `nexus.cdjuarez.tecnm.mx`) con registro DNS hacia la IP del servidor.
+- HTTPS: Let's Encrypt necesita los puertos **80 y 443** abiertos desde internet y salida a `acme-v02.api.letsencrypt.org`. **Sin internet no funciona:** hace falta el certificado del ITCJ (plan B del ADR-0013) antes del arranque real.
+- Reloj sincronizado (NTP).
+- Docker arranca con el sistema (`sudo systemctl enable docker`). Los contenedores tienen `restart: unless-stopped`: tras un reinicio vuelve el color activo, y el detenido sigue detenido.
+- Espacio: la base, los respaldos (14 diarios, 8 semanales y 5 previos a migraciones), las imágenes de los últimos 5 releases (cerca de 1 GB cada uno), los paquetes procesados de `inbox/hechos/` (bórralos de vez en cuando) y los registros (hasta 50 MB por servicio).
 
-## Primer despliegue
+## Primer arranque (servidor sin internet)
 
-1. **Obtener el código** en una versión etiquetada (para el servidor de pruebas, la rama `develop`):
+1. **Descarga el paquete** en una máquina con acceso a GitHub: en el repositorio, *Actions* → *Deploy* → la corrida del último `main` → artefacto `nexus-<sha>` (trae el `.tar` y su `.sha256`). Verifícalo y cópialo al servidor por la red del Tec o en una memoria USB:
 
    ```bash
-   sudo install -d -o "$USER" /opt/nexus
-   git clone https://github.com/Erne1357/nexus.git /opt/nexus
-   cd /opt/nexus
-   git checkout v1.0.0        # o: git checkout develop
+   sha256sum -c nexus-<sha>.tar.sha256
+   scp nexus-<sha>.tar nexus-<sha>.tar.sha256 servidor:/tmp/
    ```
 
-2. **Crear el `.env`** a partir de la plantilla, con permisos restringidos:
+2. **Carpetas** en el servidor. `BACKUP_DIR` contendrá datos personales de alumnos y docentes:
 
    ```bash
-   cp .env.production.example .env
+   sudo install -d -o "$USER" -g "$USER" /opt/nexus /opt/nexus/inbox
+   sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 /var/backups/nexus
+   sudo install -d -m 755 /srv/nexus/fotos
+   ```
+
+3. **El `.env`**, desde la plantilla que trae el paquete:
+
+   ```bash
+   cd /opt/nexus
+   tar -xOf /tmp/nexus-<sha>.tar infra.tar | tar -xO .env.production.example > .env
    chmod 600 .env
    ```
 
@@ -57,54 +84,44 @@ Volúmenes de Docker: `postgres-data`, `valkey-data`, `app-storage` (archivos co
 
    | Variable | Valor |
    |---|---|
-   | `APP_DOMAIN` | El nombre público, sin `https://` |
+   | `APP_DOMAIN` | `nexus.cdjuarez.tecnm.mx` |
    | `ACME_EMAIL` | Correo de TI que recibe los avisos de vencimiento |
    | `APP_KEY` | `echo "base64:$(openssl rand -base64 32)"` |
-   | `DB_PASSWORD`, `REDIS_PASSWORD` | `openssl rand -hex 24` (sin `$` ni espacios) |
-   | `APP_IMAGE_TAG` | El tag que desplegarás (`v1.0.0`) |
-   | `BACKUP_DIR`, `BACKUP_UID`, `BACKUP_GID` | Ver el paso siguiente |
-   | `MAIL_FROM_ADDRESS`, `MICROSOFT_GRAPH_TENANT_ID`, `MICROSOFT_GRAPH_CLIENT_ID`, `MICROSOFT_GRAPH_CLIENT_SECRET` | La cuenta de envío y la app de Azure: ver [«Correo saliente (Microsoft 365)»](#correo-saliente-microsoft-365) |
+   | `DB_PASSWORD`, `REDIS_PASSWORD`, `HEALTH_TOKEN` | `openssl rand -hex 24` (sin `$` ni espacios) |
+   | `SOLVER_TOKEN` | `openssl rand -hex 32` |
+   | `ADMIN_INITIAL_PASSWORD` | `openssl rand -hex 12` (solo para el primer `db:seed`) |
+   | `BACKUP_DIR`, `BACKUP_UID`, `BACKUP_GID` | `/var/backups/nexus`, `$(id -u)`, `$(id -g)` (con `0` los archivos quedan como `root`) |
+   | `MAIL_FROM_ADDRESS`, `MICROSOFT_GRAPH_*` | La cuenta de envío y la app de Azure: [«Correo saliente (Microsoft 365)»](#correo-saliente-microsoft-365) |
+   | `NEXUS_HOME`, `DEPLOY_*` | Déjalos como vienen (`/opt/nexus`, `DEPLOY_SOURCE=bundle`) |
 
-   Guarda una copia del `.env` **fuera del servidor**, en un lugar con acceso restringido: sin `APP_KEY` no se pueden descifrar las sesiones ni los valores cifrados, y las contraseñas no se pueden recuperar.
+   Guarda una copia del `.env` **fuera del servidor**, en un lugar con acceso restringido: sin `APP_KEY` no se pueden descifrar las sesiones ni los valores cifrados.
 
-3. **Crear el directorio de respaldos.** Contendrá datos personales de alumnos y docentes:
-
-   ```bash
-   sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 /var/backups/nexus
-   ```
-
-   y en `.env`: `BACKUP_DIR=/var/backups/nexus`, `BACKUP_UID=$(id -u)`, `BACKUP_GID=$(id -g)` (con `0` los archivos quedan como `root`).
-
-4. **Construir y levantar.** El primer arranque ejecuta las migraciones y tarda un par de minutos:
+4. **Despliega el primer paquete.** El deployer viene dentro del paquete sin comprimir, así que basta `tar` y `docker`. Después se instala él mismo como servicio y atiende la carpeta de entrada:
 
    ```bash
-   docker compose config -q                       # valida el compose y que no falte ninguna variable
-   docker compose build app
-   docker compose up -d --wait --wait-timeout 300
-   docker compose ps
+   tar -xOf /tmp/nexus-<sha>.tar images/deployer.tar | docker load
+   mv /tmp/nexus-<sha>.tar /tmp/nexus-<sha>.tar.sha256 /opt/nexus/inbox/
+   docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v /opt/nexus:/opt/nexus \
+     --env-file /opt/nexus/.env ghcr.io/erne1357/nexus-deployer:sha-<sha> \
+     deploy --bundle /opt/nexus/inbox/nexus-<sha>.tar
    ```
 
-   Si usas el staging de Let's Encrypt para ensayar (recomendado la primera vez, para no gastar el límite de certificados), agrega a `.env` antes del `up`:
-   `CADDY_GLOBAL_OPTIONS=acme_ca https://acme-staging-v02.api.letsencrypt.org/directory`. El navegador mostrará el certificado como no confiable; es lo esperado. Quita la línea y ejecuta `docker compose up -d` para pasar al certificado real.
+   Tarda unos minutos: carga las imágenes, levanta PostgreSQL, Valkey y el motor, aplica las migraciones, arranca `app-blue`, la cola, el scheduler, los respaldos y Caddy. Termina con «listo: atiende <sha> en app-blue».
 
-5. **Verificar:**
+5. **El atajo `nexus`** para operar (agrégalo al `~/.bashrc` de quien opera):
 
    ```bash
-   curl -fsS https://nexus.example.edu.mx/up                 # 200 si la app está sana
-   curl -sI http://nexus.example.edu.mx/up | head -1         # 308: redirige a HTTPS
-   docker compose logs backup | tail -5                      # primer respaldo hecho al arrancar
-   ls -l /var/backups/nexus/daily
+   alias nexus='docker exec -it nexus-deployer-1 nexus-deploy'
+   nexus status
    ```
 
-   El primer respaldo se hace al arrancar, **antes** de que terminen las migraciones, así que sale casi vacío (menos de 1 KB). Es normal; haz uno manual (`backup.sh run`) después del paso 6.
-
-6. **Datos base y primer administrador.** Con `ADMIN_INITIAL_PASSWORD` ya definida en `.env`, el seeder crea los campus, el organigrama y el usuario `admin` (sin esa variable falla a propósito: producción nunca tiene una contraseña conocida):
+6. **Datos base y primer administrador** (si no se arranca con la copia de la demo real, sección siguiente). Con `ADMIN_INITIAL_PASSWORD` en `.env`, el seeder crea los campus, el organigrama y el usuario `admin`; es idempotente y no toca la contraseña de un `admin` existente. El primer acceso obliga a cambiarla; después la variable ya no hace falta.
 
    ```bash
-   docker compose exec app php artisan db:seed --force
+   nexus compose exec app-blue php artisan db:seed --force --no-interaction
    ```
 
-   Es idempotente y no toca la contraseña de un `admin` existente. El primer acceso en `https://<APP_DOMAIN>/login` (usuario `admin`) obliga a cambiarla. Después ya no hace falta conservar la variable en `.env`.
+7. **Verifica:** `nexus status` dice `ok` o `degraded` (degradado es normal el primer minuto, hasta el primer latido del scheduler); `curl -fsS https://nexus.cdjuarez.tecnm.mx/health` responde 200; el primer respaldo está en `/var/backups/nexus/daily`.
 
 ## Arrancar con la copia de la demo real (tarea 1.29)
 
@@ -126,7 +143,7 @@ Las contraseñas nuevas se entregan aparte, en un archivo privado; no viajan en 
 
 ### Pasos
 
-1. Pasos 1 a 5 del primer despliegue. El paso 6 (`db:seed`) **no** se corre.
+1. Pasos 1 a 5 del primer arranque. El paso 6 (`db:seed`) **no** se corre.
 2. Copia el `.dump` al servidor, dentro de `BACKUP_DIR` (es confidencial):
 
    ```bash
@@ -134,16 +151,16 @@ Las contraseñas nuevas se entregan aparte, en un archivo privado; no viajan en 
    ssh servidor chmod 600 /var/backups/nexus/daily/nexus_prod-AAAAMMDD.dump
    ```
 
-3. Reemplaza la base recién creada con la copia (es el procedimiento B de «Restaurar un respaldo», con el scheduler también detenido). La copia pesa varios GB: tarda unos minutos.
+3. Reemplaza la base recién creada con la copia (es el procedimiento B de «Restaurar un respaldo»). La copia pesa varios GB: tarda unos minutos. Después, vuelve a desplegar el mismo release: el deployer aplica las migraciones que la copia no tenga (con su respaldo previo) y arranca la app.
 
    ```bash
    ARCHIVO=nexus_prod-AAAAMMDD.dump
-   docker compose stop app queue scheduler
-   docker compose exec backup sh -c "dropdb --force \"\$PGDATABASE\" && createdb \"\$PGDATABASE\" && pg_restore --no-owner --exit-on-error --single-transaction -d \"\$PGDATABASE\" /backups/daily/$ARCHIVO"
-   docker compose up -d --wait --wait-timeout 300
+   nexus pause "restaurando la copia de la demo real"
+   nexus compose stop app-blue app-green queue scheduler
+   nexus compose exec backup sh -c "dropdb --force \"\$PGDATABASE\" && createdb \"\$PGDATABASE\" && pg_restore --no-owner --exit-on-error --single-transaction -d \"\$PGDATABASE\" /backups/daily/$ARCHIVO"
+   nexus deploy --sha <sha> --force
+   nexus resume
    ```
-
-   Al arrancar, `app` aplica las migraciones que la copia no tenga.
 
 4. **Fotos de las credenciales.** No viven en la base. Copia la carpeta de fotos de la demo (`storage/app/fotos`, con la forma `<AAAA>/<número de control>.jpg`) a `/srv/nexus/fotos` (o a `NEXUS_STUDENT_PHOTOS_DIR`), sin los archivos `Zone.Identifier` que deja Windows. `compose.prod.yaml` la monta de solo lectura:
 
@@ -154,54 +171,86 @@ Las contraseñas nuevas se entregan aparte, en un archivo privado; no viajan en 
 
 5. **Variables.** `APP_URL` sale de `APP_DOMAIN` (`nexus.cdjuarez.tecnm.mx`); `NEXUS_CREDENTIAL_URL` va vacía en producción (el QR usa `APP_URL`; en la demo apuntaba al túnel); `NEXUS_DEFAULT_PASSWORD` no hace falta (el personal entra por invitación). El correo, en «Correo saliente (Microsoft 365)».
 6. **Verificar:**
-   - `curl -fsS https://nexus.cdjuarez.tecnm.mx/up` responde 200.
+   - `nexus status` y `curl -fsS https://nexus.cdjuarez.tecnm.mx/health` responden sano.
    - Entra como `admin` con la contraseña entregada; Nexus pide cambiarla.
    - En Configuración → Correos y colas, conecta la cuenta de envío y manda el correo de prueba.
    - Captura el correo institucional de cada jefe en el panel de usuarios y mándale su invitación.
    - Revisa el mapa del inicio, la credencial de un alumno (foto y QR) y el selector de periodo, que ofrece desde 2020.
-7. Haz un respaldo manual: `docker compose exec backup sh /opt/backup/backup.sh run`.
+7. Haz un respaldo manual: `nexus compose exec backup sh /opt/backup/backup.sh run`.
 
 ## Actualizar a una versión nueva
 
-Cada versión es un tag de git. La aplicación queda sin responder solo mientras `app` se recrea y migra; en la prueba local, las peticiones que llegaron en ese lapso esperaron y respondieron 200.
+**Sin internet (hoy):** descarga el artefacto `nexus-<sha>` de la corrida de *Deploy* del `main` que quieres, verifica el `sha256` y copia **los dos archivos** a la carpeta de entrada. Copia primero el `.tar` y al final el `.sha256`: el deployer solo toma un paquete con su `.sha256` y cuyo tamaño ya no cambia.
 
 ```bash
-cd /opt/nexus
-git fetch --tags
-git diff --stat v1.0.0 v1.0.1 -- compose.yaml compose.prod.yaml docker .env.production.example   # ¿cambió la infraestructura?
-
-# 1. Respaldo previo, por si una migración sale mal
-docker compose exec backup sh /opt/backup/backup.sh run
-
-# 2. Cambiar de versión
-git checkout v1.0.1
-sed -i 's/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=v1.0.1/' .env
-
-# 3. Construir (el sitio sigue sirviendo la versión anterior) y recrear
-docker compose build app
-docker compose up -d --wait --wait-timeout 300
-
-# 4. Verificar
-docker compose ps
-curl -fsS https://nexus.example.edu.mx/up
-docker compose logs --tail 40 app          # migraciones aplicadas
+sha256sum -c nexus-<sha>.tar.sha256
+scp nexus-<sha>.tar servidor:/opt/nexus/inbox/
+scp nexus-<sha>.tar.sha256 servidor:/opt/nexus/inbox/
 ```
 
-- Si el `diff` muestra cambios en `.env.production.example`, agrega las variables nuevas a tu `.env` **antes** del paso 3.
-- Si cambió `docker/caddy/Caddyfile`, aplícalo sin interrumpir: `docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`. Si cambió `docker/backup/backup.sh`, `docker compose restart backup`.
-- Cuando un cambio de `.env` o de los compose lo requiere, `docker compose up -d` recrea solo los servicios afectados.
+En menos de un minuto el deployer lo verifica y lo despliega sin cortar el servicio. Para seguirlo: `docker logs -f nexus-deployer-1`. Al terminar, el paquete queda en `inbox/hechos/` (o en `inbox/fallidos/`, con `<paquete>.log` explicando por qué). Si hay varios paquetes, despliega el más nuevo y aparta los demás en `inbox/omitidos/`. También se puede a mano: `nexus deploy --bundle /opt/nexus/inbox/nexus-<sha>.tar`.
+
+**Con internet:** pon `DEPLOY_SOURCE=github` en `.env` y crea `/opt/nexus/deployer.env` (`chmod 600`) con `DEPLOY_GITHUB_TOKEN=<token>`: un token *fine-grained* del repositorio con permiso de lectura y escritura solo en *Deployments*. Va aparte porque el `.env` lo leen también la app y la cola; `deployer.env` solo el deployer. Después, `nexus compose up -d --no-deps deployer`. Desde ahí no hay que hacer nada: cada merge a `main` se despliega solo y el resultado se ve en *Environments → production* del repositorio. El deployer solo acepta imágenes `ghcr.io/erne1357/nexus-*` por digest. Si el servidor sale por el proxy del ITCJ, pon `HTTPS_PROXY` y `NO_PROXY` en `deployer.env` y configura también el proxy del daemon de Docker (`/etc/systemd/system/docker.service.d/http-proxy.conf`), que es quien descarga las imágenes.
+
+Qué hace el deployer, en orden:
+
+1. Verifica el paquete (`sha256`), carga las imágenes y deja la infraestructura del release en `releases/<sha>/`.
+2. Revisa el `.env`: si el release trae variables nuevas en `.env.production.example` que tu `.env` no tiene, **no despliega** y las lista (código 5). Agrégalas y vuelve a copiar el paquete (o `nexus deploy --sha <sha>`).
+3. Si hay migraciones pendientes: respaldo previo en `BACKUP_DIR/predeploy/` y `migrate` con la imagen nueva. La versión vieja sigue atendiendo: las migraciones son compatibles con ella (expand/contract, CLAUDE.md §5).
+4. Arranca el color inactivo con la versión nueva, **drenado** (Caddy todavía no le manda tráfico), y espera a que `/health` responda sano con ese release (hasta `DEPLOY_HEALTH_TIMEOUT`, 180 s). Si no llega, lo detiene y **producción sigue igual** (código 6).
+5. Recrea la cola y el scheduler con la versión nueva; pone el color nuevo en la rotación; drena el viejo y lo detiene con apagado ordenado. El viejo queda detenido para volver atrás al instante.
+6. Verifica por Caddy que atiende la versión nueva; si no, vuelve sola a la anterior (código 8).
+7. Registra el release. Si el Caddyfile cambió, lo valida con la imagen de Caddy y lo recarga sin cortar conexiones (si no es válido, Caddy sigue con el anterior y queda un aviso). Limpia lo que pasó de los últimos 5 y, si cambió, se actualiza a sí mismo cuando termina cualquier despliegue en curso.
+
+### Comandos de una sola vez después de un release
+
+El despliegue automático solo hace lo que es idempotente y seguro mientras conviven dos versiones (migraciones expand/contract). Los ajustes de datos de una sola vez (reimportar algo, derivar datos nuevos) **no** van en una migración ni en el deployer: se corren a mano, una vez, en el color activo, cuando el release que los necesita ya atiende:
+
+```bash
+nexus status                                                   # dice el color activo (blue o green)
+nexus compose exec app-<color> php artisan <comando> --no-interaction
+```
+
+Cada riel que traiga uno lo anota aquí: el release (o PR) a partir del cual aplica, el orden, si se puede repetir y cuánto tarda. Lo que tarde más de unos segundos va en un job de la cola (CLAUDE.md §4.7).
+
+| Desde | Comando | Orden | ¿Se puede repetir? | Tiempo |
+|---|---|---|---|---|
+| — | (ninguno todavía) | | | |
+
+### Pausar los despliegues
+
+Para congelar en temporadas sensibles (validación, inscripciones): `nexus pause "inscripciones"`. Mientras tanto los paquetes que lleguen esperan en `inbox/` y los despliegues de GitHub siguen en cola; `nexus resume` los reanuda (se despliega el más nuevo). Con internet, la variable del repositorio `DEPLOY_PAUSED=true` (*Settings → Secrets and variables → Actions → Variables*) hace que `deploy.yml` deje de crear despliegues, aunque siga publicando imágenes y paquetes. Volver atrás funciona aunque haya pausa.
 
 ### Volver a la versión anterior
 
 ```bash
-sed -i 's/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=v1.0.0/' .env
-git checkout v1.0.0
-docker compose up -d --wait        # la imagen anterior sigue en el servidor si no la borraste
+nexus rollback                 # al release anterior
+nexus rollback <sha>           # a uno en particular (de los últimos 5; basta el inicio del sha)
 ```
 
-Las migraciones **no se revierten solas**. Si la versión nueva ya migró y el código anterior no funciona con ese esquema, restaura el respaldo del paso 1 con el procedimiento B de abajo.
+También sin entrar al servidor: un archivo vacío `rollback-previous` o `rollback-<sha>` en `inbox/`, o, con internet, *Actions → Deploy → Run workflow* con `rollback`.
 
-Limpieza: `docker image ls nexus-app` lista las versiones; borra las viejas con `docker rmi nexus-app:<tag>` y conserva al menos la anterior para poder volver atrás. `docker builder prune` libera la caché de construcción.
+- Usa las imágenes exactas de ese release, sin descargar nada, y el mismo cambio de color sin caídas. Si el contenedor detenido ya es esa versión, solo lo enciende.
+- No revierte migraciones: el esquema nuevo es compatible con el código viejo. `/health` dirá `degraded` («la base tiene migraciones que el código no conoce»), que es lo esperado.
+- **Si de por medio se aplicó una contracción** (una migración con `#[Contract]` que borró o renombró columnas o tablas, aunque el despliegue que la trajo haya fallado después), el código viejo ya no funcionaría con el esquema y el deployer se niega (código 7) diciendo qué respaldo habría que restaurar. Lo mismo con `nexus deploy --sha <un release anterior>`. Con `nexus rollback <sha> --restore --yes`:
+  1. verifica que el respaldo exista y se pueda leer (si no, no toca nada);
+  2. pone la app en mantenimiento y restaura el respaldo en una base aparte;
+  3. solo si salió bien, la cambia por la real; la de antes queda como `nexus_antes_<fecha>` para revisarla (bórrala con `nexus compose exec postgres dropdb -U nexus nexus_antes_<fecha>` cuando ya no la necesites; ocupa lo mismo que la base);
+  4. vacía Valkey (cierra las sesiones y vacía la cola) y despliega el destino.
+
+  **Se pierde todo lo escrito desde ese respaldo.** Hace falta espacio en disco para una segunda copia de la base mientras dura.
+
+### `/health`
+
+`https://nexus.cdjuarez.tecnm.mx/health` responde JSON: `status` (`ok`, `degraded`, `draining` o `fail`), `release` (el SHA que atiende) y el estado de cada chequeo. 200 si atiende (`ok` o `degraded`), 503 si no.
+
+| Chequeo | Si falla |
+|---|---|
+| `database`, `cache`, `queue`, `storage` | `fail` (503) |
+| `migrations` | pendientes o con nombre repetido: `fail`; en la base y no en el código (tras volver atrás): `degraded` |
+| `solver`, `queue_worker`, `scheduler` | `degraded` (200): la app atiende, pero el motor, la cola o lo programado no responden |
+
+Sin la cabecera `X-Health-Token: <HEALTH_TOKEN>` solo salen los estados; con ella, el detalle (errores, migraciones, tamaños de las colas). `nexus status` lo muestra con detalle. `/up` sigue existiendo: solo dice que el proceso vive.
 
 ## Respaldos
 
@@ -209,14 +258,16 @@ El servicio `backup` hace un `pg_dump` en formato custom (`-Fc`, comprimido) a l
 
 ```
 /var/backups/nexus/
-├── daily/    nexus-20261027-030000.dump   (últimos 14)
-└── weekly/   nexus-2026-W44.dump          (últimas 8; la copia del domingo)
+├── daily/      nexus-20261027-030000.dump            (últimos 14)
+├── weekly/     nexus-2026-W44.dump                   (últimas 8; la copia del domingo)
+└── predeploy/  nexus-20261123-101500-1a2b3c4d5e6f.dump   (últimos 5; antes de cada migración)
 ```
 
 - Si al arrancar no hay un respaldo de menos de 26 horas (primer despliegue, servidor apagado a las 03:00), respalda de inmediato.
-- El contenedor pasa a `unhealthy` si el último respaldo diario tiene más de 26 horas: revísalo con `docker compose ps`.
-- Respaldo manual: `docker compose exec backup sh /opt/backup/backup.sh run`.
-- Ajustes en `.env`: `BACKUP_TIME`, `BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY`.
+- El contenedor pasa a `unhealthy` si el último respaldo diario tiene más de 26 horas: revísalo con `nexus compose ps`.
+- Respaldo manual: `nexus compose exec backup sh /opt/backup/backup.sh run`.
+- **Respaldo previo a migrar:** antes de aplicar las migraciones de un release, el deployer deja `predeploy/nexus-<fecha>-<sha corto>.dump` (se conservan los últimos `BACKUP_KEEP_PREDEPLOY`, 5, fuera de la rotación diaria). Lo usa el rollback con `--restore`.
+- Ajustes en `.env`: `BACKUP_TIME`, `BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY`, `BACKUP_KEEP_PREDEPLOY`.
 - Contenido: solo la base de datos, que es la fuente de verdad. Los archivos de `app-storage` son importaciones y exportes en proceso, y se pueden volver a generar.
 - **Copia fuera del servidor:** a cargo del ITCJ. Mientras no exista, perder el disco es perder los datos. Quien copie `BACKUP_DIR` debe tratarlo como información confidencial (datos personales), por ejemplo con `rsync` desde otro equipo o a un almacenamiento cifrado.
 
@@ -234,30 +285,31 @@ ARCHIVO=nexus-20261027-030000.dump
 ### A. Verificar en una base nueva (sin afectar producción)
 
 ```bash
-docker compose exec backup sh -c "createdb nexus_restore && pg_restore --no-owner --exit-on-error --single-transaction -d nexus_restore /backups/daily/$ARCHIVO"
-docker compose exec backup psql -d nexus_restore -c 'select count(*) from users'
-docker compose exec backup psql -d nexus_restore -c 'select count(*) from migrations'
-docker compose exec backup dropdb nexus_restore
+nexus compose exec backup sh -c "createdb nexus_restore && pg_restore --no-owner --exit-on-error --single-transaction -d nexus_restore /backups/daily/$ARCHIVO"
+nexus compose exec backup psql -d nexus_restore -c 'select count(*) from users'
+nexus compose exec backup psql -d nexus_restore -c 'select count(*) from migrations'
+nexus compose exec backup dropdb nexus_restore
 ```
 
 Compara los conteos con la base real (`-d nexus`). `--single-transaction` y `--exit-on-error` hacen que, si algo falla, la base nueva quede vacía en lugar de a medias.
 
 ### B. Recuperar producción desde un respaldo
 
-Reemplaza la base real: todo lo escrito después del respaldo se pierde.
+Reemplaza la base real: todo lo escrito después del respaldo se pierde. Si es para deshacer un release, primero prueba `nexus rollback` (con `--restore` si hubo una contracción): hace esto mismo con el respaldo correcto.
 
 ```bash
-docker compose stop app queue
-docker compose exec backup sh -c "dropdb --force \"\$PGDATABASE\" && createdb \"\$PGDATABASE\" && pg_restore --no-owner --exit-on-error --single-transaction -d \"\$PGDATABASE\" /backups/daily/$ARCHIVO"
-docker compose up -d --wait
-curl -fsS https://nexus.example.edu.mx/up
+nexus pause "restauración"
+nexus compose stop app-blue app-green queue scheduler
+nexus compose exec backup sh -c "dropdb --force \"\$PGDATABASE\" && createdb \"\$PGDATABASE\" && pg_restore --no-owner --exit-on-error --single-transaction -d \"\$PGDATABASE\" /backups/daily/$ARCHIVO"
+nexus deploy --sha <sha del release que corresponde a ese respaldo> --force
+nexus resume
 ```
 
-Si restauras un respaldo anterior a una migración, vuelve también al tag que coincide con ese esquema (ver "Volver a la versión anterior"); de lo contrario `app` aplicará las migraciones pendientes al arrancar.
+Si restauras un respaldo anterior a una migración, despliega el release que coincide con ese esquema: uno más nuevo aplicaría las migraciones pendientes (con su respaldo previo).
 
 ### Servidor perdido
 
-En un servidor nuevo: pasos 1 a 4 del primer despliegue (con el `.env` guardado fuera del servidor), copia el archivo `.dump` más reciente a `BACKUP_DIR/daily/` y aplica el procedimiento B.
+En un servidor nuevo: pasos 1 a 5 del primer arranque (con el `.env` guardado fuera del servidor), copia el archivo `.dump` más reciente a `BACKUP_DIR/daily/` y aplica el procedimiento B.
 
 ## Correo saliente (Microsoft 365)
 
@@ -277,7 +329,7 @@ En [portal.azure.com](https://portal.azure.com) → **Microsoft Entra ID** → *
 Luego, en la app:
 
 - **Overview:** copia **Directory (tenant) ID** y **Application (client) ID**. El tenant ID es el del ITCJ: Nexus no acepta `common`, `organizations` ni `consumers`.
-- **Certificates & secrets** → **Client secrets** → **New client secret**: elige la duración y copia el **Value** (no el *Secret ID*); solo se muestra una vez. **Anota la fecha en que vence:** antes de esa fecha crea otro, ponlo en `.env` y ejecuta `docker compose up -d`. Si vence, el correo deja de salir y la tarjeta dice que se revise `MICROSOFT_GRAPH_CLIENT_SECRET`.
+- **Certificates & secrets** → **Client secrets** → **New client secret**: elige la duración y copia el **Value** (no el *Secret ID*); solo se muestra una vez. **Anota la fecha en que vence:** antes de esa fecha crea otro, ponlo en `.env` y vuelve a desplegar el release activo (`nexus deploy --sha <sha activo> --force`). Si vence, el correo deja de salir y la tarjeta dice que se revise `MICROSOFT_GRAPH_CLIENT_SECRET`.
 - **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**: `Mail.Send`, `User.Read` y `offline_access` (están en *OpenId permissions*). Si la política del tenant no deja que los usuarios den consentimiento, un administrador del tenant pulsa **Grant admin consent for <tenant>**.
 
 ### 2. Variables del `.env`
@@ -291,7 +343,7 @@ MICROSOFT_GRAPH_CLIENT_ID=<Application (client) ID>
 MICROSOFT_GRAPH_CLIENT_SECRET=<Value del client secret>
 ```
 
-y `docker compose up -d` para que `app`, `queue` y `scheduler` las tomen. `APP_URL` sale de `APP_DOMAIN` (`compose.prod.yaml`), así que `APP_DOMAIN=nexus.cdjuarez.tecnm.mx` debe coincidir con la Redirect URI. El nombre que ve quien recibe es el del buzón en Microsoft 365, no `MAIL_FROM_NAME`.
+y vuelve a desplegar el release activo (`nexus deploy --sha <sha activo> --force`) para que la app, `queue` y `scheduler` las tomen. `APP_URL` sale de `APP_DOMAIN` (`compose.prod.yaml`), así que `APP_DOMAIN=nexus.cdjuarez.tecnm.mx` debe coincidir con la Redirect URI. El nombre que ve quien recibe es el del buzón en Microsoft 365, no `MAIL_FROM_NAME`.
 
 ### 3. Conectar la cuenta en Nexus
 
@@ -312,47 +364,62 @@ y `docker compose up -d` para que `app`, `queue` y `scheduler` las tomen. `APP_U
 
 - Caddy obtiene el certificado la primera vez que arranca y lo renueva solo, unos 30 días antes de que venza. No hay nada que programar.
 - Los certificados viven en el volumen `caddy-data`. No lo borres: Let's Encrypt limita los certificados repetidos para el mismo nombre.
-- Para ver el estado: `docker compose logs caddy | grep -E 'tls|error'`.
+- Para ver el estado: `nexus compose logs caddy | grep -E 'tls|error'`.
 - Mantén abiertos los puertos 80 y 443 y el DNS apuntando al servidor, o la renovación fallará. Let's Encrypt avisa por correo a `ACME_EMAIL` cuando un certificado está por vencer sin renovarse.
 - Si el ITCJ no puede abrir los puertos o prefiere su propio certificado, el plan B (certificado entregado por el ITCJ o desafío DNS) está descrito en el ADR-0013.
 
 ## Operación cotidiana
 
+`nexus` es el atajo del primer arranque (`docker exec -it nexus-deployer-1 nexus-deploy`); `nexus compose …` es `docker compose` del release activo.
+
 ```bash
-docker compose ps                          # estado y salud
-docker compose logs -f --tail 100 app      # también: queue, caddy, backup, postgres
-docker compose restart app                 # reinicia un servicio
-docker compose exec app php artisan queue:failed         # jobs fallidos
-docker compose exec app php artisan queue:retry all
+nexus status                               # color activo, release, /health con detalle, pausa y últimos despliegues
+nexus compose ps                           # estado y salud de los servicios
+nexus compose logs -f --tail 100 app-blue  # también: app-green, queue, scheduler, caddy, backup, postgres
+docker logs -f nexus-deployer-1            # lo que hace el deployer
+nexus compose exec app-blue php artisan queue:failed     # jobs fallidos (usa el color activo)
+nexus compose exec app-blue php artisan queue:retry all
 docker system df                           # espacio usado por Docker
 ```
 
-Cambiar una variable del `.env` y ejecutar `docker compose up -d` recrea los servicios afectados. Dos casos especiales:
+Cambiar una variable del `.env` se aplica volviendo a desplegar el release activo (`nexus deploy --sha <sha activo> --force`): arranca el otro color con el `.env` nuevo, sin caída. Dos casos especiales:
 
-- **`DB_PASSWORD`:** PostgreSQL solo lee la contraseña inicial al crear el volumen. Primero cámbiala en la base y luego en `.env`; `up -d` recrea `postgres`, `app`, `queue` y `backup` con la nueva (la base conserva sus datos):
+- **`DB_PASSWORD`:** PostgreSQL solo lee la contraseña inicial al crear el volumen. Primero cámbiala en la base y luego en `.env`, y vuelve a desplegar:
 
   ```bash
-  docker compose exec postgres psql -U nexus -c "ALTER USER nexus PASSWORD 'NUEVA_CONTRASEÑA'"
-  sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=NUEVA_CONTRASEÑA/' .env
-  docker compose up -d --wait
+  nexus compose exec postgres psql -U nexus -c "ALTER USER nexus PASSWORD 'NUEVA_CONTRASEÑA'"
+  sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=NUEVA_CONTRASEÑA/' /opt/nexus/.env
+  nexus deploy --sha <sha activo> --force
   ```
 
-- **`REDIS_PASSWORD`:** basta editarla en `.env` y ejecutar `docker compose up -d`; recrea `valkey`, `app` y `queue`, y las sesiones y la cola se conservan (están en el volumen `valkey-data`).
+- **`REDIS_PASSWORD`:** cambiarla recrea `valkey` (un corte de segundos); las sesiones y la cola se conservan en el volumen `valkey-data`.
 
 ## Si algo falla
 
+Códigos de salida del deployer (también en `inbox/fallidos/<paquete>.log` y en el estado del despliegue de GitHub):
+
+| Código | Qué pasó | Qué hacer |
+|---|---|---|
+| 3 | Despliegues en pausa | `nexus resume`, o `--force` |
+| 4 | El paquete no coincide con su `sha256` o no se pudo cargar | Vuelve a descargarlo y copia el `.tar` completo antes que el `.sha256` |
+| 5 | El `.env` no trae variables que pide el release | Cópialas de `releases/<sha>/.env.production.example`, ponles valor y `nexus deploy --sha <sha>` |
+| 6 | La versión nueva no quedó sana; producción sigue con la anterior | `inbox/fallidos/<paquete>.log` trae el último `/health`; `nexus compose logs app-<color nuevo>` |
+| 7 | Volver atrás cruza una contracción | Lee el mensaje: dice qué respaldo restaurar. Repite con `--restore --yes` si aceptas perder lo escrito desde entonces |
+| 8 | Después del cambio Caddy no atendía la versión nueva; se volvió sola a la anterior | `nexus compose logs caddy` |
+| 9 | Una migración falló (o el respaldo previo) | La versión anterior sigue atendiendo. Lee el error en el registro; un `lock_timeout` se resuelve reintentando en un momento con menos uso (el reintento reusa el respaldo previo de ese release) |
+| 10 | Otro despliegue seguía en curso | Espera a que termine (`docker logs -f nexus-deployer-1`) |
+
 | Síntoma | Qué revisar |
 |---|---|
-| El sitio no abre | `docker compose ps`: ¿están `healthy` `caddy` y `app`? Si falta alguno, `docker compose logs --tail 100 <servicio>` |
-| Error de certificado en el navegador | `docker compose logs caddy \| grep -E 'tls.obtain\|error'`. "could not get certificate from issuer" trae el motivo: tiempo de espera (el 80 o el 443 no llegan al servidor), nombre que no resuelve (DNS), o límite de certificados excedido (esperar o usar staging). Con `CADDY_GLOBAL_OPTIONS` con el staging puesto, el certificado no es confiable a propósito |
-| 502 o respuesta lenta justo tras actualizar | `app` está migrando o arrancando (hasta `APP_START_PERIOD`, 120 s). Mira `docker compose logs -f app` |
-| `app` se reinicia en bucle | Casi siempre una migración o una variable faltante: `docker compose logs --tail 100 app` ("No application encryption key" = falta `APP_KEY`; error SQL = migración fallida). Corrige y `docker compose up -d`, o restaura el respaldo previo |
-| `required variable ... is missing a value` al ejecutar compose | Falta `APP_DOMAIN`, `ACME_EMAIL` u otra en `.env` |
-| `backup` aparece `unhealthy` | `docker compose logs backup`. Causas comunes: `BACKUP_DIR` sin permiso de escritura para `BACKUP_UID`, disco lleno o `postgres` caído. Prueba con `docker compose exec backup sh /opt/backup/backup.sh run` |
-| Las tareas en cola no avanzan | `docker compose logs queue`; `docker compose exec app php artisan queue:failed` |
-| No llegan los correos | Configuración → Correos y colas: la tarjeta «Cuenta de envío» dice si faltan variables, si no hay cuenta, si venció o el último error de Microsoft; los correos que fallaron están en la pestaña Colas. Ver «Correo saliente (Microsoft 365)» |
-| Disco lleno | `docker system df`; `docker rmi` de versiones viejas; revisa el tamaño de `BACKUP_DIR` |
-| Sesiones cerradas de repente | Cambió `APP_KEY` o se perdió el volumen `valkey-data` |
+| El sitio no abre o muestra «Nexus está en mantenimiento» | Caddy no encuentra ningún color sano: `nexus status`, `nexus compose ps`; si ninguno corre, `nexus deploy --sha <sha activo> --force` |
+| Error de certificado en el navegador | `nexus compose logs caddy \| grep -E 'tls.obtain\|error'`. "could not get certificate from issuer" trae el motivo: tiempo de espera (el 80 o el 443 no llegan al servidor), nombre que no resuelve (DNS), sin salida a internet, o límite de certificados excedido |
+| `/health` dice `degraded` | Mira qué chequeo con `nexus status`: `migrations` tras volver atrás es lo esperado; `scheduler` o `queue_worker` = el servicio no corre (`nexus compose ps`); `solver` = el motor no responde |
+| Un paquete no se despliega | ¿Están el `.tar` y el `.sha256` en `inbox/`? ¿Hay pausa (`nexus status`)? ¿Está en `fallidos/` con su `.log`? |
+| `backup` aparece `unhealthy` | `nexus compose logs backup`. Causas comunes: `BACKUP_DIR` sin permiso de escritura para `BACKUP_UID`, disco lleno o `postgres` caído. Prueba con `nexus compose exec backup sh /opt/backup/backup.sh run` |
+| Las tareas en cola no avanzan | `nexus compose logs queue`; `nexus compose exec app-blue php artisan queue:failed` |
+| No llegan los correos | Configuración → Correos y colas: la tarjeta «Cuenta de envío» dice si faltan variables, si no hay cuenta, si venció o el último error de Microsoft; los correos que fallaron están en la pestaña Colas. Ver «Correo saliente (Microsoft 365)». Sin internet no sale correo |
+| Disco lleno | `docker system df`; borra paquetes viejos de `inbox/hechos/` y `inbox/omitidos/`; baja `DEPLOY_KEEP_RELEASES`; revisa el tamaño de `BACKUP_DIR` |
+| Sesiones cerradas de repente | Cambió `APP_KEY`, se perdió el volumen `valkey-data`, o hubo un rollback con `--restore` |
 
 ## Mostrar la prueba de concepto
 
@@ -360,7 +427,7 @@ Mientras no haya servidor, el stack de producción corre en una máquina del equ
 
 ```bash
 # Hash bcrypt de la contraseña (pide la contraseña dos veces; no queda en el historial)
-docker compose exec caddy caddy hash-password
+nexus compose exec caddy caddy hash-password
 ```
 
 En `.env` agrega el usuario y el hash **entre comillas simples** (el hash lleva `$`, que compose interpretaría en otro caso) y recrea Caddy:
@@ -370,7 +437,7 @@ BASIC_AUTH_USER=demo
 BASIC_AUTH_HASH='$2a$14$...'
 ```
 ```bash
-docker compose up -d caddy
+nexus compose up -d --no-deps caddy
 ```
 
 Antes de recrear Caddy, valida la configuración en los dos casos (apagada y encendida):
@@ -385,29 +452,23 @@ docker run --rm --network none -v $PWD/docker/caddy:/etc/caddy:ro -e APP_DOMAIN=
 
 Las dos deben decir «Valid configuration». Caddy prepara `basic_auth` aunque esté apagada; por eso el valor de respaldo del hash es `b2Zm` («off» en base64), y no `off`, que no lo deja arrancar.
 
-Sin credenciales todas las rutas responden 401; con ellas, la aplicación (que además pide su propio inicio de sesión). Para apagarla, comenta las dos líneas y repite `up -d caddy`. El túnel debe apuntar a `https://127.0.0.1:<HTTPS_PORT>` con la verificación del certificado desactivada (CA interna con `local_certs`) y enviando el nombre `APP_DOMAIN` como Host/SNI. Comparte la contraseña por un canal distinto al del enlace y baja el túnel al terminar. En el servidor real déjala apagada.
+Sin credenciales todas las rutas responden 401, salvo `/health` (el deployer lo usa para verificar cada despliegue); con ellas, la aplicación (que además pide su propio inicio de sesión). Para apagarla, comenta las dos líneas y repite `up -d caddy`. El túnel debe apuntar a `https://127.0.0.1:<HTTPS_PORT>` con la verificación del certificado desactivada (CA interna con `local_certs`) y enviando el nombre `APP_DOMAIN` como Host/SNI. Comparte la contraseña por un canal distinto al del enlace y baja el túnel al terminar. En el servidor real déjala apagada.
 
 ## Probar el stack de producción en una máquina de desarrollo
 
-Sirve para validar cambios al overlay sin servidor. **No toca el stack de desarrollo** si se usa otro nombre de proyecto (`-p`) y otros puertos. Hazlo desde un worktree o una copia del repositorio con su propio `.env`, porque `env_file: .env` apunta a esa carpeta.
+`.github/scripts/prod-smoke.sh` es la misma prueba que corre el CI (`prod-smoke`): levanta el stack de producción con el deployer real en un proyecto aparte y recorre los escenarios con tráfico continuo. **No toca el stack de desarrollo** (proyecto propio y puertos 18080/18443). Necesita las imágenes construidas y su paquete:
 
 ```bash
-cp .env.production.example .env          # y completa: APP_KEY, contraseñas, APP_DOMAIN=nexus-prodcheck.test
-#   APP_IMAGE_TAG=prodcheck  HTTP_PORT=18080  HTTPS_PORT=18443
-#   CADDY_GLOBAL_OPTIONS=local_certs     (CA interna: no sale a internet)
-#   BACKUP_DIR=/ruta/de/prueba  BACKUP_UID=$(id -u)  BACKUP_GID=$(id -g)
-#   ADMIN_INITIAL_PASSWORD=...
-
-P="docker compose -p nexus-prodcheck"    # siempre con -p: sin él, compose usaría el proyecto "nexus" de desarrollo
-$P build app
-$P up -d --wait --wait-timeout 300
-$P exec app php artisan db:seed --force
-curl -sk --resolve nexus-prodcheck.test:18443:127.0.0.1 https://nexus-prodcheck.test:18443/up
-$P exec backup sh /opt/backup/backup.sh run
-$P down -v                               # borra solo este proyecto de prueba
+SHA=$(git rev-parse HEAD); R=ghcr.io/erne1357
+docker build --target prod --build-arg NEXUS_RELEASE=$SHA -t $R/nexus-app:sha-$SHA .
+docker build --target runtime -t $R/nexus-solver:sha-$SHA services/solver
+docker build -t $R/nexus-deployer:sha-$SHA docker/deployer
+docker/deployer/bin/nexus-bundle --sha $SHA --app $R/nexus-app:sha-$SHA --solver $R/nexus-solver:sha-$SHA \
+  --deployer $R/nexus-deployer:sha-$SHA --repo . --out ~/nexus-smoke/bundle
+.github/scripts/prod-smoke.sh --bundle ~/nexus-smoke/bundle/nexus-$SHA.tar --project nexus-smoke-local --home ~/nexus-smoke/run
 ```
 
-El `.env` de una prueba no debe ser el del desarrollo (`env_file: .env`): usa el de la copia donde corres esto. La CA interna de Caddy no es de confianza en el navegador, de ahí el `-k`; la redirección 308 de HTTP no conserva el puerto de prueba, así que en local pide HTTPS directamente. Las pruebas automáticas de la configuración están en `tests/Unit/Deploy/ProductionStackTest.php`.
+Necesita `jq`, `zstd` y `curl` (o córrelo dentro de la imagen del deployer, que los trae) y unos 3 GB de disco: no uses un `/tmp` en memoria. Al terminar borra sus contenedores, volúmenes y carpeta (`--keep` los deja para revisar); `--deployer-src docker/deployer` monta el código local del deployer para iterar sin rearmar el paquete. `--restart-daemon` reinicia Docker para probar el arranque tras un reinicio: solo en el CI, nunca en una máquina compartida. Las pruebas de la configuración están en `tests/Unit/Deploy/ProductionStackTest.php`.
 
 ## Ensayo local (2026-11-10)
 

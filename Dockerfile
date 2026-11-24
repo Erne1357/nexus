@@ -128,6 +128,9 @@ FROM base AS prod
 
 ARG UID=1000
 ARG GID=1000
+# El SHA del release: /health dice qué versión atiende.
+ARG NEXUS_RELEASE=dev
+ENV NEXUS_RELEASE=$NEXUS_RELEASE
 
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
@@ -145,4 +148,5 @@ RUN composer dump-autoload --no-dev --optimize --classmap-authoritative --no-int
 USER app
 
 ENTRYPOINT ["entrypoint"]
-CMD ["php", "artisan", "octane:frankenphp", "--host=0.0.0.0", "--port=8000", "--max-requests=1000"]
+# OCTANE_WORKERS (compose.prod.yaml): `auto` = uno por núcleo. Durante un cambio de color corren dos instancias.
+CMD ["sh", "-c", "exec php artisan octane:frankenphp --host=0.0.0.0 --port=8000 --max-requests=1000 --workers=\"${OCTANE_WORKERS:-auto}\""]
