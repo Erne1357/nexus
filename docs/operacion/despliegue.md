@@ -443,11 +443,11 @@ docker build --target prod --build-arg NEXUS_RELEASE=$SHA -t $R/nexus-app:sha-$S
 docker build --target runtime -t $R/nexus-solver:sha-$SHA services/solver
 docker build -t $R/nexus-deployer:sha-$SHA docker/deployer
 docker/deployer/bin/nexus-bundle --sha $SHA --app $R/nexus-app:sha-$SHA --solver $R/nexus-solver:sha-$SHA \
-  --deployer $R/nexus-deployer:sha-$SHA --repo . --out /tmp/nexus-bundle
-.github/scripts/prod-smoke.sh --bundle /tmp/nexus-bundle/nexus-$SHA.tar --project nexus-smoke-local
+  --deployer $R/nexus-deployer:sha-$SHA --repo . --out ~/nexus-smoke/bundle
+.github/scripts/prod-smoke.sh --bundle ~/nexus-smoke/bundle/nexus-$SHA.tar --project nexus-smoke-local --home ~/nexus-smoke/run
 ```
 
-Al terminar borra sus contenedores, volúmenes y carpeta (`--keep` los deja para revisar). `--restart-daemon` reinicia Docker para probar el arranque tras un reinicio: solo en el CI, nunca en una máquina compartida. Las pruebas de la configuración están en `tests/Unit/Deploy/ProductionStackTest.php`.
+Necesita `jq`, `zstd` y `curl` (o córrelo dentro de la imagen del deployer, que los trae) y unos 3 GB de disco: no uses un `/tmp` en memoria. Al terminar borra sus contenedores, volúmenes y carpeta (`--keep` los deja para revisar); `--deployer-src docker/deployer` monta el código local del deployer para iterar sin rearmar el paquete. `--restart-daemon` reinicia Docker para probar el arranque tras un reinicio: solo en el CI, nunca en una máquina compartida. Las pruebas de la configuración están en `tests/Unit/Deploy/ProductionStackTest.php`.
 
 ## Ensayo local (2026-11-10)
 

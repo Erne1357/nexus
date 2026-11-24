@@ -114,7 +114,9 @@ Decidió por AskUserQuestion:
   5. paquete alterado;
   6. rollback;
   7. contracción (negada y con restauración);
-  8. reinicio del daemon de Docker.
+  8. reinicio del daemon de Docker;
+  9. el agente con la carpeta de entrada;
+  10. el agente con GitHub (contra una API falsa), con pausa.
 
   Falla con una sola respuesta 5xx o sin conexión. También pasa `shellcheck` y `actionlint`.
 - Los shards de `tests` se rebalancearon y Pint corre en paralelo (#791).
