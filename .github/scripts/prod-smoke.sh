@@ -6,6 +6,8 @@
 #   2 despliegue sin caídas (cambio de color)   6 vuelta atrás sin caídas
 #   3 versión rota (producción no cambia)       7 contracción: rollback negado y con --restore
 #   4 .env sin una variable nueva (se rechaza)  8 reinicio del daemon de Docker (solo con --restart-daemon)
+#   9 el agente despliega lo que llega a la carpeta de entrada (y solo el paquete más nuevo)
+#  10 el agente con GitHub (contra una API falsa): toma el Deployment, publica el resultado y respeta la pausa
 #
 # Uso: prod-smoke.sh --bundle <nexus-<sha>.tar> [--project <nombre>] [--home <carpeta>] [--restart-daemon] [--keep]
 #                    [--deployer-src <docker/deployer>]   (solo en local: monta ese código sobre la imagen del deployer)
@@ -237,6 +239,75 @@ expect_release smoked000007 "tras el rollback negado"
 expect_code 0 "rollback a C con --restore --yes" -- rollback smokec000007 --restore --yes
 expect_release smokec000007 "rollback con restauración"
 
+# wait_release <sha> <segundos>: espera a que Caddy atienda ese release.
+wait_release() {
+    local want=$1 deadline=$((SECONDS + $2))
+    while [ "$SECONDS" -lt "$deadline" ]; do
+        [ "$(public_health | jq -r .release 2>/dev/null)" = "$want" ] && return 0
+        sleep 2
+    done
+    return 1
+}
+
+say "9. El agente despliega lo que llega a la carpeta de entrada"
+bundle_i=$(variant smokei000009 release.Dockerfile)
+cp "$bundle_i" "$home/inbox/nexus-smokei000009.tar.part"
+mv "$home/inbox/nexus-smokei000009.tar.part" "$home/inbox/nexus-smokei000009.tar"
+cp "$bundle_i.sha256" "$home/inbox/"
+if wait_release smokei000009 120 && [ -f "$home/inbox/hechos/nexus-smokei000009.tar" ]; then
+    pass "carpeta de entrada: atiende smokei000009 y el paquete quedó en hechos/"
+else
+    fail "carpeta de entrada: no se desplegó smokei000009 ($(ls "$home/inbox" "$home/inbox/fallidos" 2>/dev/null | tr '\n' ' '))"
+fi
+bundle_j=$(variant smokej000009 release.Dockerfile)
+sleep 1
+bundle_k=$(variant smokek000009 release.Dockerfile)
+cp "$bundle_j" "$bundle_j.sha256" "$bundle_k" "$bundle_k.sha256" "$home/inbox/"
+if wait_release smokek000009 120 && [ -f "$home/inbox/omitidos/nexus-smokej000009.tar" ]; then
+    pass "dos paquetes a la vez: solo el más nuevo (smokek000009); el otro quedó en omitidos/"
+else
+    fail "dos paquetes a la vez: $(public_health | jq -r .release 2>/dev/null); omitidos: $(ls "$home/inbox/omitidos" 2>/dev/null | tr '\n' ' ')"
+fi
+
+say "10. El agente con GitHub (API falsa)"
+# Tarball de la infraestructura como el de codeload (una carpeta de primer nivel) y la API falsa en la red del stack.
+mkdir -p "$home/fixtures/nexus-smokef000010"
+tar -C "$repo" -cf - compose.yaml compose.prod.yaml docker .env.production.example | tar -C "$home/fixtures/nexus-smokef000010" -xf -
+tar -C "$home/fixtures" -czf "$home/fixtures/smokef000010.tar.gz" nexus-smokef000010
+cp "$home/fixtures/smokef000010.tar.gz" "$home/fixtures/smokeg000010.tar.gz"
+fake="$project-fake-github"
+docker run -d --rm --name "$fake" --network "${project}_backend" -v "$smoke_dir/fake-github.php:/srv/fake-github.php:ro" \
+    -v "$home/fixtures:/fixtures:ro" --entrypoint php "$app_a" -S 0.0.0.0:8080 /srv/fake-github.php >/dev/null
+variant smokef000010 release.Dockerfile >/dev/null
+variant smokeg000010 release.Dockerfile >/dev/null
+set_env DEPLOY_SOURCE github
+set_env DEPLOY_GITHUB_TOKEN smoke
+set_env DEPLOY_GITHUB_API "http://$fake:8080"
+set_env DEPLOY_GITHUB_CODELOAD "http://$fake:8080"
+deployer compose up -d --no-deps deployer >/dev/null 2>&1
+fake_api() { docker exec "$fake" curl -fsS "$@"; }
+payload() {
+    jq -cn --arg sha "$1" --arg app "${app_a%:*}:sha-$1" --arg solver "$solver_ref" --arg deployer "$deployer_ref" \
+        '{payload: {action: "deploy", sha: $sha, images: {app: $app, solver: $solver, deployer: $deployer}}}'
+}
+id_f=$(fake_api -X POST -d "$(payload smokef000010)" http://127.0.0.1:8080/_deployments | jq -r .id)
+if wait_release smokef000010 180; then
+    sleep 4
+    states=$(fake_api "http://127.0.0.1:8080/repos/Erne1357/nexus/deployments/$id_f/statuses" | jq -r '[.[].state] | reverse | join(",")')
+    if [ "$states" = "queued,in_progress,success" ]; then pass "GitHub: desplegó smokef000010 y publicó $states"; else fail "GitHub: estados $states"; fi
+else
+    fail "GitHub: no se desplegó smokef000010 ($(docker logs --tail 5 "$project-deployer-1" 2>&1 | tr '\n' ' '))"
+fi
+deployer pause "smoke" >/dev/null 2>&1
+id_g=$(fake_api -X POST -d "$(payload smokeg000010)" http://127.0.0.1:8080/_deployments | jq -r .id)
+sleep 12
+state_g=$(fake_api "http://127.0.0.1:8080/repos/Erne1357/nexus/deployments/$id_g/statuses" | jq -r '.[0].state')
+if [ "$state_g" = queued ]; then pass "GitHub con pausa: el Deployment sigue en cola"; else fail "GitHub con pausa: quedó en $state_g"; fi
+deployer resume >/dev/null 2>&1
+if wait_release smokeg000010 180; then pass "GitHub tras resume: atiende smokeg000010"; else fail "GitHub tras resume: no se desplegó smokeg000010"; fi
+docker rm -f "$fake" >/dev/null 2>&1 || true
+last_release=smokeg000010
+
 if [ "$restart_daemon" = 1 ]; then
     say "8. Reinicio del daemon de Docker"
     sudo systemctl restart docker
@@ -245,7 +316,7 @@ if [ "$restart_daemon" = 1 ]; then
         [[ "$(public_health | jq -r .status 2>/dev/null)" =~ ^(ok|degraded)$ ]] && break
         sleep 3
     done
-    expect_release smokec000007 "tras reiniciar Docker"
+    expect_release "$last_release" "tras reiniciar Docker"
     active=$(deployer status --json | jq -r .active_color)
     other=$([ "$active" = blue ] && echo green || echo blue)
     if [ -z "$(docker ps -q --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=app-$other")" ]; then
