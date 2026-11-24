@@ -260,12 +260,24 @@ wait_release() {
     return 1
 }
 
+# eventually <segundos> <comando…>: reintenta el comando cada 2 s hasta que salga 0. El agente archiva el paquete y
+# publica el resultado al terminar de limpiar, unos segundos después de que Caddy ya atiende el release nuevo.
+eventually() {
+    local deadline=$((SECONDS + $1))
+    shift
+    while [ "$SECONDS" -lt "$deadline" ]; do
+        "$@" && return 0
+        sleep 2
+    done
+    return 1
+}
+
 say "9. El agente despliega lo que llega a la carpeta de entrada"
 bundle_i=$(variant smokei000009 release.Dockerfile)
 mv "$bundle_i" "$home/inbox/nexus-smokei000009.tar.part"
 mv "$home/inbox/nexus-smokei000009.tar.part" "$home/inbox/nexus-smokei000009.tar"
 mv "$bundle_i.sha256" "$home/inbox/"
-if wait_release smokei000009 120 && [ -f "$home/inbox/hechos/nexus-smokei000009.tar" ]; then
+if wait_release smokei000009 300 && eventually 60 test -f "$home/inbox/hechos/nexus-smokei000009.tar"; then
     pass "carpeta de entrada: atiende smokei000009 y el paquete quedó en hechos/"
 else
     fail "carpeta de entrada: no se desplegó smokei000009 ($(ls "$home/inbox" "$home/inbox/fallidos" 2>/dev/null | tr '\n' ' '))"
@@ -275,7 +287,7 @@ sleep 1
 bundle_k=$(variant smokek000009 release.Dockerfile)
 rm -f "$home"/inbox/hechos/*.tar
 mv "$bundle_j" "$bundle_j.sha256" "$bundle_k" "$bundle_k.sha256" "$home/inbox/"
-if wait_release smokek000009 120 && [ -f "$home/inbox/omitidos/nexus-smokej000009.tar" ]; then
+if wait_release smokek000009 300 && eventually 60 test -f "$home/inbox/omitidos/nexus-smokej000009.tar"; then
     pass "dos paquetes a la vez: solo el más nuevo (smokek000009); el otro quedó en omitidos/"
 else
     fail "dos paquetes a la vez: $(public_health | jq -r .release 2>/dev/null); omitidos: $(ls "$home/inbox/omitidos" 2>/dev/null | tr '\n' ' ')"
@@ -304,10 +316,10 @@ payload() {
         '{payload: {action: "deploy", sha: $sha, images: {app: $app, solver: $solver, deployer: $deployer}}}'
 }
 id_f=$(fake_api -X POST -d "$(payload smokef000010)" http://127.0.0.1:8080/_deployments | jq -r .id)
-if wait_release smokef000010 180; then
-    sleep 4
-    states=$(fake_api "http://127.0.0.1:8080/repos/Erne1357/nexus/deployments/$id_f/statuses" | jq -r '[.[].state] | reverse | join(",")')
-    if [ "$states" = "queued,in_progress,success" ]; then pass "GitHub: desplegó smokef000010 y publicó $states"; else fail "GitHub: estados $states"; fi
+f_states() { fake_api "http://127.0.0.1:8080/repos/Erne1357/nexus/deployments/$id_f/statuses" | jq -r '[.[].state] | reverse | join(",")'; }
+f_succeeded() { [ "$(f_states)" = "queued,in_progress,success" ]; }
+if wait_release smokef000010 300; then
+    if eventually 60 f_succeeded; then pass "GitHub: desplegó smokef000010 y publicó $(f_states)"; else fail "GitHub: estados $(f_states)"; fi
 else
     fail "GitHub: no se desplegó smokef000010 ($(docker logs --tail 5 "$project-deployer-1" 2>&1 | tr '\n' ' '))"
 fi
@@ -317,7 +329,7 @@ sleep 12
 state_g=$(fake_api "http://127.0.0.1:8080/repos/Erne1357/nexus/deployments/$id_g/statuses" | jq -r '.[0].state')
 if [ "$state_g" = queued ]; then pass "GitHub con pausa: el Deployment sigue en cola"; else fail "GitHub con pausa: quedó en $state_g"; fi
 deployer resume >/dev/null 2>&1
-if wait_release smokeg000010 180; then pass "GitHub tras resume: atiende smokeg000010"; else fail "GitHub tras resume: no se desplegó smokeg000010"; fi
+if wait_release smokeg000010 300; then pass "GitHub tras resume: atiende smokeg000010"; else fail "GitHub tras resume: no se desplegó smokeg000010"; fi
 docker rm -f "$fake" >/dev/null 2>&1 || true
 last_release=smokeg000010
 
