@@ -8,21 +8,21 @@ use App\Modules\Staffing\Models\SelectionEntry;
 use Illuminate\Database\QueryException;
 
 /*
-| Esquema de la selección de carga (tarea 1.33): una selección viva por periodo, modalidad, departamento y campus, y un
+| Esquema de la selección de carga (tarea 1.33): una selección viva por periodo, modalidad, departamento, y un
 | renglón por docente.
 */
 
-it('la base rechaza dos selecciones vivas del mismo periodo, modalidad, departamento y campus', function () {
+it('la base rechaza dos selecciones vivas del mismo periodo, modalidad, departamento', function () {
     $selection = Selection::factory()->create();
 
-    expect(fn () => Selection::factory()->create($selection->only(['term_id', 'modality_id', 'department_id', 'campus_id'])))
+    expect(fn () => Selection::factory()->create($selection->only(['term_id', 'modality_id', 'department_id'])))
         ->toThrow(QueryException::class);
 });
 
 it('una selección cancelada no impide crear otra igual', function () {
     $selection = Selection::factory()->create(['status' => SelectionStatus::Cancelled, 'cancelled_at' => now()]);
 
-    $other = Selection::factory()->create($selection->only(['term_id', 'modality_id', 'department_id', 'campus_id']));
+    $other = Selection::factory()->create($selection->only(['term_id', 'modality_id', 'department_id']));
 
     expect($other->status)->toBe(SelectionStatus::Draft);
 });
