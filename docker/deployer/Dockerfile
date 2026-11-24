@@ -7,7 +7,10 @@ FROM docker:29.10.0-cli@sha256:34507eb5069d8be82c95dd3b6987d4250fd5fee49b82e2509
 
 # bash para los scripts, jq para leer JSON (manifiesto, /health, API de GitHub), zstd para las imágenes del
 # paquete, coreutils y util-linux por sha256sum y flock con las opciones de GNU.
-RUN apk add --no-cache bash curl jq tar zstd coreutils util-linux tzdata
+# --upgrade: la imagen base ya trae algunas librerías (libzstd, libcurl); sin actualizarlas, un binario nuevo del
+# repositorio de Alpine puede pedir una versión que no está («symbol not found»).
+RUN apk add --no-cache --upgrade bash curl jq tar zstd zstd-libs coreutils util-linux tzdata \
+    && zstd --version && jq --version && curl --version | head -n 1
 
 COPY lib/ /usr/local/lib/nexus-deploy/
 COPY --chmod=755 bin/ /usr/local/bin/
