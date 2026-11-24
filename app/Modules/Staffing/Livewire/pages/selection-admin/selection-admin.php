@@ -113,9 +113,14 @@ new #[Title('Orden de selección')] class extends Component
 
         $selection = $this->selection();
 
-        if ($selection !== null) {
-            $this->fillFrom($selection);
+        if ($selection === null) {
+            $this->selectionId = '';
+
+            return;
         }
+
+        $this->authorizeManage($selection);
+        $this->fillFrom($selection);
     }
 
     /**
@@ -145,11 +150,22 @@ new #[Title('Orden de selección')] class extends Component
 
     public function goTo(int $step): void
     {
-        if ($this->selection() === null) {
+        $selection = $this->selection();
+
+        if ($selection === null) {
             return;
         }
 
-        $this->step = max(1, min(self::STEPS, $step));
+        $target = max(1, min(self::STEPS, $step));
+
+        for ($from = $this->step; $from < $target; $from++) {
+            if ($this->blockers($selection, $from) !== []) {
+                $target = $from;
+                break;
+            }
+        }
+
+        $this->step = $target;
     }
 
     public function next(): void

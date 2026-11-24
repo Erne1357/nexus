@@ -169,3 +169,31 @@ it('quita una carga incluida del borrador', function () {
 
     expect($selection->loads()->count())->toBe(0);
 });
+
+it('no se puede saltar al paso 3 con renglones sin resolver', function () {
+    $s = adminScope();
+    Teacher::factory()->adscribedTo($s['department'])->create(['name' => 'Ana Pérez Lara']);
+
+    Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin')
+        ->set('termId', $s['term']->id)
+        ->set('modalityId', $s['modality']->id)
+        ->set('departmentId', $s['department']->id)
+        ->call('start')
+        ->call('goTo', 2)
+        ->set('csvFile', UploadedFile::fake()->createWithContent('criterios.csv', ADMIN_HEADER."Nombre Desconocido;20;si;no;si;si;3\n"))
+        ->call('importCsv')
+        ->call('goTo', 3)
+        ->assertSet('step', 2)
+        ->call('goTo', 1)
+        ->assertSet('step', 1);
+});
+
+it('un seleccion desconocido en la URL arranca de cero', function () {
+    adminScope();
+
+    Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin', ['seleccion' => 'no-es-un-uuid'])
+        ->assertSet('selectionId', '')
+        ->assertSet('step', 1)
+        ->call('goTo', 3)
+        ->assertSet('step', 1);
+});
