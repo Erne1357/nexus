@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 
 /*
 | CampusMapQuery (tarea 1.24.1): los datos reales del mapa del campus del Inicio. El campus del mapa es el de los
-| edificios con map_key; el periodo, el que contiene el día (o el último que terminó, S1); las clases salen de la
+| edificios con map_key; el periodo, el que recibe (el de consulta de la credencial, TP-04); las clases salen de la
 | carga publicada de Nexus o, si no hay, de las sesiones históricas del SII, con el aula resuelta por la clave del salón
 | y el docente por su RFC.
 */

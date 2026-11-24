@@ -102,7 +102,7 @@ final class CampusMapQuery
 
                 $row = DB::selectOne('select '.implode(', ', $select).' from '.implode(' cross join ', $from), ['term' => $term->id, 'campus' => $campusId, 'code' => $term->code]);
 
-                return md5(json_encode($row));
+                return hash('xxh128', (string) json_encode($row));
             },
         );
     }
