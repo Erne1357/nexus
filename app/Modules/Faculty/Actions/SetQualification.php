@@ -5,6 +5,7 @@ namespace App\Modules\Faculty\Actions;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Enums\QualificationLevel;
+use App\Modules\Faculty\Enums\QualificationSource;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
@@ -48,6 +49,7 @@ final class SetQualification
                     'level' => $level,
                     'qualified_by' => $by->getKey(),
                     'notes' => $notes,
+                    'source' => QualificationSource::Manual,
                 ]);
 
                 return $this->log($qualification, ActivityEvent::Created, "Declaró la materia {$subject->code} en el perfil del docente {$locked->rfc}", attributes: $this->logged($qualification));
@@ -56,11 +58,11 @@ final class SetQualification
             $old = $this->logged($existing);
             $restoring = $existing->trashed();
 
-            if (! $restoring && $existing->level === $level && $existing->notes === $notes) {
+            if (! $restoring && $existing->level === $level && $existing->notes === $notes && $existing->source === QualificationSource::Manual) {
                 return $existing;
             }
 
-            $existing->forceFill(['level' => $level, 'notes' => $notes, 'qualified_by' => $by->getKey()]);
+            $existing->forceFill(['level' => $level, 'notes' => $notes, 'qualified_by' => $by->getKey(), 'source' => QualificationSource::Manual]);
             $existing->deleted_at = null;
             $existing->save();
 

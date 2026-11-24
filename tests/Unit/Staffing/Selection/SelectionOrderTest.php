@@ -2,9 +2,9 @@
 
 use App\Modules\Staffing\Rules\SelectionOrder;
 
-function selEntry(string $key, string $source, ?int $tier, ?float $seniority, ?string $hiredOn, string $name = 'Nombre'): array
+function selEntry(string $key, string $source, ?int $tier, ?float $seniority, ?string $hiredOn, string $name = 'Nombre', ?int $failed = null): array
 {
-    return ['key' => $key, 'source' => $source, 'tier' => $tier, 'seniority' => $seniority, 'hired_on' => $hiredOn, 'name' => $name];
+    return ['key' => $key, 'source' => $source, 'tier' => $tier, 'failed' => $failed, 'seniority' => $seniority, 'hired_on' => $hiredOn, 'name' => $name];
 }
 
 it('SEL-07: mismo escalón y misma antigüedad comparten turno', function () {
@@ -30,6 +30,25 @@ it('SEL-07: a igual escalón va primero la mayor antigüedad', function () {
     ]);
 
     expect(array_column($ranked, 'key'))->toBe(['senior', 'junior']);
+});
+
+it('SEL-07: dentro del escalón va antes quien cumple más criterios', function () {
+    $ranked = SelectionOrder::rank([
+        selEntry('con-falla', 'csv', 1, 30.0, null, 'A', 1),
+        selEntry('sin-falla', 'csv', 1, 5.0, null, 'B', 0),
+    ]);
+
+    expect(array_column($ranked, 'key'))->toBe(['sin-falla', 'con-falla']);
+});
+
+it('SEL-07: comparten turno solo con escalón, criterios y antigüedad iguales', function () {
+    $ranked = SelectionOrder::rank([
+        selEntry('a', 'csv', 1, 10.0, null, 'A', 0),
+        selEntry('b', 'csv', 1, 10.0, null, 'B', 0),
+        selEntry('c', 'csv', 1, 10.0, null, 'C', 1),
+    ]);
+
+    expect(array_column($ranked, 'slot_index', 'key'))->toBe(['a' => 0, 'b' => 0, 'c' => 1]);
 });
 
 it('SEL-06: TC con 4 fallas queda después de Asignatura sin fallas', function () {
