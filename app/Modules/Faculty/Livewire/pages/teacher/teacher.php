@@ -45,6 +45,7 @@ use App\Modules\Faculty\Queries\TeacherAccessQuery;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherRecord;
 use App\Modules\Faculty\Queries\TeacherRecordQuery;
+use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -57,10 +58,11 @@ use Mary\Traits\Toast;
 
 /**
  * Ficha del docente (tarea 1.13, spec 4.3 y S8), con la forma de la ficha del alumno: encabezado con sus datos y
- * cifras, y cinco pestañas: Datos (sus datos, sus adscripciones: quitar y hacer principal), Plazas (agregar,
+ * cifras, y seis pestañas: Datos (sus datos, sus adscripciones: quitar y hacer principal), Plazas (agregar,
  * editar y quitar), Perfil (las materias que puede dar, apto o preferente, y su «Carga académica en otra modalidad» del periodo
  * activo; S16 y S17, supuestos por confirmar) e Historial (grupos por periodo y evaluaciones, de solo lectura).
- * Disponibilidad muestra la del periodo activo, de solo lectura (AvailabilityGridQuery), y lleva al editor
+ * Carga muestra la semana del periodo en curso y la del siguiente cuando ya tiene grupos en Nexus (D-03,
+ * TeacherWeeklyLoad). Disponibilidad muestra la del periodo activo, de solo lectura (AvailabilityGridQuery), y lleva al editor
  * (faculty::pages.teacher-availability). «Acciones» trae darlo de baja o reactivarlo y, según su acceso, «Enviar
  * invitación» o «Reenviar invitación» si su usuario no tiene contraseña o «Restablecer contraseña» por enlace si la
  * tiene (CF-08, solo del admin). La invitación del admin (`core.user.invite`, CF-07) sale aunque tenga otro puesto o
@@ -79,7 +81,7 @@ new #[Title('Ficha del docente')] class extends Component
     use EditsInstitutionalEmail, ReturnsToValidation, Toast;
 
     /** Las pestañas de la ficha, en su orden. */
-    private const array TABS = ['datos', 'plazas', 'disponibilidad', 'perfil', 'historial'];
+    private const array TABS = ['datos', 'plazas', 'carga', 'disponibilidad', 'perfil', 'historial'];
 
     /** El docente de la ficha. El navegador no lo puede cambiar. */
     #[Locked]
@@ -226,7 +228,7 @@ new #[Title('Ficha del docente')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, Actor $context, PeopleQuery $people, AvailabilityGridQuery $grids, TeacherAccessQuery $access, PasswordResetTokens $tokens): array
+    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, Actor $context, PeopleQuery $people, AvailabilityGridQuery $grids, TeacherAccessQuery $access, PasswordResetTokens $tokens, TeacherWeeklyLoad $weeklyLoad): array
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('view', $teacher);
@@ -257,6 +259,7 @@ new #[Title('Ficha del docente')] class extends Component
         $tabData = match ($this->tab) {
             'perfil' => $this->profileData($teacher, $records, $teachers, $context, $record->term),
             'historial' => ['history' => $records->history($teacher)],
+            'carga' => ['weekly' => $weeklyLoad->forTeacher($teacher)],
             'disponibilidad' => [
                 'availability' => $record->term === null ? null : $grids->for($teacher, $record->term, $grids->profile()),
                 'availabilityReason' => Gate::allows('manageAvailability', $teacher) ? null : 'Solo quien administra al docente edita su disponibilidad.',
@@ -310,6 +313,7 @@ new #[Title('Ficha del docente')] class extends Component
             'tabs' => [
                 'datos' => ['Datos', null],
                 'plazas' => ['Plazas', $record->positions->count()],
+                'carga' => ['Carga', null],
                 'disponibilidad' => ['Disponibilidad', null],
                 'perfil' => ['Perfil', null],
                 'historial' => ['Historial', null],
