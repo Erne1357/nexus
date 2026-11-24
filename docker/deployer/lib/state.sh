@@ -54,20 +54,20 @@ successful_releases() {
         sort -n | cut -f 2
 }
 
-# Borra los releases que ya no están entre los últimos $KEEP_RELEASES ni activos, con sus imágenes propias.
+# Borra los releases que ya no están entre los últimos $KEEP_RELEASES ni activos, con las imágenes propias que ningún
+# release conservado usa (el motor y el deployer suelen ser la misma imagen en varios releases).
 prune_releases() {
-    local keep active sha
+    local keep active sha dir kept_refs
     active=$(state_get ACTIVE_SHA)
-    keep=$(successful_releases | tail -n "$KEEP_RELEASES")
+    keep=$( (successful_releases | tail -n "$KEEP_RELEASES"; printf '%s\n' "$active") | sort -u)
+    kept_refs=$(for sha in $keep; do jq -r '.images[].ref' "$RELEASES_DIR/$sha/manifest.json" 2>/dev/null; done | sort -u)
     for dir in "$RELEASES_DIR"/*/; do
         [ -d "$dir" ] || continue
         sha=$(basename "$dir")
-        if [ "$sha" = "$active" ] || grep -qx "$sha" <<<"$keep"; then
-            continue
-        fi
+        grep -qxF "$sha" <<<"$keep" && continue
         log "limpiando el release viejo $(short "$sha")"
         jq -r '.images[].ref' "$dir/manifest.json" 2>/dev/null | while read -r ref; do
-            docker image rm "$ref" >/dev/null 2>&1 || true
+            grep -qxF "$ref" <<<"$kept_refs" || docker image rm "$ref" >/dev/null 2>&1 || true
         done
         rm -rf -- "$dir"
     done
