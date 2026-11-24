@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Database\Factories\TeacherSubjectQualificationFactory;
 use App\Modules\Faculty\Enums\QualificationLevel;
+use App\Modules\Faculty\Enums\QualificationSource;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * Perfil: el nivel con que el jefe declara que el docente puede dar una materia.
  */
-#[Fillable(['teacher_id', 'subject_id', 'level', 'qualified_by', 'notes'])]
+#[Fillable(['teacher_id', 'subject_id', 'level', 'qualified_by', 'notes', 'source'])]
 #[UseFactory(TeacherSubjectQualificationFactory::class)]
 class TeacherSubjectQualification extends Model
 {
@@ -31,7 +32,7 @@ class TeacherSubjectQualification extends Model
      */
     protected function casts(): array
     {
-        return ['level' => QualificationLevel::class];
+        return ['level' => QualificationLevel::class, 'source' => QualificationSource::class];
     }
 
     /**
