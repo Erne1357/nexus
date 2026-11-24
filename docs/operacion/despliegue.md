@@ -202,6 +202,21 @@ Qué hace el deployer, en orden:
 6. Verifica por Caddy que atiende la versión nueva; si no, vuelve sola a la anterior (código 8).
 7. Registra el release. Si el Caddyfile cambió, lo valida con la imagen de Caddy y lo recarga sin cortar conexiones (si no es válido, Caddy sigue con el anterior y queda un aviso). Limpia lo que pasó de los últimos 5 y, si cambió, se actualiza a sí mismo cuando termina cualquier despliegue en curso.
 
+### Comandos de una sola vez después de un release
+
+El despliegue automático solo hace lo que es idempotente y seguro mientras conviven dos versiones (migraciones expand/contract). Los ajustes de datos de una sola vez (reimportar algo, derivar datos nuevos) **no** van en una migración ni en el deployer: se corren a mano, una vez, en el color activo, cuando el release que los necesita ya atiende:
+
+```bash
+nexus status                                                   # dice el color activo (blue o green)
+nexus compose exec app-<color> php artisan <comando> --no-interaction
+```
+
+Cada riel que traiga uno lo anota aquí: el release (o PR) a partir del cual aplica, el orden, si se puede repetir y cuánto tarda. Lo que tarde más de unos segundos va en un job de la cola (CLAUDE.md §4.7).
+
+| Desde | Comando | Orden | ¿Se puede repetir? | Tiempo |
+|---|---|---|---|---|
+| — | (ninguno todavía) | | | |
+
 ### Pausar los despliegues
 
 Para congelar en temporadas sensibles (validación, inscripciones): `nexus pause "inscripciones"`. Mientras tanto los paquetes que lleguen esperan en `inbox/` y los despliegues de GitHub siguen en cola; `nexus resume` los reanuda (se despliega el más nuevo). Con internet, la variable del repositorio `DEPLOY_PAUSED=true` (*Settings → Secrets and variables → Actions → Variables*) hace que `deploy.yml` deje de crear despliegues, aunque siga publicando imágenes y paquetes. Volver atrás funciona aunque haya pausa.
