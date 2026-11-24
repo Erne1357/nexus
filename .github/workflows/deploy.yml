@@ -8,7 +8,7 @@
 #   toma, despliega y publica el resultado, y este workflow falla si el despliegue falló (GitHub avisa por correo).
 #
 # Pausa: la variable del repositorio DEPLOY_PAUSED=true deja de crear Deployments (las imágenes y el paquete se siguen
-# publicando). A mano: «Run workflow» con `deploy` (el último `main`) o `rollback` a un `target`.
+# publicando). A mano, desde `main`: «Run workflow» con `deploy` (el último `main`) o `rollback` a un `target`.
 
 name: Deploy
 
@@ -26,10 +26,9 @@ on:
         description: Para rollback, el SHA del release (o previous)
         default: previous
 
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
-
+# Cada push construye, prueba y publica su paquete (sin concurrencia: ningún commit se queda sin artefacto). Solo
+# `release` y `rollback` comparten el grupo `deploy-production`: si se juntan varios, GitHub deja pendiente solo el más
+# nuevo, que es el que el servidor desplegaría de todos modos.
 permissions:
   contents: read
 
@@ -39,7 +38,7 @@ env:
 jobs:
   build:
     name: build
-    if: github.event_name == 'push' || inputs.action == 'deploy'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.action == 'deploy')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -69,6 +68,8 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/nexus-app:sha-${{ github.sha }}
           build-args: NEXUS_RELEASE=${{ github.sha }}
+          # Liga el paquete de GHCR al repositorio: así el GITHUB_TOKEN puede volver a publicarlo y bajarlo.
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=prod-image
           cache-to: type=gha,scope=prod-image,mode=max
           provenance: false
@@ -82,6 +83,7 @@ jobs:
           target: runtime
           push: true
           tags: ${{ env.REGISTRY }}/nexus-solver:sha-${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=solver-image
           cache-to: type=gha,scope=solver-image,mode=max
           provenance: false
@@ -94,6 +96,7 @@ jobs:
           context: docker/deployer
           push: true
           tags: ${{ env.REGISTRY }}/nexus-deployer:sha-${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=deployer-image
           cache-to: type=gha,scope=deployer-image,mode=max
           provenance: false
@@ -105,8 +108,18 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Los paquetes nuevos de GHCR nacen privados: sin entrar, el pull por digest falla.
+      - name: Entrar a GHCR
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
 
       - name: Bajar las imágenes por digest
         env:
@@ -153,7 +166,10 @@ jobs:
     name: release
     needs: [build, smoke]
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 45
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     permissions:
       contents: read
       deployments: write
@@ -177,7 +193,10 @@ jobs:
     name: rollback
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 45
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     permissions:
       contents: read
       deployments: write

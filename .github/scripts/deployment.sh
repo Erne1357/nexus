@@ -22,12 +22,16 @@ id=$(jq -n --arg ref "$SHA" --argjson payload "$payload" \
 gh api "repos/$REPO/deployments/$id/statuses" -f state=queued -f description="Esperando al servidor." >/dev/null
 echo "Deployment $id en cola: $(jq -c . <<<"$payload")"
 
+# Un error pasajero de la API no corta la espera. Una vez que el servidor tomó el Deployment (in_progress), se espera
+# hasta DEPLOY_RUN_MINUTES (38) desde el inicio: un despliegue con migraciones grandes puede pasar de los 30 minutos.
 deadline=$((SECONDS + wait_minutes * 60))
+run_deadline=$((SECONDS + ${DEPLOY_RUN_MINUTES:-38} * 60))
 last=""
-while [ "$SECONDS" -lt "$deadline" ]; do
-    state=$(gh api "repos/$REPO/deployments/$id/statuses?per_page=1" --jq '.[0].state')
-    description=$(gh api "repos/$REPO/deployments/$id/statuses?per_page=1" --jq '.[0].description')
-    if [ "$state" != "$last" ]; then
+while [ "$SECONDS" -lt "$deadline" ] || { [ "$last" = in_progress ] && [ "$SECONDS" -lt "$run_deadline" ]; }; do
+    status=$(gh api "repos/$REPO/deployments/$id/statuses?per_page=1" --jq '.[0] // {}' 2>/dev/null || echo '{}')
+    state=$(jq -r '.state // ""' <<<"$status")
+    description=$(jq -r '.description // ""' <<<"$status")
+    if [ -n "$state" ] && [ "$state" != "$last" ]; then
         echo "$(date -u +%H:%M:%S) $state: $description"
         last=$state
     fi
@@ -38,4 +42,8 @@ while [ "$SECONDS" -lt "$deadline" ]; do
     esac
     sleep 30
 done
+if [ "$last" = in_progress ]; then
+    echo "::error::El servidor tomó el Deployment $id pero no terminó a tiempo; revisa «nexus status» en el servidor."
+    exit 1
+fi
 echo "::warning::Nadie tomó el Deployment $id en $wait_minutes min (¿el servidor no tiene internet?). El paquete del release está en los artefactos del workflow."
