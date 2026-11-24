@@ -5,12 +5,10 @@ namespace App\Modules\Staffing\Actions;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
-use App\Modules\Scheduling\Actions\SetGroupTeacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
-use App\Modules\Staffing\Models\StaffingRanking;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -27,7 +25,7 @@ use Illuminate\Validation\ValidationException;
  */
 final class AssignTeacher
 {
-    public function __construct(private readonly SetGroupTeacher $setGroupTeacher) {}
+    public function __construct(private readonly RecordTeacherAssignment $record) {}
 
     /**
      * @throws ValidationException
@@ -54,7 +52,7 @@ final class AssignTeacher
                 throw ValidationException::withMessages(['teacher' => 'El docente no está activo.']);
             }
 
-            [$position, $size] = $this->rankingPosition($group, $teacher);
+            [$position, $size] = $this->record->rankingPosition($group, $teacher);
 
             if ($position !== 1 && $reason === null) {
                 throw ValidationException::withMessages(['reason' => $position === null
@@ -70,38 +68,7 @@ final class AssignTeacher
                 throw ValidationException::withMessages(['teacher' => $result->messages()]);
             }
 
-            $current?->update(['replaced_at' => now(), 'replaced_by' => $actor->getKey()]);
-
-            $this->setGroupTeacher->handle($group, $teacher, $actor);
-
-            $assignment = GroupTeacherAssignment::query()->create([
-                'term_id' => $group->term_id,
-                'modality_id' => $group->modality_id,
-                'group_id' => $group->id,
-                'teacher_id' => $teacher->id,
-                'assigned_by' => $actor->getKey(),
-                'assigned_at' => now(),
-                'ranking_position_at_assignment' => $position,
-                'ranking_size_at_assignment' => $size,
-                'reason' => $reason,
-            ]);
-
-            $place = $position === null ? 'fuera del ranking' : "lugar {$position} de {$size}";
-
-            activity()
-                ->performedOn($group)
-                ->causedBy($actor)
-                ->event('teacher_assigned')
-                ->withProperties([
-                    'teacher_id' => $teacher->id,
-                    'previous_teacher_id' => $current?->teacher_id,
-                    'assignment_id' => $assignment->id,
-                    'position' => $place,
-                    'reason' => $reason,
-                ])
-                ->log("Asignó a {$teacher->name} al grupo {$group->code} ({$place})");
-
-            return $assignment;
+            return $this->record->handle($group, $teacher, $actor, $reason, $position, $size);
         }), 'group');
     }
 
@@ -115,20 +82,5 @@ final class AssignTeacher
 
             throw ValidationException::withMessages(['group' => "La carga está en {$label}: los docentes se asignan en Asignación, Ajustes o Re-análisis."]);
         }
-    }
-
-    /**
-     * @return array{0: ?int, 1: ?int} lugar del docente en el ranking del grupo (null si no está) y tamaño del ranking
-     *                                 (null si el grupo todavía no tiene ranking)
-     */
-    private function rankingPosition(Group $group, Teacher $teacher): array
-    {
-        $rankings = StaffingRanking::query()->where('group_id', $group->id);
-        $size = $rankings->count();
-
-        return [
-            (clone $rankings)->where('teacher_id', $teacher->id)->value('rank'),
-            $size > 0 ? $size : null,
-        ];
     }
 }
