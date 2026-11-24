@@ -10,7 +10,7 @@ use Attribute;
  * respaldo. `$reason` dice por qué ya es seguro (qué release dejó de usar lo que se borra).
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-final class Contract
+final readonly class Contract
 {
     public function __construct(public string $reason) {}
 }
