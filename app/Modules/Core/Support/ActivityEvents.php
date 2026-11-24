@@ -21,6 +21,7 @@ final class ActivityEvents
         'selection_scheduled' => 'Turnos programados',
         'selection_published' => 'Selección publicada',
         'selection_cancelled' => 'Selección cancelada',
+        'selection_loads_set' => 'Cargas de la selección ajustadas',
         'updated' => 'Cambio',
         'deleted' => 'Borrado',
         'restored' => 'Restaurado',
