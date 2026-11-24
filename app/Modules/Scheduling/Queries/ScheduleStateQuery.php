@@ -184,10 +184,15 @@ final class ScheduleStateQuery
             ->where('kind', PositionKind::Honorarios->value)
             ->distinct()->pluck('teacher_id')->flip();
 
-        $allowances = TeacherHourAllowance::query()->where('term_id', $term->id)->whereIn('teacher_id', $teacherIds)
-            ->pluck('hours', 'teacher_id');
-
-        return Teacher::query()->whereIn('id', $teacherIds)->orderBy('id')->get(['id', 'name'])
+        return Teacher::query()
+            ->whereIn('teachers.id', $teacherIds)
+            ->orderBy('teachers.id')
+            ->select(['teachers.id', 'teachers.name'])
+            ->addSelect(['allowance_hours' => TeacherHourAllowance::query()->select('hours')
+                ->whereColumn('teacher_hour_allowances.teacher_id', 'teachers.id')
+                ->where('teacher_hour_allowances.term_id', $term->id)
+                ->limit(1)])
+            ->get()
             ->map(fn (Teacher $teacher): StateTeacher => new StateTeacher(
                 $teacher->id,
                 $teacher->name,
@@ -195,7 +200,7 @@ final class ScheduleStateQuery
                 (int) ($external[$teacher->id] ?? 0),
                 $unavailable[$teacher->id] ?? [],
                 $honorarios->has($teacher->id),
-                isset($allowances[$teacher->id]) ? (int) $allowances[$teacher->id] : null,
+                $teacher->allowance_hours === null ? null : (int) $teacher->allowance_hours,
             ))
             ->all();
     }
