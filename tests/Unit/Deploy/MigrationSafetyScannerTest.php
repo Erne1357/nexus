@@ -93,6 +93,19 @@ it('rechaza SQL crudo con DROP, RENAME, ALTER ... TYPE o SET NOT NULL', function
     'SET NOT NULL' => ['ALTER TABLE rooms ALTER COLUMN code SET NOT NULL'],
 ]);
 
+it('acepta SQL crudo con DROP NOT NULL: relajar una columna es expansión', function () {
+    $violations = migrationSafetyScan(migrationSafetySource("DB::statement('alter table rooms alter column code drop not null');"));
+
+    expect($violations)->toBe([]);
+});
+
+it('sigue rechazando un DROP real aunque el mismo SQL tenga DROP NOT NULL', function () {
+    $violations = migrationSafetyScan(migrationSafetySource("DB::statement('alter table rooms alter column code drop not null, drop column x');"));
+
+    expect($violations)->toHaveCount(1)
+        ->and($violations[0])->toContain('SQL crudo con DROP');
+});
+
 it('acepta cualquiera de las anteriores con el atributo Contract', function () {
     $source = migrationSafetySource(
         "Schema::table('rooms', function (Blueprint \$table) { \$table->dropColumn('code'); \$table->string('x'); });

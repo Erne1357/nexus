@@ -14,6 +14,13 @@ final class ActivityEvents
     /** @var array<string, string> */
     private const array LABELS = [
         'created' => 'Alta',
+        'selection_created' => 'Selección creada',
+        'selection_csv_imported' => 'CSV de la selección importado',
+        'selection_entry_resolved' => 'Renglón resuelto',
+        'selection_entry_discarded' => 'Renglón descartado',
+        'selection_scheduled' => 'Turnos programados',
+        'selection_published' => 'Selección publicada',
+        'selection_cancelled' => 'Selección cancelada',
         'updated' => 'Cambio',
         'deleted' => 'Borrado',
         'restored' => 'Restaurado',
@@ -77,6 +84,8 @@ final class ActivityEvents
         'room_removed_by_rejected_loan' => 'Salón quitado: préstamo rechazado',
         'teacher_assigned' => 'Docente asignado',
         'teacher_unassigned' => 'Docente quitado',
+        'selection_load_finished' => 'Carga terminada en la orden de selección',
+        'hour_allowance_granted' => 'Horas autorizadas',
         'group_history_imported' => 'Historial de grupos importado',
         'load_projection_imported' => 'Proyección de carga importada',
         'launched' => 'Lanzado',

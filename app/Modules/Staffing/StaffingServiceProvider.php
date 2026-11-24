@@ -26,6 +26,7 @@ use App\Modules\Core\Settings\SettingType;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
+use App\Modules\Faculty\Events\HourAllowanceChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
@@ -42,6 +43,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
 use App\Modules\Scheduling\Queries\PendingPlacements;
 use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
+use App\Modules\Staffing\Console\AdvanceSelectionsCommand;
 use App\Modules\Staffing\Console\RankTerm;
 use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
 use App\Modules\Staffing\Database\Seeders\ChangeRequestsDemoSeeder;
@@ -93,6 +95,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         GroupsCreated::class,
         PositionChanged::class,
         ExternalLoadChanged::class,
+        HourAllowanceChanged::class,
         TeacherUpdated::class,
         AdscriptionChanged::class,
     ];
@@ -126,7 +129,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         }
 
         if ($this->app->runningInConsole()) {
-            $this->commands([RankTerm::class, RefreshTeacherLoadsCommand::class]);
+            $this->commands([RankTerm::class, RefreshTeacherLoadsCommand::class, AdvanceSelectionsCommand::class]);
         }
 
         Event::listen(LoadTransitioning::class, BlockClosingWithPendingChangeRequests::class);
