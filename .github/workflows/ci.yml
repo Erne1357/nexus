@@ -3,7 +3,7 @@
 # con PostgreSQL y Valkey de compose.yaml. Detalle en docs/arquitectura/testing.md.
 # Los nombres de los jobs (`lint`, `tests`, `browser`) son los checks requeridos de la tarea 0.12:
 # no los renombres sin actualizar la protección de ramas. `tests` y `browser` corren en shards
-# (`tests 1/3`, `browser 1/3`…, en paralelo, cada uno con su runner) y el job con el nombre requerido
+# (`tests 1/4`, `browser 1/3`…, en paralelo, cada uno con su runner) y el job con el nombre requerido
 # junta sus resultados: falla si algún shard falló. Solo corre en PR (y a mano): el calentado de la
 # caché al mezclar vive en cache.yml, para que ningún push cree checks con estos nombres.
 
@@ -33,9 +33,9 @@ jobs:
       - uses: ./.github/actions/setup-ci
 
       - name: Pint (verificación)
-        run: docker compose run --rm -T --no-deps app ./vendor/bin/pint --test
+        run: docker compose run --rm -T --no-deps app ./vendor/bin/pint --test --parallel
 
-  # Cada shard corre un tercio de las clases de prueba, repartidas por tiempo con tests/.pest/shards.json
+  # Cada shard corre un cuarto de las clases de prueba, repartidas por tiempo con tests/.pest/shards.json
   # (Pest, `--shard`; las clases nuevas que el archivo no trae se reparten por turno, con aviso).
   solver:
     # Servicio del motor en Python (fase 7, tarea 7.12): ruff y pytest dentro de su imagen `dev`, con los fixtures
@@ -58,13 +58,13 @@ jobs:
         run: docker run --rm -e SOLVER_TOKEN=ci -v "$PWD/tests/Fixtures/solver:/fixtures:ro" nexus-solver-dev pytest -q
 
   tests-shard:
-    name: tests ${{ matrix.shard }}/3
+    name: tests ${{ matrix.shard }}/4
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -76,14 +76,14 @@ jobs:
       - name: Levantar PostgreSQL y Valkey
         run: docker compose up -d --wait postgres valkey
 
-      # Cobertura con pcov en Clover; el job `tests` junta los de los tres shards. En paralelo, un
+      # Cobertura con pcov en Clover; el job `tests` junta los de los cuatro shards. En paralelo, un
       # proceso por núcleo del runner: cada uno con su base nexus_test_test_<n>.
-      - name: Unit, Feature y Arch (shard ${{ matrix.shard }}/3)
+      - name: Unit, Feature y Arch (shard ${{ matrix.shard }}/4)
         run: |
           docker compose run --rm -T app php artisan test \
             --testsuite=Unit,Feature,Arch --compact \
             --parallel --processes="$(nproc)" \
-            --shard=${{ matrix.shard }}/3 \
+            --shard=${{ matrix.shard }}/4 \
             --coverage-clover=storage/logs/clover.xml \
             --log-junit=storage/logs/junit.xml
 
@@ -116,17 +116,17 @@ jobs:
           pattern: tests-shard-*
           path: shards
 
-      # Informativo: las 20 pruebas y los 10 archivos más lentos de los tres shards, en el resumen del job.
+      # Informativo: las 20 pruebas y los 10 archivos más lentos de los cuatro shards, en el resumen del job.
       - name: Pruebas más lentas
         run: python3 .github/scripts/slowest-tests.py shards/*/junit.xml 20 >> "$GITHUB_STEP_SUMMARY"
 
       # Bloqueante desde la fase 1: falla si un módulo de app/Modules/ queda debajo de 80 %. Solo con los
-      # tres Clover: con un shard incompleto la cobertura saldría de menos. `shell: bash` activa pipefail.
+      # cuatro Clover: con un shard incompleto la cobertura saldría de menos. `shell: bash` activa pipefail.
       - name: Cobertura por módulo (mínimo 80 %)
         if: ${{ needs.tests-shard.result == 'success' }}
         shell: bash
         run: |
-          python3 .github/scripts/merge-clover.py clover.xml shards/tests-shard-1/clover.xml shards/tests-shard-2/clover.xml shards/tests-shard-3/clover.xml
+          python3 .github/scripts/merge-clover.py clover.xml shards/tests-shard-1/clover.xml shards/tests-shard-2/clover.xml shards/tests-shard-3/clover.xml shards/tests-shard-4/clover.xml
           .github/scripts/coverage-summary.sh clover.xml no-text-report 80 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Resultado de los shards
@@ -173,7 +173,21 @@ jobs:
         run: docker compose up -d --wait postgres valkey
 
       - name: Browser tests (shard ${{ matrix.shard }}/3)
-        run: docker compose run --rm -T app php artisan test --testsuite=Browser --compact --shard=${{ matrix.shard }}/3
+        run: |
+          docker compose run --rm -T app php artisan test \
+            --testsuite=Browser --compact \
+            --shard=${{ matrix.shard }}/3 \
+            --log-junit=storage/logs/junit-browser.xml
+
+      # Informativo: sus tiempos por clase alimentan tests/.pest/shards.json (testing.md, «Shards»).
+      - name: Subir tiempos del shard
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-shard-${{ matrix.shard }}
+          path: storage/logs/junit-browser.xml
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Subir capturas de los tests que fallaron
         if: failure()
