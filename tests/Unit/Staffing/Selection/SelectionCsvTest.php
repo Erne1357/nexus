@@ -38,3 +38,38 @@ it('SEL-06: un renglón con antigüedad inválida o sin nombre va a errores', fu
     expect($result['rows'])->toBe([])
         ->and(array_column($result['errors'], 'line'))->toBe([2, 3]);
 });
+
+it('SEL-06: un CSV de Excel en Windows-1252 se lee igual que en UTF-8', function () {
+    $csv = "Nombre completo;horas;auto ev;cumpl asig;C1;C2;antig\xFCedad\n"
+        ."Jos\xE9 P\xE9rez;40;s\xED;no;1;x;2\n";
+
+    $result = SelectionCsv::parse($csv);
+
+    expect($result['errors'])->toBe([])
+        ->and($result['rows'][0]['name'])->toBe('José Pérez')
+        ->and($result['rows'][0]['auto_eval'])->toBeTrue();
+});
+
+it('SEL-06: un valor que no es sí ni no es error con su línea', function (string $value) {
+    $csv = "Nombre completo;horas;auto ev;cumpl asig;C1;C2;antiguedad\n"
+        ."Ana Ejemplo;30;si;si;si;si;1\n"
+        ."Luis Ejemplo;30;si;si;{$value};si;1\n";
+
+    $result = SelectionCsv::parse($csv);
+
+    expect($result['rows'])->toHaveCount(1)
+        ->and($result['errors'])->toHaveCount(1)
+        ->and($result['errors'][0]['line'])->toBe(3)
+        ->and($result['errors'][0]['message'])->toContain($value)->toContain('C1');
+})->with(['S', 'true', 'verdadero', 'Sí.']);
+
+it('SEL-06: un archivo vacío o solo con encabezado es error', function (string $csv) {
+    $result = SelectionCsv::parse($csv);
+
+    expect($result['rows'])->toBe([])
+        ->and($result['errors'])->toHaveCount(1)
+        ->and($result['errors'][0]['message'])->toBe('El archivo no trae docentes.');
+})->with([
+    'vacío' => [''],
+    'solo encabezado' => ["Nombre completo;horas;auto ev;cumpl asig;C1;C2;antiguedad\n"],
+]);

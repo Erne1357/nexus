@@ -57,3 +57,14 @@ it('SEL-10: los que no vienen en el CSV van al final por fecha de contratación'
         ->and($slots['nuevo-2019'])->toBe($slots['csv-peor'] + 1)
         ->and($slots['nuevo-sin-fecha-a'])->not->toBe($slots['nuevo-sin-fecha']);
 });
+
+it('SEL-10: los nombres con acento se ordenan sin acentos en los empates', function () {
+    $ranked = SelectionOrder::rank([
+        selEntry('zeta', 'appended', null, null, null, 'Zoe Prueba'),
+        selEntry('nandu', 'appended', null, null, null, 'Ñandú Prueba'),
+        selEntry('alvaro', 'appended', null, null, null, 'Álvaro Prueba'),
+        selEntry('beto', 'appended', null, null, null, 'Beto Prueba'),
+    ]);
+
+    expect(array_column($ranked, 'key'))->toBe(['alvaro', 'beto', 'nandu', 'zeta']);
+});

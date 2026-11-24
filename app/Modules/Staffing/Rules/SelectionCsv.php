@@ -26,6 +26,12 @@ final readonly class SelectionCsv
     public static function parse(string $contents): array
     {
         $contents = preg_replace('/^\xEF\xBB\xBF/', '', $contents) ?? $contents;
+
+        // El «CSV» de Excel en español es Windows-1252, no UTF-8.
+        if (! mb_check_encoding($contents, 'UTF-8')) {
+            $contents = mb_convert_encoding($contents, 'UTF-8', 'Windows-1252');
+        }
+
         $lines = preg_split('/\r\n|\r|\n/', $contents) ?: [];
         $rows = [];
         $errors = [];
@@ -69,24 +75,46 @@ final readonly class SelectionCsv
             } elseif (! is_numeric($seniority) || (float) $seniority < 0) {
                 $errors[] = ['line' => $line, 'message' => "La antigüedad «{$cell('seniority_years')}» no es un número."];
             } else {
+                $flags = [];
+
+                foreach (['auto_eval', 'prior_compliance', 'partials_1', 'partials_2'] as $field) {
+                    $flags[$field] = self::flag($cell($field));
+
+                    if ($flags[$field] === null) {
+                        $errors[] = ['line' => $line, 'message' => "Línea {$line}: \"{$cell($field)}\" no es sí ni no en la columna ".self::COLUMNS[$field]];
+
+                        continue 2;
+                    }
+                }
+
                 $rows[] = [
                     'line' => $line,
                     'name' => $name,
                     'hours' => (int) $hours,
-                    'auto_eval' => self::flag($cell('auto_eval')),
-                    'prior_compliance' => self::flag($cell('prior_compliance')),
-                    'partials_1' => self::flag($cell('partials_1')),
-                    'partials_2' => self::flag($cell('partials_2')),
+                    ...$flags,
                     'seniority_years' => (float) $seniority,
                 ];
             }
         }
 
+        if ($rows === [] && $errors === []) {
+            $errors[] = ['line' => 1, 'message' => 'El archivo no trae docentes.'];
+        }
+
         return ['rows' => $rows, 'errors' => $errors];
     }
 
-    private static function flag(string $value): bool
+    /**
+     * Verdadero: sí, 1, x. Falso: no, 0 o vacío. Cualquier otro valor es nulo (error).
+     */
+    private static function flag(string $value): ?bool
     {
-        return in_array(TeacherNameMatcher::normalize($value), ['SI', '1', 'X'], true);
+        $value = TeacherNameMatcher::normalize($value);
+
+        return match (true) {
+            in_array($value, ['SI', '1', 'X'], true) => true,
+            in_array($value, ['NO', '0', ''], true) => false,
+            default => null,
+        };
     }
 }

@@ -8,7 +8,9 @@ use Carbon\CarbonImmutable;
  * SEL-08. Turnos fijos de la selección: consecutivos dentro de una ventana diaria y en los días de la semana dados
  * (ISO, 1 = lunes). Un turno que no cabe completo pasa al siguiente día válido a la hora de inicio de la ventana.
  * La segunda ronda arranca en el primer inicio de turno que sea ≥ fin de la primera + 30 minutos dentro de la
- * ventana, y si no, el siguiente día válido a la hora de inicio. Puro; zona America/Ciudad_Juarez.
+ * ventana, y si no, el siguiente día válido a la hora de inicio. Los turnos se alinean a la cuadrícula de la ventana
+ * (inicio de la ventana + k turnos): `extraRoundStart()` siempre cae en ella (redondea hacia arriba) y se espera que
+ * el `startsAt` de `layout()` también. Puro; zona America/Ciudad_Juarez.
  */
 final readonly class SelectionSlots
 {
@@ -41,12 +43,13 @@ final readonly class SelectionSlots
     public static function extraRoundStart(CarbonImmutable $firstRoundEnd, string $windowStarts, string $windowEnds, array $weekdays, int $slotMinutes): CarbonImmutable
     {
         $earliest = $firstRoundEnd->setTimezone(self::TIMEZONE)->addMinutes(self::EXTRA_ROUND_GAP_MINUTES);
+        $earliest = $earliest->second > 0 || $earliest->microsecond > 0 ? $earliest->startOfMinute()->addMinute() : $earliest;
         $candidate = self::fit($earliest, $windowStarts, $windowEnds, $weekdays, $slotMinutes);
 
         // Alinea el inicio a la cuadrícula de turnos del día (inicio de la ventana + k turnos).
         [$startHour, $startMinute] = array_map('intval', explode(':', $windowStarts));
         $open = $candidate->setTime($startHour, $startMinute);
-        $offset = (int) $open->diffInMinutes($candidate, true);
+        $offset = (int) round($open->diffInMinutes($candidate, true));
         $aligned = $open->addMinutes((int) (ceil($offset / $slotMinutes) * $slotMinutes));
 
         return self::fit($aligned, $windowStarts, $windowEnds, $weekdays, $slotMinutes);

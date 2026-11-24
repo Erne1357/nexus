@@ -49,3 +49,9 @@ it('SEL-08: la segunda ronda arranca 30 minutos después de la primera, o al dí
     $between = SelectionSlots::extraRoundStart(CarbonImmutable::parse('2026-11-30 10:10', SEL_TZ), '09:00', '14:00', [1, 2, 3, 4, 5], 30);
     expect($between->format('Y-m-d H:i'))->toBe('2026-11-30 11:00');
 });
+
+it('SEL-08: la segunda ronda redondea hacia arriba al siguiente turno si el fin trae segundos', function () {
+    $start = SelectionSlots::extraRoundStart(CarbonImmutable::parse('2026-11-30 10:00:30', SEL_TZ), '09:00', '14:00', [1, 2, 3, 4, 5], 30);
+
+    expect($start->format('Y-m-d H:i:s'))->toBe('2026-11-30 11:00:00');
+});
