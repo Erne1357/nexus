@@ -6,11 +6,16 @@
     «tu mejor lugar» y las fichas de sus grupos. Las marcas de una ficha van como icono y texto, sin insignia, para que no
     pesen más que el grupo. Al tocar una ficha, el panel de la derecha muestra el grupo y SOLO el desglose del propio
     docente. Todo viene de TeacherOfferQuery.
+
+    Con una orden de selección viva a la vista (tarea 1.33), la pantalla es su horario: offer/selection/page.
 --}}
 @use('App\Modules\Core\Enums\StatusTone')
 <div class="relative space-y-4 overflow-x-clip" x-data="{ opener: null }"
     x-init="$wire.$watch('showDrawer', (open) => { if (! open) { $nextTick(() => { if (opener?.isConnected) { opener.focus(); } }); } })"
     x-on:click.capture="opener = $event.target.closest('[data-opener]') ?? opener">
+    @if ($selection !== null)
+        @include('staffing::offer.selection.page')
+    @else
     <div>
         <h1 class="text-2xl font-bold leading-tight md:text-3xl">Oferta del departamento</h1>
         @if ($term)
@@ -166,5 +171,6 @@
                 @include('staffing::offer.panel', ['group' => $selected])
             @endif
         </x-drawer>
+    @endif
     @endif
 </div>
