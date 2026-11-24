@@ -25,7 +25,6 @@ final class SelectionPolicy
     {
         return $this->actor($user)->allows(StaffingPermission::SelectionManage, Target::of(
             modality: $selection->modality_id,
-            campus: $selection->campus_id,
             unit: $selection->department_id,
         ));
     }
