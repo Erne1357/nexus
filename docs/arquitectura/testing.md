@@ -91,6 +91,20 @@ La base es ancha en unit: las reglas de negocio son lo que más cambia y lo más
 - **Ids de registros que la prueba no crea:** `fakeKey(10)` (`tests/Pest.php`) da un uuid fijo y válido. Lo usan los departamentos y carreras de los alcances mientras Academic no tenga sus tablas; un id que no es uuid lo rechaza PostgreSQL ([ADR-0014](../decisiones/0014-uuidv7-como-llave-primaria.md)).
 - **Nunca datos personales reales en el repositorio.** Las exportaciones reales viven solo en el servidor de pruebas y en las máquinas del equipo, fuera de `git`.
 
+## Migraciones sin caída
+
+Durante un despliegue conviven el código nuevo y el anterior sobre la misma base (blue/green, ADR-0033), así que toda migración nueva debe funcionar con el release anterior. `tests/Arch/MigrationSafetyTest.php` lo revisa con `Tests\Support\MigrationSafetyScanner`, que analiza el método `up()` de cada migración que no esté en la línea base (`tests/Arch/migrations-baseline.txt`, las que ya existían al crear el riel de despliegue).
+
+Qué rechaza, sin la marca:
+
+- Columnas `NOT NULL` sin `default()` agregadas con `Schema::table` a una tabla existente (usa `nullable()` o `default()`; `Schema::create` queda libre).
+- `dropColumn`, `renameColumn`, `drop`, `dropIfExists`, `rename` y `->change()`.
+- SQL crudo (`DB::statement`, `DB::unprepared`) con `DROP`, `RENAME`, `ALTER … TYPE` o `SET NOT NULL`.
+
+Cómo marcar una contracción: pon `#[Contract('qué release dejó de usarlo')]` (`App\Modules\Core\Database\Contract`) en la clase, `return new #[Contract('…')] class extends Migration { … };`, y súbela en un release posterior al que dejó de usar lo que borra. Un rollback que cruce ese release exige restaurar el respaldo.
+
+Por qué: si la migración borra o vuelve obligatoria una columna antes de que el código viejo deje de usarla, el color que sigue atendiendo falla en pleno despliegue. La línea base no se amplía para saltar la guardia: una prueba verifica que no crece ni pierde entradas.
+
 ## Base de datos de pruebas
 
 Las pruebas corren contra **PostgreSQL** en la base `nexus_test` (creada por el script de inicialización de `docker/postgres/`), con `RefreshDatabase` para aislar cada test. Las pruebas unitarias no tocan base de datos.
