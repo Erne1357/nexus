@@ -217,6 +217,16 @@ nexus status                                                   # dice el color a
 nexus compose exec app-<color> php artisan <comando> --no-interaction
 ```
 
+**Datos de producción, nunca en el repositorio** (decisión del usuario, 24 de noviembre de 2026; CLAUDE.md §5). Un cambio a registros reales (insertar, corregir o desactivar) es un comando de Artisan como estos, no una migración ni un seeder. El comando lee sus datos de un archivo que se copia al servidor y que git no rastrea, o de sus argumentos. Para correrlo:
+
+1. Copia el archivo a `storage/app/imports/` del volumen `app-storage`: `docker cp <archivo> nexus-app-<color>-1:/app/storage/app/imports/`.
+2. Saca un respaldo: `nexus compose exec backup sh /opt/backup/backup.sh run`.
+3. Corre el comando con `--dry-run`, que solo cuenta lo que haría.
+4. Corre el comando de verdad.
+5. Borra el archivo del servidor.
+
+Nada de catálogo ni de bitácora se borra físicamente: se desactiva.
+
 Cada riel que traiga uno lo anota aquí: el release (o PR) a partir del cual aplica, el orden, si se puede repetir y cuánto tarda. Lo que tarde más de unos segundos va en un job de la cola (CLAUDE.md §4.7).
 
 | Desde | Comando | Orden | ¿Se puede repetir? | Tiempo |

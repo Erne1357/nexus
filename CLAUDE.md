@@ -70,6 +70,14 @@ Detalle: `docs/arquitectura/arquitectura.md`.
 - **Livewire MFC:** una carpeta por componente con `<nombre>.php` (clase anónima) y `<nombre>.blade.php`; namespace `<modulo>::pages.<nombre>` o `<modulo>::components.<nombre>`.
 - **Migraciones:** dentro del módulo. Una migración mezclada en `develop` no se edita; se crea otra.
 - **Migraciones sin caída (expand/contract):** toda migración debe funcionar con el código del release anterior, porque los dos conviven durante el despliegue. Columnas nuevas `nullable()` o con `default()`. Borrar, renombrar o cambiar de tipo va en un release posterior al que dejó de usarlo y lleva `#[Contract('qué release dejó de usarlo')]`; volver atrás de ese release exige restaurar el respaldo. Índices en tablas grandes: `CREATE INDEX CONCURRENTLY` con `$withinTransaction = false`. Los jobs aceptan los payloads del release anterior. Lo revisa `tests/Arch/MigrationSafetyTest.php` ([ADR-0033](docs/decisiones/0033-despliegue-continuo.md)).
+- **Datos fuera de las migraciones** (decisión del usuario, 24 de noviembre de 2026). El repositorio es público: lo que queda en una migración o un seeder se publica para siempre, y `rollback` no lo deshace.
+  - Una migración cambia el esquema. Puede reacomodar datos que ya existen, sin valores escritos a mano; por ejemplo, copiar una columna a otra.
+  - Los seeders llevan solo catálogos públicos de referencia: campus, modalidades, permisos.
+  - Insertar, corregir o desactivar registros reales de producción se hace con un comando de Artisan del módulo:
+    - pasa por Actions (bitácora), se puede repetir y trae `--dry-run`, que solo cuenta;
+    - toma sus datos de un archivo puesto en el servidor (`storage/app/imports/`, ignorado por git) o de sus argumentos, nunca del código;
+    - se corre una vez, después de un respaldo, y se anota en «Comandos de una sola vez» de `docs/operacion/despliegue.md`.
+  - Lo que ya hace una pantalla va por la pantalla.
 - **Llaves:** UUIDv7 en todo modelo (`HasUuids`, `foreignUuid`, `default uuidv7()`); los ids del cliente se buscan con `KeyLookup` ([ADR-0014](docs/decisiones/0014-uuidv7-como-llave-primaria.md)).
 - **Enums** PHP respaldados por string. Eventos con `timestamptz`; horas de sesión con `time`. Zona `America/Ciudad_Juarez`.
 - **Catálogos:** soft deletes + `is_active`; nunca borrado físico. Bitácora: nunca se edita ni se borra.
