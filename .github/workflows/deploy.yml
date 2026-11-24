@@ -1,0 +1,194 @@
+# Despliegue continuo de Nexus (ADR-0033, tarea 1.31). Cada push a `main` construye una sola vez las imágenes
+# (app `prod`, motor y deployer), las publica en GHCR con el tag `sha-<sha>`, corre el smoke del stack de producción
+# con esos digests (sin reconstruir) y arma el paquete del release:
+#
+# - Servidor sin internet (hoy): el paquete queda como artefacto `nexus-<sha>` (30 días). Se descarga, se copia a la
+#   carpeta de entrada del servidor y el deployer lo despliega solo (runbook, «Actualizar»).
+# - Servidor con internet: el job `release` crea un Deployment de GitHub en el ambiente `production`; el deployer lo
+#   toma, despliega y publica el resultado, y este workflow falla si el despliegue falló (GitHub avisa por correo).
+#
+# Pausa: la variable del repositorio DEPLOY_PAUSED=true deja de crear Deployments (las imágenes y el paquete se siguen
+# publicando). A mano: «Run workflow» con `deploy` (el último `main`) o `rollback` a un `target`.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: deploy (el último main) o rollback
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
+      target:
+        description: Para rollback, el SHA del release (o previous)
+        default: previous
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io/erne1357
+
+jobs:
+  build:
+    name: build
+    if: github.event_name == 'push' || inputs.action == 'deploy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      app: ${{ steps.app.outputs.digest }}
+      solver: ${{ steps.solver.outputs.digest }}
+      deployer: ${{ steps.deployer.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Entrar a GHCR
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+      - name: App (prod)
+        id: app
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: prod
+          push: true
+          tags: ${{ env.REGISTRY }}/nexus-app:sha-${{ github.sha }}
+          build-args: NEXUS_RELEASE=${{ github.sha }}
+          cache-from: type=gha,scope=prod-image
+          cache-to: type=gha,scope=prod-image,mode=max
+          provenance: false
+          sbom: false
+
+      - name: Motor
+        id: solver
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: services/solver
+          target: runtime
+          push: true
+          tags: ${{ env.REGISTRY }}/nexus-solver:sha-${{ github.sha }}
+          cache-from: type=gha,scope=solver-image
+          cache-to: type=gha,scope=solver-image,mode=max
+          provenance: false
+          sbom: false
+
+      - name: Deployer
+        id: deployer
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: docker/deployer
+          push: true
+          tags: ${{ env.REGISTRY }}/nexus-deployer:sha-${{ github.sha }}
+          cache-from: type=gha,scope=deployer-image
+          cache-to: type=gha,scope=deployer-image,mode=max
+          provenance: false
+          sbom: false
+
+  # Prueba exactamente las imágenes publicadas (por digest) y arma con ellas el paquete del servidor.
+  smoke:
+    name: smoke
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Bajar las imágenes por digest
+        env:
+          SHA: ${{ github.sha }}
+          APP: ${{ needs.build.outputs.app }}
+          SOLVER: ${{ needs.build.outputs.solver }}
+          DEPLOYER: ${{ needs.build.outputs.deployer }}
+        run: |
+          for pair in "nexus-app@$APP" "nexus-solver@$SOLVER" "nexus-deployer@$DEPLOYER"; do
+            name=${pair%@*}
+            docker pull -q "$REGISTRY/$pair"
+            docker tag "$REGISTRY/$pair" "$REGISTRY/$name:sha-$SHA"
+          done
+
+      - name: Armar el paquete del release
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          docker/deployer/bin/nexus-bundle --sha "$SHA" \
+            --app "$REGISTRY/nexus-app:sha-$SHA" \
+            --solver "$REGISTRY/nexus-solver:sha-$SHA" \
+            --deployer "$REGISTRY/nexus-deployer:sha-$SHA" \
+            --repo . --out "$RUNNER_TEMP/bundle"
+          ls -lh "$RUNNER_TEMP/bundle"
+
+      - name: Smoke del stack de producción
+        env:
+          SHA: ${{ github.sha }}
+        run: .github/scripts/prod-smoke.sh --bundle "$RUNNER_TEMP/bundle/nexus-$SHA.tar" --restart-daemon
+
+      # El paquete ya viene comprimido (zstd por imagen).
+      - name: Publicar el paquete
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nexus-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/bundle/nexus-${{ github.sha }}.tar
+            ${{ runner.temp }}/bundle/nexus-${{ github.sha }}.tar.sha256
+          compression-level: 0
+          retention-days: 30
+
+  release:
+    name: release
+    needs: [build, smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Crear el Deployment de production y esperar al servidor
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          PAUSED: ${{ vars.DEPLOY_PAUSED }}
+          PAYLOAD: >-
+            {"action": "deploy", "sha": "${{ github.sha }}",
+             "images": {"app": "${{ env.REGISTRY }}/nexus-app@${{ needs.build.outputs.app }}",
+                        "solver": "${{ env.REGISTRY }}/nexus-solver@${{ needs.build.outputs.solver }}",
+                        "deployer": "${{ env.REGISTRY }}/nexus-deployer@${{ needs.build.outputs.deployer }}"}}
+        run: .github/scripts/deployment.sh "$PAYLOAD"
+
+  rollback:
+    name: rollback
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Pedir la vuelta atrás al servidor
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          PAUSED: "false"
+          TARGET: ${{ inputs.target }}
+        run: |
+          .github/scripts/deployment.sh "$(jq -cn --arg target "$TARGET" '{action: "rollback", target: $target}')"
