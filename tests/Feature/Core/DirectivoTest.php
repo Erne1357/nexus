@@ -48,9 +48,10 @@ use Livewire\Livewire;
 */
 
 beforeEach(function () {
+    $this->travelTo(CarbonImmutable::parse('2027-02-01 10:00', 'America/Ciudad_Juarez'));
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-05-28']);
 
     $root = app(OrgTree::class)->idOf(OrgTree::ROOT);
     $this->direction = OrgUnit::query()->findOrFail($root);

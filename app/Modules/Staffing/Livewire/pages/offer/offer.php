@@ -81,7 +81,7 @@ new #[Title('Oferta del departamento')] class extends Component
         $user = $context->user();
         abort_unless($user !== null && $context->allows(StaffingPermission::OfferView, Target::ownedBy((string) $user->getKey())), 403);
 
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
         $teacher = Teacher::query()->where('user_id', $user->getKey())->where('is_active', true)->first();
 
         if ($term === null || $teacher === null) {

@@ -78,7 +78,7 @@ new #[Title('Avance del cierre')] class extends Component
         abort_unless(app(Actor::class)->allowsAny(AcademicLoadPermission::LoadReopen), 403);
 
         $department = KeyLookup::findOrFail(Department::query()->withTrashed(), $departmentId);
-        $term = app(Actor::class)->activeTerm() ?? abort(404);
+        $term = app(Actor::class)->loadTerm() ?? abort(404);
         $loads = $query->loadsOf($term->getKey(), $department->getKey());
         abort_if($loads->isEmpty(), 404);
 
@@ -150,7 +150,7 @@ new #[Title('Avance del cierre')] class extends Component
     {
         abort_unless($context->allowsAny(AcademicLoadPermission::LoadReopen), 403);
 
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
         $closing = null;
         $tabs = collect();
 

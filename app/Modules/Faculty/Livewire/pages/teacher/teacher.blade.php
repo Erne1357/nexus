@@ -293,6 +293,8 @@
                     @endforelse
                 </section>
             </div>
+        @elseif ($tab === 'carga')
+            @include('faculty::teachers.load-tab', ['weekly' => $weekly])
         @elseif ($tab === 'disponibilidad')
             @include('faculty::teachers.availability-tab', ['teacher' => $record->teacher, 'term' => $record->term, 'availability' => $availability, 'editReason' => $availabilityReason, 'back' => $this->validationReturnParams()])
         @else

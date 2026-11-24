@@ -12,6 +12,7 @@ use App\Modules\Core\Authorization\PermissionGrantRules;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\RoleAccess;
 use App\Modules\Core\Authorization\ScopeLabels;
+use App\Modules\Core\Console\MigrationPlanCommand;
 use App\Modules\Core\Console\SeedDemo;
 use App\Modules\Core\Console\SyncTermsFromData;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
@@ -38,7 +39,10 @@ use App\Modules\Core\Enums\StageStatus;
 use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Events\SettingsUpdated;
 use App\Modules\Core\Events\TermCalendarChanged;
+use App\Modules\Core\Health\Checks\HeartbeatCheck;
+use App\Modules\Core\Http\Controllers\HealthEndpoint;
 use App\Modules\Core\Http\Middleware\EnsureAcademicLoadIsVisible;
+use App\Modules\Core\Jobs\RecordQueueHeartbeat;
 use App\Modules\Core\Listeners\ForgetAcademicLoadVisibility;
 use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetRoleAccess;
@@ -75,6 +79,7 @@ use App\Modules\Core\Support\QueueJobScope;
 use App\Modules\Core\View\Components\Drawer;
 use App\Modules\Core\View\DrawerIds;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Mail\Events\MessageSent;
@@ -84,9 +89,11 @@ use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Route;
 use Livewire\ComponentHookRegistry;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -189,8 +196,19 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Blade::component(config('mary.prefix').'drawer', Drawer::class);
 
         if ($this->app->runningInConsole()) {
-            $this->commands([SeedDemo::class, SyncTermsFromData::class]);
+            $this->commands([SeedDemo::class, SyncTermsFromData::class, MigrationPlanCommand::class]);
         }
+
+        // `/health` (tarea 1.31) fuera del grupo `web`: sin sesión, cookies ni throttle, para que un Valkey caído dé 503 y no 500.
+        Route::get('/health', HealthEndpoint::class)->name('health');
+
+        // Los latidos de `/health`: el scheduler escribe el suyo y manda un job que escribe el de la cola.
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
+            $schedule->call(function (): void {
+                Cache::store(config('health.cache_store'))->put(HeartbeatCheck::SCHEDULER_KEY, now()->timestamp, 600);
+                dispatch(new RecordQueueHeartbeat);
+            })->everyMinute()->name('health-heartbeat');
+        });
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
         Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetAcademicLoadVisibility::class);

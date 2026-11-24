@@ -31,6 +31,7 @@ use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
+use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupMovedToCampus;
@@ -69,6 +70,7 @@ use App\Modules\Staffing\Models\TeacherTermLoad;
 use App\Modules\Staffing\Policies\ChangeRequestPolicy;
 use App\Modules\Staffing\Policies\SelectionPolicy;
 use App\Modules\Staffing\Queries\ChosenAlternativePlacementsQuery;
+use App\Modules\Staffing\Queries\TeacherWeeklyLoadQuery;
 use App\Modules\Staffing\Rules\RankingWindowSizes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -115,6 +117,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         parent::register();
 
         $this->app->bind(PendingPlacements::class, ChosenAlternativePlacementsQuery::class);
+        $this->app->bind(TeacherWeeklyLoad::class, TeacherWeeklyLoadQuery::class);
     }
 
     public function boot(): void

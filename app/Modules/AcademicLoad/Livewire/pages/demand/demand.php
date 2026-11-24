@@ -284,7 +284,7 @@ new #[Title('Demanda por materia')] class extends Component
 
         $modality = $this->requiredModality();
         $this->modalidad = $modality->code;
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
 
         if ($term === null) {
             $this->message = 'No hay un periodo activo: elige uno en tu credencial.';

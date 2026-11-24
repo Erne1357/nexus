@@ -19,7 +19,7 @@ use App\Modules\Staffing\Models\StaffingRanking;
 */
 
 beforeEach(function () {
-    $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
     $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $department = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id, 'status' => LoadStatus::Staffing]);
@@ -41,6 +41,9 @@ beforeEach(function () {
 });
 
 it('el docente abre la oferta, ve su lugar y desglose en el panel y pasa a Mi carga', function () {
+    // Mi carga muestra el periodo en curso (P9, TP-03): el día cae en Ene-Jun 2027, el de su carga.
+    $this->travelTo('2027-02-01 10:00:00');
+
     visit('/login')
         ->fill('username', 'marisol')
         ->fill('password', 'password')

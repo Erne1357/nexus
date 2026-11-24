@@ -390,6 +390,16 @@ El calendario de un periodo (`core::pages.term`, `/terms/{term}`) y el bloque «
 - **Resumen de modalidades (ficha):** entre el encabezado y «Calendario», un renglón con «Abierto en» y las claves de las modalidades abiertas en Mono, y un «Abrir en <modalidad>» por cada modalidad activa sin abrir (un solo menú «Abrir en…» si faltan más de dos). La lista «Modalidades» (quién abrió, cuándo, «Completar apertura»; una modalidad abierta e inactiva en gris con «Modalidad inactiva») va al final.
 - **Inicio:** solo lectura, trae las etapas en curso y las dos que siguen, y enlaza la ficha del periodo a quien puede verla.
 
+### Mapa del campus (Inicio)
+El Inicio es el mapa 3D del campus (tarea 1.24.1, ADR-0030; `resources/js/ubicatec`, estilos aislados en `resources/css/ubicatec.css` bajo `#ubicatec-root`). Desde el pulido de la tarea 1.32 (crítica de impeccable del 23 de noviembre de 2026; el usuario eligió alinear la paleta a Nexus):
+- **Panel, cajón y controles** usan los tokens del tema: `--g` es `primary` (azul espacio; en oscuro, `#a9c7e3`) con su `primary-content`; superficies `base-100`/`base-200`, filete `base-300`, texto `base-content` y secundario `neutral`. Así siguen al tema claro y oscuro.
+- **Los colores de departamento son datos,** no marca: se quedan en `data.js` y pintan insignias, chips, clases del horario y edificios resaltados. El texto encima es blanco solo si da 4.5:1; si no, tinta oscura (`onC()` en `app.js`, variable `--on`).
+- **El mundo 3D** (terreno, pasto, muros de ladrillo, rampa de ocupación) conserva sus colores físicos; los acentos de selección, ruta y «Estás aquí» van en azul espacio.
+- **Dos buscadores con trabajos distintos:** el de la banda (Ctrl K) es de toda la app; el del panel dice «Buscar en el mapa…» y lo enfoca «/».
+- **Cajón de horario:** se apoya abajo a la derecha, crece solo lo que pide su horario (de la primera a la última hora con clase; sábado solo si hay) y deja el mapa a la vista. Con un detalle abierto, los chips de departamento se esconden.
+- **Estados:** «Cargando el mapa…» hasta el primer cuadro y un aviso si el navegador no puede con el 3D; un periodo sin clases dice «Sin clases publicadas en <periodo>», deshabilita Ocupación y explica que el periodo se cambia en la credencial; en Ocupación no se rotulan los edificios al 0 % y la rampa lleva 0 % y 100 %.
+- **Accesibilidad:** filas y clases con `role="button"` y teclado (Enter o espacio), interruptores con `aria-pressed`, foco visible en `primary`, controles de 44 px en el celular, ningún rótulo bajo 11 px y etiquetas de interiores que no se enciman.
+
 ### Cuadrícula día x hora
 La disponibilidad de un docente en un periodo, decidida el 30 de octubre de 2026 (variante A, «herramienta y pintar»; maquetas en `.impeccable/mocks/decision/docente/`). Las piezas son de Faculty: `x-faculty::availability.grid`, `.ranges`, `.legend` y `.swatch` (`app/Modules/Faculty/Views/components/availability/`).
 

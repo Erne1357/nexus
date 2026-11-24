@@ -547,7 +547,7 @@ new #[Title('Asignación docente')] class extends Component
         $this->termId = $this->modalityId = $this->campusId = $this->departmentId = null;
         $this->departments = [];
 
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
         $this->followRequestedGroup($query, $term?->getKey());
         $modality = $this->requiredModality();
         $this->modalidad = $modality->code;

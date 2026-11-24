@@ -22,7 +22,7 @@ final readonly class TermAvailability
     public static function of(Closure $forTerm): Closure
     {
         return static function (Actor $context) use ($forTerm): ?string {
-            $term = $context->activeTerm();
+            $term = $context->loadTerm();
 
             return $term === null ? self::NO_TERM : $forTerm($term);
         };

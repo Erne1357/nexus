@@ -133,7 +133,7 @@ new #[Title('Docentes')] class extends Component
     {
         $options = $teachers->filterOptions($context);
         $this->forgetFiltersOutside($options);
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
         $page = $teachers->forTable(
             $context,
             $this->search,

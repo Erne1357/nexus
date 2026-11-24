@@ -15,6 +15,7 @@ use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Queries\MyLoadQuery;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 
@@ -23,7 +24,8 @@ use Livewire\Livewire;
 */
 
 beforeEach(function () {
-    $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    $this->travelTo(CarbonImmutable::parse('2027-02-01 10:00', 'America/Ciudad_Juarez'));
+    $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-05-28']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->sc = Department::factory()->create(['code' => 'SC']);

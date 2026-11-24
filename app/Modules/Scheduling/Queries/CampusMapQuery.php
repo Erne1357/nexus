@@ -15,19 +15,26 @@ use Illuminate\Support\Facades\DB;
  *
  * - El campus del mapa es el de los edificios con `map_key` (los que sincroniza `facilities:sync-campus-map`); sin
  *   ninguno, el mapa sale sin salones ni clases.
- * - El periodo es el que contiene `$day` (`starts_on` a `ends_on`); si ninguno, el último que ya terminó (supuesto por
- *   confirmar, S1 de 1.24).
+ * - El periodo lo recibe quien llama (el de consulta de la credencial, TP-04); sin periodo el mapa sale vacío.
  * - Las clases salen de la carga publicada de Nexus del periodo en ese campus si existe; si no, de las sesiones
  *   históricas del SII (`historical_group_sessions`, fuente `sii`). Las sesiones del SII guardan el aula y el RFC
  *   como texto: aquí se resuelven contra `rooms.code` del campus y `teachers.rfc`.
  * - Una clase es un grupo a la misma hora en uno o más días (0 = lunes), con su salón del mapa (`map_key`) o sin él
  *   (`room` nulo y `roomLabel` con la clave del aula).
  *
- * Solo lectura; se guarda en caché diez minutos por periodo, fuente y día.
+ * Solo lectura (MP-01): se guarda en caché por periodo, campus y huella de los datos que lee; un periodo estable
+ * (terminado o con siete días o más) vive 30 días y uno reciente diez minutos, y cualquier cambio de datos cambia la
+ * huella, que se recalcula cada 60 segundos.
  */
 final class CampusMapQuery
 {
-    private const int TTL_SECONDS = 600;
+    public const int STABLE_TTL_SECONDS = 2592000;
+
+    public const int LIVE_TTL_SECONDS = 600;
+
+    public const int FINGERPRINT_TTL_SECONDS = 60;
+
+    public const int STABLE_AFTER_DAYS = 7;
 
     /**
      * @return array{
@@ -43,20 +50,83 @@ final class CampusMapQuery
      *     classes: list<array{subject: string, group: string, prof: ?string, room: ?string, roomLabel: ?string, days: list<int>, hour: int, end: int}>
      * }
      */
-    public function forDay(CarbonImmutable $day): array
+    public function forTerm(?Term $term): array
     {
         $campusId = DB::table('buildings')->whereNotNull('map_key')->whereNull('deleted_at')->value('campus_id');
-        $term = $this->termOn($day);
-        $source = $term === null || $campusId === null ? null : ($this->hasPublishedLoad($term, $campusId) ? 'nexus' : 'sii');
-        $key = 'scheduling:campus-map:v1:'.($term?->code ?? 'none').':'.($source ?? 'none').':'.($campusId ?? 'none').':'.$day->toDateString();
 
-        return Cache::remember($key, self::TTL_SECONDS, fn (): array => $this->build($term, $campusId, $source));
+        if ($term === null || $campusId === null) {
+            return $this->build($term, $campusId, null);
+        }
+
+        // Una sola llave por periodo y campus que guarda la huella con el mapa: si la huella cambió, se rehace y se
+        // sobrescribe, así las versiones viejas no se acumulan en Valkey.
+        $fingerprint = $this->fingerprint($term, $campusId);
+        $key = 'scheduling:campus-map:v3:'.$term->code.':'.$campusId;
+        $cached = Cache::get($key);
+
+        if (is_array($cached) && ($cached['fp'] ?? null) === $fingerprint) {
+            return $cached['map'];
+        }
+
+        $map = $this->build($term, $campusId, $this->hasPublishedLoad($term, $campusId) ? 'nexus' : 'sii');
+        Cache::put($key, ['fp' => $fingerprint, 'map' => $map], $this->isStable($term) ? self::STABLE_TTL_SECONDS : self::LIVE_TTL_SECONDS);
+
+        return $map;
     }
 
-    private function termOn(CarbonImmutable $day): ?Term
+    /**
+     * Huella de todo lo que pinta el mapa del periodo en el campus: conteo, última modificación y suma de las
+     * marcas de tiempo de cada tabla que lee, con el periodo y el campus (una sola consulta con subselects); la suma
+     * nota también dos cambios en el mismo segundo. Se guarda 60 segundos; pasado ese lapso un cambio ya cambia la llave de
+     * la caché (MP-01).
+     */
+    public function fingerprint(Term $term, string $campusId): string
     {
-        return Term::query()->containing($day)->orderByDesc('code')->first()
-            ?? Term::query()->whereDate('ends_on', '<', $day)->orderByDesc('ends_on')->first();
+        return Cache::remember(
+            'scheduling:campus-map:fp:'.$term->code.':'.$campusId,
+            self::FINGERPRINT_TTL_SECONDS,
+            function () use ($term, $campusId): string {
+                $parts = [
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from academic_loads where term_id = :term',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from groups where term_id = :term and campus_id = :campus',
+                    'select count(*) c, max(s.updated_at) m, sum(extract(epoch from s.updated_at)) e from group_sessions s join groups g on g.id = s.group_id where g.term_id = :term and g.campus_id = :campus',
+                    "select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from historical_groups where term_code = :code and source = 'sii' and campus_id = :campus",
+                    "select count(*) c, max(s.updated_at) m, sum(extract(epoch from s.updated_at)) e from historical_group_sessions s join historical_groups g on g.id = s.historical_group_id where g.term_code = :code and g.source = 'sii' and g.campus_id = :campus",
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from rooms where campus_id = :campus',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from buildings where campus_id = :campus',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from teachers',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from teacher_departments',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from departments',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from subjects',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from careers',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from terms where id = :term',
+                    'select count(*) c, max(updated_at) m, sum(extract(epoch from updated_at)) e from campuses where id = :campus',
+                ];
+                $select = [];
+                $from = [];
+                foreach ($parts as $i => $sql) {
+                    $select[] = "t{$i}.c as c{$i}, t{$i}.m as m{$i}, t{$i}.e as e{$i}";
+                    $from[] = "($sql) t{$i}";
+                }
+
+                $row = DB::selectOne('select '.implode(', ', $select).' from '.implode(' cross join ', $from), ['term' => $term->id, 'campus' => $campusId, 'code' => $term->code]);
+
+                return hash('xxh128', (string) json_encode($row));
+            },
+        );
+    }
+
+    /**
+     * Estable: el periodo ya terminó o lleva al menos siete días corridos; ahí la carga ya no se mueve de forma
+     * habitual y la caché puede vivir un mes (la huella la invalida igual si algo cambia).
+     */
+    private function isStable(Term $term): bool
+    {
+        $today = CarbonImmutable::now('America/Ciudad_Juarez')->startOfDay();
+        $starts = CarbonImmutable::parse($term->starts_on->toDateString(), 'America/Ciudad_Juarez');
+        $ends = CarbonImmutable::parse($term->ends_on->toDateString(), 'America/Ciudad_Juarez');
+
+        return $ends->lessThan($today) || $today->greaterThanOrEqualTo($starts->addDays(self::STABLE_AFTER_DAYS));
     }
 
     private function hasPublishedLoad(Term $term, string $campusId): bool

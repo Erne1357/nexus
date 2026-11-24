@@ -190,7 +190,9 @@ describe('vigencia y coherencia del alcance', function () {
             ->and($context->heldRoles())->toBe([])
             ->and($context->allows(FakePermission::ViewCampus, Target::of(campus: $this->c2->id)))->toBeFalse()
             ->and($context->campuses())->toBeEmpty()
-            ->and($context->activeTerm())->toBeNull();
+            ->and($context->loadTerm())->toBeNull()
+            ->and($context->viewTerm())->toBeNull()
+            ->and($context->worksLoad())->toBeFalse();
     });
 });
 
@@ -385,23 +387,83 @@ describe('campus y periodo activos por omisión', function () {
 
         $context = actorOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
 
-        expect($context->activeTerm()?->is($current))->toBeTrue();
+        expect($context->loadTerm()?->is($current))->toBeTrue();
+    });
+
+    it('TP-04: sin sesión, el periodo de consulta es el en curso y el de carga el vigente', function () {
+        $this->travelTo(CarbonImmutable::parse('2026-11-23 10:00', 'America/Ciudad_Juarez'));
+        $inProgress = Term::factory()->create(['code' => '20263', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
+        $current = Term::factory()->current()->create(['code' => '20271', 'starts_on' => '2027-01-25', 'ends_on' => '2027-05-28']);
+        $context = actorOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
+
+        expect($context->viewTerm()?->is($inProgress))->toBeTrue()
+            ->and($context->loadTerm()?->is($current))->toBeTrue();
+    });
+
+    it('TP-04: cada periodo sigue su llave de sesión y no mueve al otro', function () {
+        $this->travelTo(CarbonImmutable::parse('2026-11-23 10:00', 'America/Ciudad_Juarez'));
+        $inProgress = Term::factory()->create(['code' => '20263', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
+        $current = Term::factory()->current()->create(['code' => '20271', 'starts_on' => '2027-01-25', 'ends_on' => '2027-05-28']);
+        $other = Term::factory()->create(['code' => '20253', 'starts_on' => '2025-08-18', 'ends_on' => '2025-12-12']);
+        $context = actorOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
+
+        // Una elección guardada antes del despliegue (llave vieja) sigue siendo el periodo de carga.
+        session([Actor::ACTIVE_TERM => $other->id]);
+
+        expect($context->loadTerm()?->is($other))->toBeTrue()
+            ->and($context->viewTerm()?->is($inProgress))->toBeTrue();
+
+        session([Actor::VIEW_TERM => $current->id]);
+
+        expect($context->viewTerm()?->is($current))->toBeTrue()
+            ->and($context->loadTerm()?->is($other))->toBeTrue();
+    });
+
+    it('TP-04: solo los puestos que trabajan la carga ven «Carga»', function (Role $role, bool $works) {
+        $context = actorOf(User::factory()->withRole($role, match ($role) {
+            Role::JefeDepartamento => ['department_id' => departmentKey(10)],
+            Role::Coordinador => ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)],
+            default => [],
+        })->create());
+
+        expect($context->worksLoad())->toBe($works);
+    })->with([
+        'docente' => [Role::Docente, false],
+        'alumno' => [Role::Alumno, false],
+        'jefe de departamento' => [Role::JefeDepartamento, true],
+        'coordinador' => [Role::Coordinador, true],
+        'admin' => [Role::Admin, true],
+    ]);
+
+    it('TP-04: docente y alumno siempre tienen el periodo de carga vigente, aunque la sesión traiga otro', function (Role $role) {
+        $current = Term::factory()->current()->create(['code' => '20271']);
+        $other = Term::factory()->create(['code' => '20253']);
+        $context = actorOf(User::factory()->withRole($role, ['campus_id' => $this->c2->id])->create());
+
+        session([Actor::ACTIVE_TERM => $other->id]);
+
+        expect($context->worksLoad())->toBeFalse()
+            ->and($context->loadTerm()?->is($current))->toBeTrue();
+    })->with([Role::Docente, Role::Alumno]);
+
+    it('TP-04: el personal sin puesto no ve «Carga»', function () {
+        expect(actorOf(User::factory()->create())->worksLoad())->toBeFalse();
     });
 
     it('recuerda el periodo activo en la petición, pero sigue una elección nueva', function () {
         $current = Term::factory()->current()->create();
         $previous = Term::factory()->create();
-        $context = actorOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
-        $context->activeTerm();
+        $context = actorOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
+        $context->loadTerm();
 
         DB::enableQueryLog();
 
-        expect($context->activeTerm()?->is($current))->toBeTrue()
+        expect($context->loadTerm()?->is($current))->toBeTrue()
             ->and(DB::getQueryLog())->toBeEmpty();
 
         app(SetActiveContext::class)->handle($previous);
 
-        expect($context->activeTerm()?->is($previous))->toBeTrue();
+        expect($context->loadTerm()?->is($previous))->toBeTrue();
     });
 
     // ADR-0014: una sesión de antes del cambio a UUID guarda el id entero del periodo.
@@ -410,7 +472,7 @@ describe('campus y periodo activos por omisión', function () {
         $context = actorOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
         session([Actor::ACTIVE_TERM => 3]);
 
-        expect($context->activeTerm()?->is($current))->toBeTrue();
+        expect($context->loadTerm()?->is($current))->toBeTrue();
     });
 
     it('con varios campus en el alcance, la credencial los ofrece todos', function () {
