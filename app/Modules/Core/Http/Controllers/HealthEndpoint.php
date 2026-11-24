@@ -9,7 +9,7 @@ use Throwable;
 
 /**
  * `GET /health` (readiness): fuera del grupo `web`, sin sesión, cookies ni throttle (dependen de Valkey y darían un 500
- * en lugar de un 503). Sin `X-Health-Token` correcto solo salen los estados.
+ * en lugar de un 503). Solo la sonda del balanceador (`X-Health-Probe: lb`) recibe `draining`. Sin `X-Health-Token` correcto solo salen los estados.
  */
 final class HealthEndpoint
 {
@@ -20,7 +20,7 @@ final class HealthEndpoint
         $withDetail = $token !== '' && $provided !== '' && hash_equals($token, $provided);
 
         try {
-            $report = $query->run();
+            $report = $query->run($request->header((string) config('health.probe_header')) === 'lb');
 
             return response()->json($report->toArray($withDetail), $report->httpStatus());
         } catch (Throwable $e) {

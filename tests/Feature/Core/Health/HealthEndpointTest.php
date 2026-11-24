@@ -109,14 +109,30 @@ it('falla si dos módulos tienen una migración con el mismo nombre', function (
         ->assertJsonPath('checks.migrations.status', 'fail');
 });
 
-it('responde draining mientras existe el archivo de drenado', function () {
+it('responde draining a la sonda del balanceador mientras existe el archivo de drenado', function () {
+    touch(config('health.drain_file'));
+
+    try {
+        $this->getJson('/health', ['X-Health-Probe' => 'lb'])
+            ->assertStatus(503)
+            ->assertJsonPath('status', HealthStatus::Draining->value)
+            ->assertJsonMissingPath('checks');
+    } finally {
+        unlink(config('health.drain_file'));
+    }
+});
+
+it('sigue respondiendo normal al público mientras drena', function () {
     touch(config('health.drain_file'));
 
     try {
         $this->getJson('/health')
-            ->assertStatus(503)
-            ->assertJsonPath('status', HealthStatus::Draining->value)
-            ->assertJsonMissingPath('checks');
+            ->assertOk()
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonPath('draining', true)
+            ->assertJsonStructure(['checks' => ['database']]);
+
+        $this->getJson('/health', ['X-Health-Probe' => 'otro'])->assertOk();
     } finally {
         unlink(config('health.drain_file'));
     }

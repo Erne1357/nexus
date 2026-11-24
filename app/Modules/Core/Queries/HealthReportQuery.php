@@ -25,11 +25,17 @@ final class HealthReportQuery
 {
     public function __construct(private readonly Container $container) {}
 
-    public function run(): HealthReport
+    /**
+     * @param  bool  $probe  la sonda del balanceador (cabecera `health.probe_header` = `lb`): solo a ella se le dice `draining`;
+     *                       el público que Caddy todavía le manda a un color que drena recibe la respuesta normal
+     */
+    public function run(bool $probe = false): HealthReport
     {
         $release = (string) config('health.release');
 
-        if (is_file((string) config('health.drain_file'))) {
+        $draining = is_file((string) config('health.drain_file'));
+
+        if ($draining && $probe) {
             return new HealthReport(HealthStatus::Draining, $release);
         }
 
@@ -46,7 +52,7 @@ final class HealthReportQuery
             }
         }
 
-        return new HealthReport($status, $release, $results);
+        return new HealthReport($status, $release, $results, $draining);
     }
 
     /** @return list<Check> */

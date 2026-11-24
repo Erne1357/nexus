@@ -8,6 +8,7 @@
 return [
     'token' => env('HEALTH_TOKEN'),
     'release' => env('NEXUS_RELEASE', 'dev'),
+    'probe_header' => 'X-Health-Probe',
     'drain_file' => env('NEXUS_DRAIN_FILE', '/tmp/nexus-draining'),
     'heartbeat_stale_seconds' => 180,
     'database_connection' => null,

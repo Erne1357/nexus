@@ -7,7 +7,7 @@ use App\Modules\Core\Enums\HealthStatus;
 final readonly class HealthReport
 {
     /** @param array<string, CheckResult> $checks */
-    public function __construct(public HealthStatus $status, public string $release, public array $checks = []) {}
+    public function __construct(public HealthStatus $status, public string $release, public array $checks = [], public bool $draining = false) {}
 
     /** 200 si sirve (`ok`, `degraded`); 503 si no (`draining`, `fail`). */
     public function httpStatus(): int
@@ -25,6 +25,10 @@ final readonly class HealthReport
 
         if ($this->status === HealthStatus::Draining) {
             return $report;
+        }
+
+        if ($this->draining) {
+            $report['draining'] = true;
         }
 
         $report['checks'] = array_map(function (CheckResult $result) use ($withDetail): array {
