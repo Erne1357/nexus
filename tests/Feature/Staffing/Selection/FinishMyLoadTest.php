@@ -15,6 +15,7 @@ use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\SelectionEntry;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\Staffing\SelectionWorld;
@@ -189,4 +190,72 @@ it('SEL-12: las horas de más aceptadas con la casilla no son choque duro de HC-
     expect($hoursViolations())->not->toBeEmpty()
         ->and(collect($hoursViolations())->every(fn ($violation) => $violation->severity->value === 'hard'))->toBeTrue()
         ->and(Group::query()->where('teacher_id', $teacher->id)->count())->toBe(2);
+});
+
+/**
+ * El docente tomó su grupo en su turno, no terminó, pasó la ronda extra sin cerrar y la selección terminó: queda sin
+ * resolver (SEL-09).
+ *
+ * @return array{0: SelectionWorld, 1: Teacher}
+ */
+function unresolvedAfterSelection(int $base): array
+{
+    [$world, $teacher] = finishLoadWorld(base: $base);
+    $world->selection->update(['status' => SelectionStatus::Finished, 'finished_at' => now()->addDay()]);
+    $world->entryOf($teacher)->update(['status' => SelectionEntryStatus::Unresolved]);
+    test()->travel(2)->days();
+
+    return [$world, $teacher];
+}
+
+it('SEL-14: sin resolver, con la selección terminada, confirma su carga con la casilla; autoriza HC-08 y quita el choque duro', function () {
+    [$world, $teacher] = unresolvedAfterSelection(base: 2);
+
+    expect(finishLoadHoursViolations($world, $teacher))->not->toBeEmpty();
+
+    $missing = finishLoadErrors(fn () => app(FinishMyLoad::class)->confirm($world->selection, $teacher, false, $teacher->user));
+
+    expect($missing['acknowledged'])->toBe([FINISH_OUT_OF_BAND])
+        ->and($world->entryOf($teacher)->status)->toBe(SelectionEntryStatus::Unresolved)
+        ->and(finishLoadHoursViolations($world, $teacher))->not->toBeEmpty();
+
+    $entry = app(FinishMyLoad::class)->confirm($world->selection, $teacher, true, $teacher->user);
+
+    expect($entry->fresh())
+        ->status->toBe(SelectionEntryStatus::Done)
+        ->closed_hours->toBe(5)
+        ->out_of_band_acknowledged_at->not->toBeNull()
+        ->and(TeacherHourAllowance::query()->sole()->hours)->toBe(5)
+        ->and(finishLoadHoursViolations($world, $teacher))->toBe([])
+        ->and(Activity::query()->where('event', 'selection_load_confirmed')->sole()->properties['band'])->toBe('over');
+});
+
+it('SEL-14: dentro de su margen confirma sin la casilla', function () {
+    [$world, $teacher] = unresolvedAfterSelection(base: 5);
+
+    expect(app(FinishMyLoad::class)->confirm($world->selection, $teacher, false, $teacher->user)->fresh()->status)->toBe(SelectionEntryStatus::Done);
+});
+
+it('SEL-14: otro docente no confirma por él', function () {
+    [$world, $teacher] = unresolvedAfterSelection(base: 2);
+    $other = $world->teacher(base: 2, name: 'Docente Otro Ficticio', position: 2, entry: ['status' => SelectionEntryStatus::Unresolved]);
+
+    expect(fn () => app(FinishMyLoad::class)->confirm($world->selection, $teacher, true, $other->user))->toThrow(AuthorizationException::class)
+        ->and($world->entryOf($teacher)->status)->toBe(SelectionEntryStatus::Unresolved)
+        ->and(TeacherHourAllowance::query()->count())->toBe(0);
+});
+
+it('SEL-14: solo confirma un renglón sin resolver, y confirmar no deja tomar ni soltar fuera de turno', function () {
+    [$world, $teacher] = finishLoadWorld(base: 5);
+
+    expect(finishLoadErrors(fn () => app(FinishMyLoad::class)->confirm($world->selection, $teacher, false, $teacher->user))['group'])
+        ->toBe(['Solo confirma su carga quien quedó sin resolver al terminar la selección.']);
+
+    [$finished, $unresolved] = unresolvedAfterSelection(base: 5);
+    app(FinishMyLoad::class)->confirm($finished->selection, $unresolved, false, $unresolved->user);
+
+    expect(finishLoadErrors(fn () => app(FinishMyLoad::class)->confirm($finished->selection, $unresolved, false, $unresolved->user))['group'])
+        ->toBe(['Solo confirma su carga quien quedó sin resolver al terminar la selección.'])
+        ->and(finishLoadErrors(fn () => app(PickSelectionGroup::class)->handle($finished->selection, $unresolved, $finished->group('B', [[2, '09:00', '10:00']]), $finished->room('A2'), $unresolved->user))['group'])
+        ->toBe(['Ya terminaste tu carga: solo tu jefe de departamento o el JPD la cambian.']);
 });

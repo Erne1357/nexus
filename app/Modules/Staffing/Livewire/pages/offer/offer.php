@@ -55,7 +55,8 @@ use Mary\Traits\Toast;
  * renglón por hora de 7:00 a 21:00 con los grupos como fichas (SelectionTimetableQuery), la barra del turno pegada
  * arriba con la cuenta regresiva (Alpine, desde `ends_at` del servidor), la cuenta de horas contra la base (SEL-05),
  * «Orden de selección» (SelectionOrderQuery, en un drawer) y «Terminar mi carga» (FinishMyLoad, en un modal con la
- * casilla fuera del margen y el aviso de cada grupo sin salón). Se refresca cada 5 s. Al tocar una ficha se abre el
+ * casilla fuera del margen y el aviso de cada grupo sin salón); con la selección terminada, quien quedó sin resolver
+ * usa el mismo modal como «Confirmar mi carga» (SEL-14, FinishMyLoad::confirm). Se refresca cada 5 s. Al tocar una ficha se abre el
  * drawer del grupo (`staffing::components.selection-group-drawer`), que toma, suelta o, para quien tiene
  * `staffing.teacher.assign` sobre el grupo, asigna a mano. El docente sale siempre del usuario de la sesión. Filtros:
  * materia en `?q=` y «Todos · Libres · Míos» en `?grupos=`. Con varias selecciones a la vista, `?depto=` elige.
@@ -173,6 +174,35 @@ new #[Title('Oferta del departamento')] class extends Component
         $entry->status === SelectionEntryStatus::Done
             ? $this->success('Terminaste tu carga', "{$entry->closed_hours} h. Tus grupos quedan a tu nombre.")
             : $this->warning('Cerraste con menos horas', 'Vuelves a elegir en la ronda extra, en el mismo orden.');
+    }
+
+    /**
+     * «Confirmar mi carga» (SEL-14): el docente que quedó sin resolver al terminar la selección cierra con lo que lleva,
+     * con la casilla si está fuera del margen; no toma ni suelta nada.
+     */
+    public function confirm(Actor $context, SelectionTimetableQuery $timetable, FinishMyLoad $action): void
+    {
+        $context->user() ?? abort(403);
+        $selection = $this->selection($context, $timetable) ?? abort(404);
+        $this->authorize('pickOwn', $selection);
+        $teacher = $this->teacherMemo ?? abort(403);
+        $this->resetValidation();
+
+        try {
+            $entry = $action->confirm($selection, $teacher, $this->acknowledged, $context->user());
+        } catch (ValidationException $e) {
+            foreach ($e->errors() as $key => $messages) {
+                $this->addError($key, $messages[0]);
+            }
+
+            $this->error('No se confirmó tu carga', e(collect($e->errors())->flatten()->first()));
+
+            return;
+        }
+
+        $this->showFinish = false;
+        $this->acknowledged = false;
+        $this->success('Confirmaste tu carga', "{$entry->closed_hours} h. Tus grupos quedan a tu nombre.");
     }
 
     public function open(string $id): void
@@ -374,6 +404,7 @@ new #[Title('Oferta del departamento')] class extends Component
             'done' => $turn['done'],
             'unresolved' => $turn['unresolved'],
             'in_queue' => $inQueue,
+            'confirmable' => $selection->status === SelectionStatus::Finished && $turn['entry_status'] === SelectionEntryStatus::Unresolved->value,
             'extra' => $extra,
         ];
     }

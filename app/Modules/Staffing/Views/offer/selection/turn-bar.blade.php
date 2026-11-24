@@ -8,8 +8,8 @@
     - idle: nadie en turno ahora y quién sigue;
     - done: ya terminó su carga; extra: cerró con menos y vuelve en la ronda extra;
     - manager: la jefatura, con quién está en turno, cuántos terminaron y «Asignas cualquier grupo, a cualquier hora.»;
-    - finished: la selección terminó (decisión 8): el docente solo consulta; la jefatura ve quiénes quedaron sin resolver
-      y asigna o quita a mano.
+    - finished: la selección terminó (decisión 8): el docente solo consulta, salvo quien quedó sin resolver, que confirma
+      su carga (SEL-14); la jefatura ve quiénes quedaron sin resolver y asigna o quita a mano.
     Espera $bar, $data, $selection y $assigns.
 --}}
 @php
@@ -44,7 +44,9 @@
                 @switch ($kind)
                     @case ('finished')
                         <p class="leading-tight"><b>La selección terminó</b></p>
-                        @if ($bar['in_queue'])
+                        @if ($bar['confirmable'])
+                            <p class="text-sm text-neutral">Quedaste sin resolver: confirma tu carga con lo que llevas. Ya no tomas ni sueltas grupos.</p>
+                        @elseif ($bar['in_queue'])
                             <p class="text-sm text-neutral">Solo consulta: los cambios los hacen tu jefe de departamento o el JPD.</p>
                         @elseif ($bar['unresolved'] !== [])
                             <p class="text-sm text-neutral" data-testid="selection-unresolved"><b class="text-base-content">{{ count($bar['unresolved']) }} sin resolver:</b> {{ implode(', ', $bar['unresolved']) }} · terminaron {{ $bar['done'] }} de {{ $bar['total'] }}</p>
@@ -120,6 +122,8 @@
         <x-button label="Orden de selección" icon="o-queue-list" :class="'whitespace-nowrap max-md:h-11 max-md:flex-1 max-md:px-2 max-md:text-[13px]'.($kind === 'mine' ? ' btn-ghost' : '')" wire:click="$set('showOrder', true)" data-testid="selection-order-open" />
         @if ($kind === 'mine')
             <x-button label="Terminar mi carga" icon="o-check" class="btn-primary whitespace-nowrap max-md:h-11 max-md:flex-1 max-md:px-2 max-md:text-[13px]" wire:click="$set('showFinish', true)" data-testid="selection-finish" />
+        @elseif ($bar['confirmable'])
+            <x-button label="Confirmar mi carga" icon="o-check" class="btn-primary whitespace-nowrap max-md:h-11 max-md:flex-1 max-md:px-2 max-md:text-[13px]" wire:click="$set('showFinish', true)" data-testid="selection-confirm" />
         @endif
     </div>
 </div>

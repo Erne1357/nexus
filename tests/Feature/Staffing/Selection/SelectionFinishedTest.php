@@ -217,3 +217,25 @@ it('decisión 8: el aviso de pendientes lleva a la selección terminada, que el 
         ->assertSee('Docente Dos Ficticio');
     $this->actingAs($this->jefe)->get($notice->toMail($this->jefe)->actionUrl)->assertOk()->assertSee('La selección terminó');
 });
+
+it('SEL-14: en «Oferta», el docente sin resolver confirma su carga con el mismo modal; el que ya terminó no', function () {
+    $this->group->update(['teacher_id' => $this->dos->id]);
+
+    Livewire::actingAs($this->uno->user)->test('staffing::pages.offer')
+        ->assertDontSeeHtml('data-testid="selection-confirm"')
+        ->call('confirm')
+        ->assertHasErrors('group');
+
+    Livewire::actingAs($this->dos->user)->test('staffing::pages.offer')
+        ->assertSeeHtml('data-testid="selection-confirm"')
+        ->assertSee('Quedaste sin resolver')
+        ->set('showFinish', true)
+        ->assertSee('¿Confirmar tu carga?')
+        ->assertSeeHtml('data-testid="selection-confirm-submit"')
+        ->call('confirm')
+        ->assertHasNoErrors()
+        ->assertSet('showFinish', false);
+
+    expect($this->world->entryOf($this->dos)->status)->toBe(SelectionEntryStatus::Done)
+        ->and($this->world->entryOf($this->uno)->status)->toBe(SelectionEntryStatus::Done);
+});

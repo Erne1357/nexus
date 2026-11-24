@@ -45,19 +45,7 @@ trait GuardsSelectionTurn
      */
     private function entryInTurn(Selection $selection, Teacher $teacher, User $actor): SelectionEntry
     {
-        if ($teacher->user_id === null || $teacher->user_id !== $actor->getKey()) {
-            throw new AuthorizationException('Solo el propio docente elige, suelta o termina su carga.');
-        }
-
-        $entry = SelectionEntry::query()
-            ->where('selection_id', $selection->getKey())
-            ->where('teacher_id', $teacher->getKey())
-            ->lockForUpdate()
-            ->first();
-
-        if ($entry === null) {
-            throw ValidationException::withMessages(['group' => 'No estás en la cola de esta selección.']);
-        }
+        $entry = $this->ownEntry($selection, $teacher, $actor);
 
         if ($entry->status === SelectionEntryStatus::Done) {
             throw ValidationException::withMessages(['group' => 'Ya terminaste tu carga: solo tu jefe de departamento o el JPD la cambian.']);
@@ -69,6 +57,31 @@ trait GuardsSelectionTurn
 
         if (! app(SelectionTurnQuery::class)->isTurnOf($selection, $teacher, CarbonImmutable::now())) {
             throw ValidationException::withMessages(['group' => 'No es tu turno.']);
+        }
+
+        return $entry;
+    }
+
+    /**
+     * El renglón del docente, bloqueado, si quien actúa es el propio docente (sin mirar el turno).
+     *
+     * @throws AuthorizationException si el docente no es el del usuario (o no tiene cuenta)
+     * @throws ValidationException si no está en la cola
+     */
+    private function ownEntry(Selection $selection, Teacher $teacher, User $actor): SelectionEntry
+    {
+        if ($teacher->user_id === null || $teacher->user_id !== $actor->getKey()) {
+            throw new AuthorizationException('Solo el propio docente elige, suelta, termina o confirma su carga.');
+        }
+
+        $entry = SelectionEntry::query()
+            ->where('selection_id', $selection->getKey())
+            ->where('teacher_id', $teacher->getKey())
+            ->lockForUpdate()
+            ->first();
+
+        if ($entry === null) {
+            throw ValidationException::withMessages(['group' => 'No estás en la cola de esta selección.']);
         }
 
         return $entry;
