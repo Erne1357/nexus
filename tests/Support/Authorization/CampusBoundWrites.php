@@ -56,6 +56,7 @@ final class CampusBoundWrites
             StaffingPermission::ChangeRequestRequest,
             StaffingPermission::ChangeRequestApplySchedule,
             StaffingPermission::ChangeRequestApplyRoom,
+            StaffingPermission::SelectionManage,
         ];
     }
 
