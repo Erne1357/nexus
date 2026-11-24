@@ -2,6 +2,7 @@
 
 namespace App\Modules\Faculty\Actions;
 
+use App\Modules\Faculty\Enums\QualificationSource;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,8 @@ final class RemoveQualification
             $locked = TeacherSubjectQualification::query()->lockForUpdate()->find($qualification->getKey())
                 ?? throw ValidationException::withMessages(['qualification' => 'Esa materia ya se quitó del perfil.']);
 
+            // Quitar una derivada la vuelve manual para que la derivación (D-02) no la restaure.
+            $locked->forceFill(['source' => QualificationSource::Manual])->save();
             $locked->delete();
 
             activity()
