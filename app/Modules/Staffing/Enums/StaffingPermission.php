@@ -59,8 +59,8 @@ enum StaffingPermission: string implements Permission
         }
 
         return match ($this) {
-            self::RankingView, self::TeacherLoadView, self::ChangeRequestView, self::ChangeRequestDecide, self::SelectionView => [Dimension::Modality, Dimension::Unit],
-            self::TeacherAssign, self::ChangeRequestApplyRoom, self::SelectionManage => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
+            self::RankingView, self::TeacherLoadView, self::ChangeRequestView, self::ChangeRequestDecide, self::SelectionManage, self::SelectionView => [Dimension::Modality, Dimension::Unit],
+            self::TeacherAssign, self::ChangeRequestApplyRoom => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
             self::ChangeRequestRequest, self::ChangeRequestApplySchedule => [Dimension::Modality, Dimension::Campus, Dimension::Career],
             self::OfferView, self::MyLoadView, self::ChangeRequestRequestOwn, self::SelectionPickOwn => [],
         };

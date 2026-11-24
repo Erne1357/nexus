@@ -3,7 +3,6 @@
 namespace App\Modules\Staffing\Database\Factories;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Staffing\Enums\SelectionStatus;
@@ -28,7 +27,6 @@ class SelectionFactory extends Factory
             'term_id' => Term::factory(),
             'modality_id' => Modality::factory(),
             'department_id' => Department::factory(),
-            'campus_id' => Campus::factory(),
             'status' => SelectionStatus::Draft,
         ];
     }

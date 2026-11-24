@@ -4,7 +4,6 @@ namespace App\Modules\Staffing\Models;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -20,9 +19,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Selección de carga por turnos de un departamento en un periodo, modalidad y campus (tarea 1.33).
+ * Selección de carga por turnos de un departamento en un periodo, y modalidad (tarea 1.33).
  */
-#[Fillable(['term_id', 'modality_id', 'department_id', 'campus_id', 'status', 'starts_at', 'window_starts', 'window_ends', 'weekdays', 'slot_minutes', 'published_at', 'first_round_ends_at', 'extra_round_starts_at', 'extra_round_ends_at', 'finished_at', 'cancelled_at', 'created_by'])]
+#[Fillable(['term_id', 'modality_id', 'department_id', 'status', 'starts_at', 'window_starts', 'window_ends', 'weekdays', 'slot_minutes', 'published_at', 'first_round_ends_at', 'extra_round_starts_at', 'extra_round_ends_at', 'finished_at', 'cancelled_at', 'created_by'])]
 #[UseFactory(SelectionFactory::class)]
 class Selection extends Model
 {
@@ -74,14 +73,6 @@ class Selection extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
-    }
-
-    /**
-     * @return BelongsTo<Campus, $this>
-     */
-    public function campus(): BelongsTo
-    {
-        return $this->belongsTo(Campus::class);
     }
 
     /**
