@@ -116,7 +116,14 @@ it('corre el deployer sin puertos, con el socket de Docker y la carpeta de relea
     expect($deployer)->not->toHaveKey('ports')
         ->and($deployer['restart'])->toBe('unless-stopped')
         ->and($deployer['volumes'])->toContain('/var/run/docker.sock:/var/run/docker.sock')
-        ->and($deployer['volumes'])->toContain('${NEXUS_HOME:-/opt/nexus}:${NEXUS_HOME:-/opt/nexus}');
+        ->and($deployer['volumes'])->toContain('${NEXUS_HOME:-/opt/nexus}:${NEXUS_HOME:-/opt/nexus}')
+        ->and($deployer['env_file'][1])->toBe(['path' => '${NEXUS_HOME:-/opt/nexus}/deployer.env', 'required' => false]);
+});
+
+it('no pone el token de GitHub del deployer en el .env que leen la app y la cola', function () {
+    $template = file_get_contents(dirname(__DIR__, 3).'/.env.production.example');
+
+    expect($template)->not->toMatch('/^DEPLOY_GITHUB_TOKEN=/m');
 });
 
 it('fija por digest la imagen base del deployer', function () {
@@ -179,7 +186,8 @@ it('deja apagada por defecto la contraseña previa al sitio del túnel de demost
     // Vacías por defecto y con un matcher que sin usuario nunca coincide.
     expect($caddy['BASIC_AUTH_USER'])->toBe('${BASIC_AUTH_USER:-}')
         ->and($caddy['BASIC_AUTH_HASH'])->toBe('${BASIC_AUTH_HASH:-}')
-        ->and($caddyfile)->toContain('@gate expression `"{$BASIC_AUTH_USER:}" != ""`')
+        ->and($caddyfile)->toContain('expression `"{$BASIC_AUTH_USER:}" != ""`')
+        ->and($caddyfile)->toContain('not path /health')
         ->and($caddyfile)->toContain('basic_auth @gate')
         ->and($caddyfile)->toContain('{$BASIC_AUTH_HASH:b2Zm}')
         ->and($template)->toMatch('/^# BASIC_AUTH_USER=/m')

@@ -18,7 +18,11 @@ release_from_bundle() {
     [ -f "$dir/$name.sha256" ] || die "$E_BUNDLE" "falta $name.sha256 junto al paquete (se descarga con él)"
 
     log "verificando $name"
-    (cd "$dir" && sha256sum --quiet -c "$name.sha256") ||
+    # Se compara la suma del paquete mismo con la del .sha256 (no el archivo que el .sha256 nombre).
+    local expected actual
+    expected=$(awk 'NR == 1 { print $1 }' "$dir/$name.sha256")
+    actual=$(sha256sum <"$bundle" | awk '{ print $1 }')
+    [[ "$expected" =~ ^[0-9a-f]{64}$ ]] && [ "$expected" = "$actual" ] ||
         die "$E_BUNDLE" "el paquete $name no coincide con su sha256: está incompleto o alterado; no se despliega"
 
     work=$(mktemp -d "$RELEASES_DIR/.incoming.XXXXXX")
@@ -26,7 +30,8 @@ release_from_bundle() {
         rm -rf -- "$work"
         die "$E_BUNDLE" "no se pudo abrir $name"
     }
-    sha=$(jq -er '.sha' "$work/manifest.json") || {
+    sha=$(jq -er '.sha' "$work/manifest.json") && valid_sha "$sha" &&
+        jq -e '[(.images[].file), (.third_party[].file)] | all(test("^images/[A-Za-z0-9._-]+$"))' "$work/manifest.json" >/dev/null || {
         rm -rf -- "$work"
         die "$E_BUNDLE" "$name no trae un manifest.json válido"
     }
@@ -54,7 +59,15 @@ release_from_bundle() {
 # SHA en codeload (repo público; respeta HTTPS_PROXY). Imprime el SHA.
 release_from_github() {
     local payload=$1 sha work ref
-    sha=$(jq -er '.sha' "$payload") || die "$E_BUNDLE" "el Deployment no trae el sha del release"
+    local prefix=${DEPLOY_IMAGE_PREFIX:-ghcr.io/erne1357/nexus-} pattern
+    sha=$(jq -er '.sha' "$payload") && valid_sha "$sha" || die "$E_BUNDLE" "el Deployment no trae un sha de release válido"
+    # Solo imágenes propias y por digest: el deployer administra el servidor y se actualiza a la imagen que diga aquí.
+    pattern="^${prefix//./\\.}(app|solver|deployer)@sha256:[0-9a-f]{64}\$"
+    if [ "${DEPLOY_ALLOW_TAG_REFS:-false}" = true ]; then
+        pattern="^${prefix//./\\.}(app|solver|deployer)([@:][A-Za-z0-9._:-]+)\$"
+    fi
+    jq -e --arg p "$pattern" '[.images.app, .images.solver, .images.deployer] | all(type == "string" and test($p))' \
+        "$payload" >/dev/null || die "$E_BUNDLE" "el Deployment pide imágenes que no son de $prefix por digest; no se despliega"
     work=$(mktemp -d "$RELEASES_DIR/.incoming.XXXXXX")
     for ref in $(jq -r '.images[]' "$payload"); do
         docker image inspect "$ref" >/dev/null 2>&1 || docker pull -q "$ref" >/dev/null ||
@@ -66,12 +79,40 @@ release_from_github() {
             '*/compose.yaml' '*/compose.prod.yaml' '*/.env.production.example' '*/docker/*' ||
         { rm -rf -- "$work"; die "$E_BUNDLE" "no se pudo descargar la infraestructura de $(short "$sha")"; }
     tar -cf "$work/infra.tar" -C "$work/tree" compose.yaml compose.prod.yaml docker .env.production.example
-    jq --arg created "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
-        '{sha, created_at: $created, images: (.images | map_values({ref: .})), third_party: []}' \
+    # Las de terceros, con la misma etiqueta local que en un paquete: cambiar de fuente no recrea PostgreSQL ni Valkey.
+    local third='[]' local_ref
+    while read -r ref; do
+        local_ref=$(local_tag "$ref")
+        docker image inspect "$ref" >/dev/null 2>&1 || docker pull -q "$ref" >/dev/null ||
+            { rm -rf -- "$work"; die "$E_BUNDLE" "no se pudo descargar $ref"; }
+        docker tag "$ref" "$local_ref"
+        third=$(jq -c --arg ref "$ref" --arg local "$local_ref" '. + [{ref: $ref, local: $local, file: "-"}]' <<<"$third")
+    done < <(third_party_refs "$work/tree")
+    jq --arg created "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" --argjson third "$third" \
+        '{sha, created_at: $created, images: (.images | map_values({ref: .})), third_party: $third}' \
         "$payload" >"$work/manifest.json"
     materialize_release "$sha" "$work/infra.tar" "$work/manifest.json" github
     rm -rf -- "$work"
     printf '%s\n' "$sha"
+}
+
+# El sha de un release se vuelve nombre de carpeta: solo letras minúsculas y números.
+valid_sha() {
+    [[ "$1" =~ ^[0-9a-z]{7,40}$ ]]
+}
+
+# Imágenes de terceros que fijan los compose de un árbol (tag + digest), como las empaqueta nexus-bundle.
+third_party_refs() {
+    sed -n 's/^[[:space:]]*image:[[:space:]]*\([^[:space:]]*@sha256:[0-9a-f]\{64\}\).*/\1/p' "$1/compose.yaml" "$1/compose.prod.yaml" | sort -u
+}
+
+# La etiqueta local con que viaja una imagen de terceros (nexus-bundle usa la misma regla).
+local_tag() {
+    local ref=$1 name digest
+    name=${ref%%[:@]*}
+    name=${name##*/}
+    digest=${ref##*@sha256:}
+    printf 'nexus-local/%s:%s\n' "$name" "${digest:0:12}"
 }
 
 load_image() {
@@ -117,8 +158,7 @@ write_release_compose() {
               | (if ($name | test("^(app|app-blue|app-green|migrate|queue|scheduler)$")) then $m.images.app.ref
                  elif $name == "solver" then $m.images.solver.ref
                  elif $name == "deployer" then $m.images.deployer.ref
-                 elif ($source == "bundle") then ($local[.value] // .value)
-                 else .value end) as $image
+                 else ($local[.value] // .value) end) as $image
               | {key: $name, value: ({image: $image} + (if $source == "bundle" then {pull_policy: "never"} else {} end))}
           ) | from_entries)}' >"$dir/compose.release.yaml"
 }

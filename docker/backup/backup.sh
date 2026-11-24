@@ -101,6 +101,13 @@ predeploy_backup() {
             return 2
             ;;
     esac
+    # Un reintento del mismo release reusa su respaldo: si no, cada intento fallido ocuparía un lugar de la retención.
+    existing=$(ls -1 "$BACKUP_DIR/predeploy/"*"-${label}.dump" 2>/dev/null | sort | tail -n 1)
+    if [ -n "$existing" ]; then
+        log "ya hay un respaldo previo de ${label}: $(basename "$existing")"
+        echo "PREDEPLOY_FILE=$(basename "$existing")"
+        return 0
+    fi
     name="${PGDATABASE}-$(date +%Y%m%d-%H%M%S)-${label}.dump"
     dump_to "$BACKUP_DIR/predeploy" "$name" || return 1
     prune "$BACKUP_DIR/predeploy" "$KEEP_PREDEPLOY"

@@ -65,6 +65,10 @@ cmd_deploy() {
     else
         sha=$(resolve_sha "$sha")
     fi
+    # Un release que ya atendió y no es el activo es una vuelta atrás: misma guardia de contracciones.
+    if [ "$sha" != "$(state_get ACTIVE_SHA)" ] && successful_releases | grep -qxF "$sha"; then
+        check_contracts "$sha"
+    fi
     deploy_release "$sha" 1 deploy
 }
 
@@ -94,8 +98,9 @@ cmd_status() {
     sha=$(state_get ACTIVE_SHA)
     container=$(container_of "app-${color:-none}")
     if [ -n "$container" ]; then
-        health=$(docker exec "$container" curl -s --max-time 5 -H "X-Health-Token: ${HEALTH_TOKEN:-}" \
-            http://127.0.0.1:8000/health 2>/dev/null | jq -c . 2>/dev/null) || health=null
+        health=$(docker exec "$container" sh -c \
+            'printf "X-Health-Token: %s\n" "${HEALTH_TOKEN:-}" | curl -s --max-time 5 -H @- http://127.0.0.1:8000/health' \
+            2>/dev/null | jq -c . 2>/dev/null) || health=null
         [ -n "$health" ] || health=null
     fi
     if [ "$json" = 1 ]; then
@@ -115,9 +120,12 @@ cmd_status() {
     tail -n 10 "$STATE_DIR/releases.log"
 }
 
+# Espera a que no haya ningún despliegue en curso: recrear el deployer a la mitad de uno lo cortaría.
 cmd_self_update() {
     local sha=${1:?falta el sha}
     sleep 10
+    state_init
+    take_lock
     compose "$sha" up -d --no-deps deployer
 }
 
