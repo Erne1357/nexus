@@ -33,7 +33,7 @@ jobs:
       - uses: ./.github/actions/setup-ci
 
       - name: Pint (verificación)
-        run: docker compose run --rm -T --no-deps app ./vendor/bin/pint --test
+        run: docker compose run --rm -T --no-deps app ./vendor/bin/pint --test --parallel
 
   # Cada shard corre un tercio de las clases de prueba, repartidas por tiempo con tests/.pest/shards.json
   # (Pest, `--shard`; las clases nuevas que el archivo no trae se reparten por turno, con aviso).
@@ -173,7 +173,21 @@ jobs:
         run: docker compose up -d --wait postgres valkey
 
       - name: Browser tests (shard ${{ matrix.shard }}/3)
-        run: docker compose run --rm -T app php artisan test --testsuite=Browser --compact --shard=${{ matrix.shard }}/3
+        run: |
+          docker compose run --rm -T app php artisan test \
+            --testsuite=Browser --compact \
+            --shard=${{ matrix.shard }}/3 \
+            --log-junit=storage/logs/junit-browser.xml
+
+      # Informativo: sus tiempos por clase alimentan tests/.pest/shards.json (testing.md, «Shards»).
+      - name: Subir tiempos del shard
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-shard-${{ matrix.shard }}
+          path: storage/logs/junit-browser.xml
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Subir capturas de los tests que fallaron
         if: failure()
