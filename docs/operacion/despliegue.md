@@ -210,12 +210,25 @@ Qué hace el deployer, en orden:
 
 ### Comandos de una sola vez después de un release
 
-El despliegue automático solo hace lo que es idempotente y seguro mientras conviven dos versiones (migraciones expand/contract). Los ajustes de datos de una sola vez (reimportar algo, derivar datos nuevos) **no** van en una migración ni en el deployer: se corren a mano, una vez, en el color activo, cuando el release que los necesita ya atiende:
+El despliegue automático solo hace lo que es idempotente y seguro mientras conviven dos versiones (migraciones expand/contract). Los ajustes de datos de una sola vez (reimportar algo, derivar datos nuevos, corregir o desactivar registros reales) **no** van en una migración, ni en un seeder, ni en el deployer. Son comandos de Artisan que traen `--dry-run` (solo cuenta) y que toman sus datos de un archivo puesto en el servidor, fuera del repositorio, o de sus argumentos; el repositorio es público (decisión del usuario, 24 de noviembre de 2026; CLAUDE.md §5). Se corren a mano, una vez, en el color activo, cuando el release que los necesita ya atiende:
 
 ```bash
 nexus status                                                   # dice el color activo (blue o green)
 nexus compose exec app-<color> php artisan <comando> --no-interaction
 ```
+
+Con un archivo de datos: usa el color activo (`nexus status`). Con `docker exec -i` el archivo queda del usuario `app` de la imagen, y la carpeta se crea si no existe:
+
+```bash
+C=nexus-app-<color>-1
+nexus compose exec backup sh /opt/backup/backup.sh run              # 1. respaldo (daily/nexus-<fecha-hora>.dump; no toca predeploy/)
+docker exec -i $C sh -c 'mkdir -p storage/app/imports && cat > storage/app/imports/<archivo>' < <archivo>   # 2. subir el archivo
+nexus compose exec app-<color> php artisan <comando> storage/app/imports/<archivo> --dry-run --no-interaction   # 3. solo cuenta
+nexus compose exec app-<color> php artisan <comando> storage/app/imports/<archivo> --no-interaction             # 4. de verdad
+docker exec $C rm storage/app/imports/<archivo>                     # 5. borrar el archivo del servidor
+```
+
+Nada de catálogo ni de bitácora se borra físicamente: se desactiva.
 
 Cada riel que traiga uno lo anota aquí: el release (o PR) a partir del cual aplica, el orden, si se puede repetir y cuánto tarda. Lo que tarde más de unos segundos va en un job de la cola (CLAUDE.md §4.7).
 
