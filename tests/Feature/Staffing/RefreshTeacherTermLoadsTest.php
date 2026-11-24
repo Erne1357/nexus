@@ -10,11 +10,13 @@ use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
+use App\Modules\Faculty\Events\HourAllowanceChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
+use App\Modules\Faculty\Models\TeacherHourAllowance;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupsCreated;
@@ -229,6 +231,17 @@ describe('disparadores', function () {
         $load = TeacherExternalLoad::factory()->for($this->teacher)->create(['term_id' => $this->term->id, 'hours' => 4]);
 
         ExternalLoadChanged::dispatch($load);
+
+        Queue::assertPushed(RefreshTeacherLoads::class, fn (RefreshTeacherLoads $job): bool => $job->termId === $this->term->id);
+        Queue::assertPushed(RefreshTeacherLoads::class, 1);
+    });
+
+    it('las horas autorizadas encolan solo su periodo (SEL-12)', function () {
+        $allowance = TeacherHourAllowance::query()->create([
+            'teacher_id' => $this->teacher->id, 'term_id' => $this->term->id, 'hours' => 30, 'reason' => 'Cerró su carga', 'granted_at' => now(),
+        ]);
+
+        HourAllowanceChanged::dispatch($allowance);
 
         Queue::assertPushed(RefreshTeacherLoads::class, fn (RefreshTeacherLoads $job): bool => $job->termId === $this->term->id);
         Queue::assertPushed(RefreshTeacherLoads::class, 1);

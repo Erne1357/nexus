@@ -29,6 +29,23 @@ enum SelectionStatus: string
         };
     }
 
+    /**
+     * Viva: publicada, en curso o en la ronda extra. Mientras lo está, los docentes eligen sus grupos y el jefe o el JPD
+     * asignan sin HC-16 y con HC-08 como aviso (diseño 1.33, 6.7).
+     */
+    public function isLive(): bool
+    {
+        return in_array($this, self::live(), true);
+    }
+
+    /**
+     * @return list<self>
+     */
+    public static function live(): array
+    {
+        return [self::Published, self::Running, self::ExtraRound];
+    }
+
     public function tone(): StatusTone
     {
         return match ($this) {

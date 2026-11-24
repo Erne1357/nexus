@@ -21,6 +21,7 @@ use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
+use App\Modules\Faculty\Models\TeacherHourAllowance;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Queries\TeacherBaseHoursQuery;
 use App\Modules\Scheduling\Enums\GroupStatus;
@@ -51,7 +52,7 @@ use Illuminate\Database\Eloquent\Builder;
  * - las materias de esos grupos, los salones de los campus donde la modalidad tiene grupos y los que usan esas
  *   sesiones, y los bloqueos vigentes;
  * - los docentes de esos grupos: nombre, horas base (TeacherBaseHoursQuery), horas externas del periodo, bloques no
- *   disponibles y si es de honorarios;
+ *   disponibles, si es de honorarios y sus horas autorizadas del periodo (`teacher_hour_allowances`, SEL-12);
  * - los perfiles de las modalidades (todas, borradas incluidas; una con perfil guardado inválido toma el perfil por
  *   omisión, ModalityProfile::DEFAULTS, para que un perfil roto no tumbe la foto de todas las modalidades:
  *   Modality::valid_profile), las claves de los campus, las carreras ofrecidas, los planes activos y los parámetros
@@ -183,6 +184,9 @@ final class ScheduleStateQuery
             ->where('kind', PositionKind::Honorarios->value)
             ->distinct()->pluck('teacher_id')->flip();
 
+        $allowances = TeacherHourAllowance::query()->where('term_id', $term->id)->whereIn('teacher_id', $teacherIds)
+            ->pluck('hours', 'teacher_id');
+
         return Teacher::query()->whereIn('id', $teacherIds)->orderBy('id')->get(['id', 'name'])
             ->map(fn (Teacher $teacher): StateTeacher => new StateTeacher(
                 $teacher->id,
@@ -191,6 +195,7 @@ final class ScheduleStateQuery
                 (int) ($external[$teacher->id] ?? 0),
                 $unavailable[$teacher->id] ?? [],
                 $honorarios->has($teacher->id),
+                isset($allowances[$teacher->id]) ? (int) $allowances[$teacher->id] : null,
             ))
             ->all();
     }
