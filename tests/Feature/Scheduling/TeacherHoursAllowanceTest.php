@@ -14,7 +14,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Horas autorizadas de un docente en un periodo (tarea 1.33, SEL-12): el límite de HC-08 es el mayor entre base más
-| tolerancia y esas horas. Las da Staffing cuando el docente cierra su carga con horas de más y la casilla.
+| tolerancia y esas horas. Las da Staffing cuando el docente termina su carga.
 */
 
 beforeEach(function () {

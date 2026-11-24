@@ -1,8 +1,11 @@
 <?php
 
+use App\Modules\Core\Models\Modality;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherHourAllowance;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Actions\Selection\FinishMyLoad;
@@ -43,6 +46,14 @@ function finishLoadFor(SelectionWorld $world, Teacher $teacher, bool $acknowledg
     return app(FinishMyLoad::class)->handle($world->selection, $teacher, $acknowledged, $teacher->user);
 }
 
+function finishLoadHoursViolations(SelectionWorld $world, Teacher $teacher): array
+{
+    $validator = app(ScheduleValidator::class);
+    $validator->forget();
+
+    return $validator->validateTeacher($teacher, $world->term)->forRule('HC-08');
+}
+
 function finishLoadErrors(Closure $callback): array
 {
     try {
@@ -65,7 +76,35 @@ it('SEL-05: dentro de su base ±2 termina sin la casilla', function () {
         ->closed_at->not->toBeNull()
         ->out_of_band_acknowledged_at->toBeNull()
         ->and(Activity::query()->where('event', 'selection_load_finished')->sole()->properties['band'])->toBe('within')
-        ->and(TeacherHourAllowance::query()->count())->toBe(0);
+        ->and(TeacherHourAllowance::query()->sole()->hours)->toBe(5);
+});
+
+it('SEL-12: cerrar dentro de la banda con más horas que su límite de Nexus no deja choque duro de HC-08', function () {
+    [$world, $teacher] = finishLoadWorld(base: 3, entry: ['base_hours' => 5]);
+
+    expect(finishLoadHoursViolations($world, $teacher))->not->toBeEmpty();
+
+    finishLoadFor($world, $teacher, false);
+
+    expect(finishLoadHoursViolations($world, $teacher))->toBe([]);
+});
+
+it('SEL-12: las horas autorizadas son todo lo que HC-08 le cuenta al cerrar: otras modalidades y horas externas', function () {
+    [$world, $teacher] = finishLoadWorld(base: 2, entry: ['base_hours' => 5]);
+    $elsewhere = Group::factory()->create(['term_id' => $world->term->id, 'modality_id' => Modality::factory()->create()->id, 'teacher_id' => $teacher->id]);
+    GroupSession::factory()->for($elsewhere)->on(4, '16:00', '18:00')->create();
+    TeacherExternalLoad::factory()->create(['teacher_id' => $teacher->id, 'term_id' => $world->term->id, 'hours' => 2]);
+
+    $entry = finishLoadFor($world, $teacher, false);
+
+    expect($entry->fresh()->closed_hours)->toBe(5)
+        ->and(TeacherHourAllowance::query()->sole()->hours)->toBe(12)
+        ->and(finishLoadHoursViolations($world, $teacher))->toBe([]);
+
+    $extra = $world->group('B', [[2, '11:00', '12:00']], theory: 1, practice: 0);
+    app(AssignTeacher::class)->handle($extra, $teacher, $world->admin);
+
+    expect(finishLoadHoursViolations($world, $teacher))->not->toBeEmpty();
 });
 
 it('SEL-05: cerrar fuera de ±2 sin la casilla se rechaza', function () {
@@ -136,12 +175,7 @@ it('fuera de su turno no cierra su carga', function () {
 
 it('SEL-12: las horas de más aceptadas con la casilla no son choque duro de HC-08; agregarle más sí', function () {
     [$world, $teacher] = finishLoadWorld(base: 2);
-    $hoursViolations = function () use ($world, $teacher): array {
-        $validator = app(ScheduleValidator::class);
-        $validator->forget();
-
-        return $validator->validateTeacher($teacher, $world->term)->forRule('HC-08');
-    };
+    $hoursViolations = fn (): array => finishLoadHoursViolations($world, $teacher);
 
     expect($hoursViolations())->not->toBeEmpty();
 

@@ -7,6 +7,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\GrantHourAllowance;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Queries\TeacherBaseHoursQuery;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Actions\Selection\Concerns\GuardsSelectionTurn;
 use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
@@ -24,9 +25,13 @@ use Illuminate\Validation\ValidationException;
  * En su turno y con el candado de la selección, suma las horas (teoría + práctica de la materia) de los grupos del
  * docente en las cargas incluidas y las compara con su base: la del CSV o, si no viene en él, la de sus plazas en Nexus
  * al inicio del periodo (TeacherBaseHoursQuery). Dentro de la banda de ±2 (LoadBand) termina. Fuera, solo con la
- * casilla de responsabilidad: con horas de más termina y se le autorizan esas horas en el periodo (GrantHourAllowance),
- * así HC-08 no las cuenta como choque mientras no le agreguen más (SEL-12); con menos pasa a la ronda extra
- * (`pending_extra`), y en la ronda extra termina, porque no hay otra. Terminar acaba su turno: ya no toma ni suelta.
+ * casilla de responsabilidad: con horas de más termina; con menos pasa a la ronda extra (`pending_extra`), y en la
+ * ronda extra termina, porque no hay otra. Terminar acaba su turno: ya no toma ni suelta.
+ *
+ * SEL-12: cada cierre que termina (`done`) le autoriza en el periodo (GrantHourAllowance) todo lo que HC-08 le cuenta en
+ * ese momento: sus grupos de cualquier carga, modalidad o campus más sus horas externas (ScheduleValidator::
+ * teacherTermHours). Así lo que cerró, dentro de la banda o con la casilla, no es choque duro de HC-08 aunque su base de
+ * Nexus sea menor que la del CSV; lo que le agreguen después sí.
  */
 final class FinishMyLoad
 {
@@ -38,6 +43,7 @@ final class FinishMyLoad
         private readonly SelectionGroupsQuery $groups,
         private readonly TeacherBaseHoursQuery $baseHours,
         private readonly GrantHourAllowance $grantHours,
+        private readonly ScheduleValidator $validator,
     ) {}
 
     /**
@@ -74,8 +80,8 @@ final class FinishMyLoad
                 'out_of_band_acknowledged_at' => $band === 'within' ? null : now(),
             ]);
 
-            if ($band === 'over') {
-                $this->grantHours->handle($teacher, $term, $hours, "Cerró su carga con {$hours} h y base de {$base} h en la orden de selección (SEL-05).", $actor);
+            if ($status === SelectionEntryStatus::Done) {
+                $this->justifyHours($teacher, $term, $base, $actor);
             }
 
             activity()
@@ -87,5 +93,20 @@ final class FinishMyLoad
 
             return $entry;
         });
+    }
+
+    /**
+     * SEL-12: autoriza el total de HC-08 del docente al cerrar (asignadas en todo el periodo más externas). Sin horas no
+     * hay nada que autorizar.
+     */
+    private function justifyHours(Teacher $teacher, Term $term, int $base, User $actor): void
+    {
+        $this->validator->forget();
+        $count = $this->validator->teacherTermHours($teacher, $term);
+        $total = $count === null ? 0 : $count['assigned_hours'] + $count['external_hours'];
+
+        if ($total > 0) {
+            $this->grantHours->handle($teacher, $term, $total, "Cerró su carga con {$total} h de HC-08 (asignadas y externas) y base de {$base} h en la orden de selección (SEL-05).", $actor);
+        }
     }
 }

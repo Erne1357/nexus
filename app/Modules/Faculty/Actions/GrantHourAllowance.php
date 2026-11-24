@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * Autoriza horas a un docente en un periodo (tarea 1.33, SEL-12): el límite de HC-08 pasa a ser el mayor entre su base
  * más la tolerancia y estas horas. Una fila por docente y periodo: si ya tiene, la reemplaza. La llama Staffing cuando
- * el docente cierra su carga con horas de más y la casilla de responsabilidad (FinishMyLoad, SEL-05); quién puede lo
+ * el docente termina su carga en la orden de selección (FinishMyLoad, SEL-05), con su total de HC-08; quién puede lo
  * decide quien la llama.
  *
  * En una transacción bloquea al docente, escribe, deja bitácora y, después del commit, avisa con HourAllowanceChanged.
