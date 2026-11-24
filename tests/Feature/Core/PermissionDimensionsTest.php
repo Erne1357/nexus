@@ -181,7 +181,6 @@ function modalityLevelPermissions(): array
         'academic_load.agreement.decide' => 'M12: el jefe decide los acuerdos de toda la modalidad de su departamento, de cualquier campus.',
         'academic_load.demand.view_department' => 'Tarea 5.7: «Demanda por materia» es de todo el Tec, con una insignia por campus; se lee a nivel de modalidad.',
         'academic_load.demand.view_career' => 'Tarea 5.7: la lente de carrera es de todo el Tec, como la propuesta de la carrera (M7); se lee a nivel de modalidad.',
-        'staffing.selection.view' => 'Tarea 1.33: el jefe, el JPD, el directivo y la Subdirección ven la selección de su departamento y modalidad, de cualquier campus; se lee a nivel de modalidad.',
     ];
 }
 
