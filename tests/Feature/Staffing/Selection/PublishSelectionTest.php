@@ -12,6 +12,7 @@ use App\Modules\Staffing\Actions\Selection\PublishSelection;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
+use App\Modules\Staffing\Notifications\SelectionCancelled;
 use App\Modules\Staffing\Notifications\SelectionTurnPublished;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Notification;
@@ -141,6 +142,21 @@ it('cancelar antes de la primera hora deja la selección cancelada', function ()
     expect(Activity::query()->where('event', 'selection_cancelled')->count())->toBe(1);
 });
 
+it('SEL-11: cancelar una selección publicada antes de su primera hora avisa a cada docente de la cola, y un borrador a nadie', function () {
+    Notification::fake();
+    $s = pubScenario();
+    $draft = pubScenario();
+    app(PublishSelection::class)->handle($s['selection'], $this->actor);
+
+    app(CancelSelection::class)->handle($s['selection'], $this->actor);
+    app(CancelSelection::class)->handle($draft['selection'], $this->actor);
+
+    expect($s['selection']->fresh()->status)->toBe(SelectionStatus::Cancelled);
+    Notification::assertSentTo($s['teacherUser'], SelectionCancelled::class, fn (SelectionCancelled $notice): bool => $notice->message($s['teacherUser'])->route === 'staffing.offer');
+    Notification::assertNotSentTo($draft['teacherUser'], SelectionCancelled::class);
+    expect(Activity::query()->where('event', 'selection_cancelled')->where('subject_id', $s['selection']->id)->sole()->properties['notified'])->toBe(1);
+});
+
 it('cancelar después de la primera hora se rechaza', function () {
     $s = pubScenario(startsAt: CarbonImmutable::now()->subMinute());
 
@@ -170,10 +186,10 @@ it('sin cargas incluidas no se publica y lo dice', function () {
     }
 });
 
-it('el aviso lleva a la oferta y un docente sin turno no frena a los demás', function () {
+it('el aviso lleva a la oferta, y un renglón sin turno recibe el suyo al recalcular la cola al publicar', function () {
     Notification::fake();
     $s = pubScenario();
-    SelectionEntry::factory()->for($s['selection'])->create([
+    $unslotted = SelectionEntry::factory()->for($s['selection'])->create([
         'teacher_id' => Teacher::factory()->create(['user_id' => User::factory()->create()->id])->id, 'position' => 2, 'slot_starts_at' => null, 'slot_ends_at' => null,
     ]);
 
@@ -184,5 +200,22 @@ it('el aviso lleva a la oferta y un docente sin turno no frena a los demás', fu
 
         return $message['route'] === 'staffing.offer' && $message['parameters'] === [] && route($message['route']) !== '';
     });
-    Notification::assertCount(1);
+    expect($unslotted->fresh()->slot_starts_at)->not->toBeNull();
+    Notification::assertCount(2);
+});
+
+it('SEL-10: publicar recalcula la cola dentro del candado: un docente adscrito después del CSV entra al final', function () {
+    Notification::fake();
+    $s = pubScenario();
+    $late = Teacher::factory()->adscribedTo($s['selection']->department)->create(['name' => 'Docente Tardío Ficticio', 'user_id' => User::factory()->create()->id]);
+
+    app(PublishSelection::class)->handle($s['selection'], $this->actor);
+
+    $entry = $s['selection']->entries()->where('teacher_id', $late->id)->first();
+
+    expect($entry)->not->toBeNull()
+        ->and($entry->source->value)->toBe('appended')
+        ->and($entry->slot_starts_at)->not->toBeNull()
+        ->and($entry->position)->toBeGreaterThan($s['entry']->fresh()->position);
+    Notification::assertSentTo($late->user, SelectionTurnPublished::class);
 });

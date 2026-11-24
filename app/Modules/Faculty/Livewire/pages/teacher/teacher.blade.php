@@ -71,7 +71,18 @@
                 @elseif ($resetReason !== null)
                     <x-core::row-menu-item label="Restablecer contraseña" :reason="$resetReason" disabled data-testid="reset-password" />
                 @endif
-                @if ($inviteReason === '' && $invited)
+                @if ($personalInvite !== null)
+                    <x-core::row-menu-item
+                        label="Reenviar al correo personal"
+                        wire:click="resendToPersonal"
+                        x-confirm="No tiene correo institucional y está en una orden de selección: se manda un enlace nuevo a {{ $personalInvite }}; el anterior deja de servir."
+                        data-confirm-title="¿Reenviar la invitación de {{ $record->teacher->rfc }} a su correo personal?"
+                        data-confirm-button="Reenviar"
+                        data-confirm-tone="primary"
+                        spinner="resendToPersonal"
+                        data-testid="resend-personal-invitation"
+                    />
+                @elseif ($inviteReason === '' && $invited)
                     <x-core::row-menu-item
                         label="Reenviar invitación"
                         wire:click="resendInvitation"

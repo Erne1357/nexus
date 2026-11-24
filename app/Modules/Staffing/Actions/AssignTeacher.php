@@ -28,8 +28,11 @@ use Illuminate\Validation\ValidationException;
  *
  * Con una selección viva (publicada, en curso o en ronda extra) que incluye la carga del grupo, el orden de selección
  * reemplaza al ranking: HC-16 no se exige y HC-08 solo avisa (no veta); HC-01 y HC-09 siguen siendo duros (diseño 1.33,
- * 6.7, supuesto por confirmar). Sin motivo, el historial guarda SELECTION_REASON: la base exige un motivo cuando el
- * docente no es el primer lugar (`group_teacher_assignments_hc16_check`).
+ * 6.7, supuesto por confirmar). Ya terminada la selección de la carga, su orden sigue reemplazando al ranking (HC-16
+ * no se exige, decisión del coordinador del riel del 24 de noviembre de 2026), pero HC-08 vuelve a ser duro para el
+ * jefe: las horas de más solo las justifica la casilla del docente (SEL-12, SEL-14). Sin motivo, el historial guarda
+ * SELECTION_REASON: la base exige un motivo cuando el docente no es el primer lugar
+ * (`group_teacher_assignments_hc16_check`).
  */
 final class AssignTeacher
 {
@@ -68,7 +71,8 @@ final class AssignTeacher
             [$position, $size] = $this->record->rankingPosition($group, $teacher);
             $inSelection = $this->groups->liveSelectionFor($load) !== null;
 
-            if ($inSelection && $position !== 1) {
+            // HC-16: el orden de una selección viva o ya terminada de la carga reemplaza al ranking.
+            if ($position !== 1 && ($inSelection || $this->groups->finishedSelectionFor($load) !== null)) {
                 $reason ??= self::SELECTION_REASON;
             }
 

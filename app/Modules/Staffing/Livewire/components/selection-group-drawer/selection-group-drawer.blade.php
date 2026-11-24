@@ -3,7 +3,8 @@
     derecha, `max-w-xl`). Encabezado con la clave, la materia y su horario; los datos en cuatro casillas (horas, lugares,
     espacio y días); quién lo tiene; los avisos (fuera de tu perfil, choque, solo consulta). En su turno y con el grupo
     libre: «Con este grupo llevarías…» y el salón en pestañas Lista y Mapa; al pie, «Tomar en 704». Si es suyo y está en
-    su turno, «Soltar grupo». «Asignar a…» (jefatura): el docente en el orden, el salón y el motivo opcional.
+    su turno, «Soltar grupo». «Asignar a…» (jefatura): el docente en el orden, el salón y el motivo opcional; desde ahí,
+    «Quitar docente» pide el motivo en el mismo drawer. Con la selección terminada, el docente solo consulta.
 --}}
 @use('App\Modules\Scheduling\Validation\Minutes')
 @use('App\Modules\Staffing\Rules\LoadBand')
@@ -27,7 +28,9 @@
                 <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
                     <div class="min-w-0 flex-1">
                         <h2 id="selection-group-title" class="leading-tight">
-                            @if ($assigning)
+                            @if ($unassigning)
+                                <span class="text-xl font-bold">Quitar docente de</span>
+                            @elseif ($assigning)
                                 <span class="text-xl font-bold">Asignar</span>
                             @endif
                             <span class="font-mono text-xl font-semibold">{{ $code }}</span>
@@ -75,7 +78,19 @@
                         </p>
                     @endif
 
-                    @unless ($assigning)
+                    @if ($unassigning)
+                        <div role="note" class="alert alert-warning alert-soft items-start text-sm" data-testid="selection-unassign-panel">
+                            <x-icon name="o-user-minus" class="mt-0.5 h-5 w-5" aria-hidden="true" />
+                            <div>
+                                <p class="font-semibold">Quitar a {{ $card['teacher'] }}</p>
+                                <p>El grupo queda libre y conserva su salón.@if (! $finished) Mientras la selección siga, otro docente lo puede tomar en su turno.@endif Queda en el historial y en la bitácora con tu nombre y el motivo.</p>
+                            </div>
+                        </div>
+                        <x-textarea label="Motivo" wire:model="unassignReason" rows="3" placeholder="Por qué se le quita el grupo" data-testid="selection-unassign-reason" />
+                        @error('unassignReason')
+                            <p class="text-sm font-semibold text-error" role="alert">{{ $message }}</p>
+                        @enderror
+                    @elseif (! $assigning)
                         @if ($card['mine'])
                             <div role="note" class="alert alert-info alert-soft items-start text-sm">
                                 <x-icon name="o-check-circle" class="mt-0.5 h-5 w-5" aria-hidden="true" />
@@ -118,7 +133,9 @@
                                 <div>
                                     <p class="font-semibold">Solo consulta</p>
                                     <p>
-                                        @if ($entry->closed_at !== null)
+                                        @if ($finished)
+                                            La selección terminó: solo tu jefe de departamento o el JPD cambian los grupos.
+                                        @elseif ($entry->closed_at !== null)
                                             Ya cerraste tu carga: solo tu jefe de departamento o el JPD la cambian.
                                         @elseif ($mySlot !== null && $mySlot->isFuture())
                                             Eliges en tu turno, el {{ $mySlot->isoFormat('dddd D [de] MMMM') }} a las {{ $mySlot->format('G:i') }}.
@@ -152,11 +169,16 @@
                         @enderror
                     @else
                         @include('staffing::offer.selection.assign', ['card' => $card, 'candidates' => $candidates, 'managerRooms' => $managerRooms, 'canAssignRoom' => $canAssignRoom, 'teacherId' => $teacherId])
-                    @endunless
+                    @endif
                 </div>
 
                 <footer class="sticky bottom-0 border-t border-base-300 bg-base-100 px-5 py-3">
-                    @if ($assigning)
+                    @if ($unassigning)
+                        <div class="flex flex-wrap items-center justify-end gap-2">
+                            <x-button label="Volver" class="btn-ghost max-md:h-11" wire:click="$set('mode', 'assign')" />
+                            <x-button :label="'Quitar a '.$card['teacher']" icon="o-user-minus" class="btn-error max-md:h-11" wire:click="unassign" spinner="unassign" data-testid="selection-unassign" />
+                        </div>
+                    @elseif ($assigning)
                         <div class="flex flex-wrap items-center justify-end gap-2">
                             <p class="me-auto text-sm text-neutral" data-testid="selection-assign-hint">
                                 @if (! $changesTeacher && $changesRoom)
@@ -165,6 +187,9 @@
                                     Queda en la bitácora con tu nombre.
                                 @endif
                             </p>
+                            @if ($card['teacher_id'] !== null)
+                                <x-button label="Quitar docente" icon="o-user-minus" class="btn-ghost text-error max-md:h-11" wire:click="confirmUnassign" spinner="confirmUnassign" data-testid="selection-unassign-open" />
+                            @endif
                             @if ($entry !== null && $inTurn)
                                 <x-button label="Ver como docente" class="btn-ghost max-md:h-11" wire:click="$set('mode', 'group')" />
                             @endif

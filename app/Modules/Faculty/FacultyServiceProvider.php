@@ -28,7 +28,9 @@ use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Faculty\Queries\InvitationRelease;
 use App\Modules\Faculty\Queries\NoInvitationRelease;
+use App\Modules\Faculty\Queries\NoSelectionQueueMembership;
 use App\Modules\Faculty\Queries\NoTeacherWeeklyLoad;
+use App\Modules\Faculty\Queries\SelectionQueueMembership;
 use App\Modules\Faculty\Queries\TeacherUnitAdscriptions;
 use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
 use Illuminate\Support\Facades\Event;
@@ -48,6 +50,9 @@ final class FacultyServiceProvider extends ModuleServiceProvider
 
         // Sin la validación de catálogos la primera invitación no se libera; CatalogValidation lo reemplaza (AC-09).
         $this->app->bindIf(InvitationRelease::class, NoInvitationRelease::class);
+
+        // Sin la orden de selección nadie está en una cola, y la invitación va solo al institucional; Staffing lo reemplaza (SEL-13).
+        $this->app->bindIf(SelectionQueueMembership::class, NoSelectionQueueMembership::class);
 
         // Sin carga docente la pestaña «Carga» de la ficha sale vacía; Staffing lo reemplaza (D-03).
         $this->app->bindIf(TeacherWeeklyLoad::class, NoTeacherWeeklyLoad::class);

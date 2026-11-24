@@ -3,7 +3,7 @@
     orden de selección, con su escalón, lo que lleva contra su base, con cuál de sus grupos le choca (no se puede
     elegir) y su estado; para quien asigna salones, el salón sin el filtro de la selección (diseño 6.14): primero los
     recomendados (los elegibles) y luego los demás del campus, del departamento o sin dueño, con su motivo; el motivo
-    opcional.
+    opcional (el orden de la selección, viva o terminada, reemplaza al ranking de HC-16).
     Espera $card, $candidates, $managerRooms (SelectionRoomOptionsQuery::forManager), $canAssignRoom y $teacherId (el
     elegido; al abrir, el de ahora).
 --}}

@@ -222,7 +222,7 @@ Cada riel que traiga uno lo anota aquí: el release (o PR) a partir del cual apl
 | Desde | Comando | Orden | ¿Se puede repetir? | Tiempo |
 |---|---|---|---|---|
 | 1.32 (#824) y otra vez desde 1.33 (D-01: la sesión sin RFC toma el del grupo) | `php artisan academic-load:import-sii-groups` (todos los periodos; reemplaza el historial de grupos `sii` y sus horarios desde `sii_archivo`) | Una vez después del release que trae 1.33, y después de restaurar una copia de la demo o de reimportar el SII | Sí (idempotente) | ~1 min |
-| `riel/orden-seleccion` (1.33) | `php artisan faculty:derive-qualifications` (D-02: perfil «Apto» de los últimos 6 semestres) | Después de importar los grupos | Sí | segundos |
+| `riel/orden-seleccion` (1.33) | `php artisan faculty:derive-qualifications` (D-02: perfil «Apto» de los últimos 6 semestres) y después `php artisan staffing:rank <periodo>` (p. ej. `staffing:rank 20271`; opcional `--modality=` y `--department=`), que recalcula el ranking docente con el perfil nuevo | Después de importar los grupos; el ranking, justo después de derivar el perfil | Sí, los dos | segundos el perfil; el ranking, en el momento y sin la cola (unos segundos por departamento) |
 | `riel/orden-seleccion` (1.33) | `php artisan facilities:set-room-types C1 701=sala_computo 703=sala_computo 705=sala_computo 706=sala_computo 702=laboratorio 707=laboratorio` (tipos de los salones de Sistemas) | Después de derivar el perfil | Sí | segundos |
 
 ### Pausar los despliegues

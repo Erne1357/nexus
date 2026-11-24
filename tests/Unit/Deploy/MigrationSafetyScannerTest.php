@@ -106,6 +106,13 @@ it('sigue rechazando un DROP real aunque el mismo SQL tenga DROP NOT NULL', func
         ->and($violations[0])->toContain('SQL crudo con DROP');
 });
 
+it('rechaza alter column x drop default', function () {
+    $violations = migrationSafetyScan(migrationSafetySource("DB::statement('alter table rooms alter column x drop default');"));
+
+    expect($violations)->toHaveCount(1)
+        ->and($violations[0])->toContain('SQL crudo con DROP');
+});
+
 it('acepta cualquiera de las anteriores con el atributo Contract', function () {
     $source = migrationSafetySource(
         "Schema::table('rooms', function (Blueprint \$table) { \$table->dropColumn('code'); \$table->string('x'); });

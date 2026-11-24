@@ -340,13 +340,6 @@
                     <x-button label="Publicar" class="btn-primary" wire:click="publish" spinner="publish" />
                 </x-slot:actions>
             </x-modal>
-            <x-modal wire:model="showCancel" title="¿Cancelar la selección?" box-class="max-w-lg">
-                <p>Se descarta el borrador y no se avisa a nadie. Puedes abrir otra después.</p>
-                <x-slot:actions>
-                    <x-button label="Volver" wire:click="$set('showCancel', false)" />
-                    <x-button label="Cancelar la selección" class="btn-error" wire:click="cancel" spinner="cancel" />
-                </x-slot:actions>
-            </x-modal>
         @endif
     @endif
 
@@ -363,6 +356,16 @@
                     <div class="p-4"><p class="text-xs text-neutral">Esperando</p><p class="text-2xl font-bold">{{ $monitor['waiting'] }}</p></div>
                 </section>
 
+                @if ($cancellable)
+                    <section class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-box border border-base-300 bg-base-100 p-4" data-testid="monitor-cancel">
+                        <p class="text-sm">
+                            <b>Empieza el {{ $selection->starts_at->locale('es')->isoFormat('dddd D [de] MMMM [a las] H:mm') }}.</b>
+                            <span class="text-neutral">Hasta entonces puedes cancelarla; después ya no.</span>
+                        </p>
+                        <x-button label="Cancelar la selección" icon="o-x-circle" class="btn-ghost text-error" wire:click="$set('showCancel', true)" />
+                    </section>
+                @endif
+
                 @if ($monitor['current'])
                     <section class="mt-4 rounded-box border border-info/40 bg-info/10 p-4" data-testid="monitor-current">
                         <p class="text-xs font-semibold uppercase text-neutral">Ahora</p>
@@ -371,10 +374,37 @@
                     </section>
                 @endif
 
+                @php
+                    $accessLabels = ['access' => 'Con acceso', 'invited' => 'Invitado', 'pending' => 'Pendiente', 'no_email' => 'Sin correo'];
+                @endphp
+                <x-card title="Acceso a Nexus" shadow class="mt-4" data-testid="monitor-access">
+                    <p class="text-sm text-neutral">Al publicar se invita a quien no tiene acceso: a su correo institucional si su departamento validó el catálogo de docentes y, si no, al personal.</p>
+                    <dl class="mt-3 grid grid-cols-2 overflow-hidden rounded-box border border-base-300 text-center sm:grid-cols-4">
+                        @foreach ($accessLabels as $state => $label)
+                            <div class="p-3"><dt class="text-xs text-neutral">{{ $label }}</dt><dd @class(['text-xl font-bold', 'text-warning' => in_array($state, ['pending', 'no_email'], true) && $monitor['access']['counts'][$state] > 0])>{{ $monitor['access']['counts'][$state] }}</dd></div>
+                        @endforeach
+                    </dl>
+                    @if ($monitor['access']['missing'] !== [])
+                        <ul class="mt-3 divide-y divide-base-300 rounded-box border border-base-300">
+                            @foreach ($monitor['access']['missing'] as $row)
+                                <li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2" wire:key="access-{{ $loop->index }}">
+                                    <b>{{ $row['name'] }}</b>
+                                    <span class="flex flex-wrap items-center gap-x-3 text-sm text-neutral">
+                                        {{ $row['state'] === 'no_email' ? $row['reason'] : 'Sin acceso: '.mb_lcfirst($row['reason']) }}
+                                        @if ($row['resendable'])
+                                            <x-button label="Reenviar invitación" icon="o-paper-airplane" class="btn-ghost btn-sm" wire:click="resendInvitation('{{ $row['teacher_id'] }}')" spinner="resendInvitation('{{ $row['teacher_id'] }}')" data-testid="monitor-resend-{{ $row['teacher_id'] }}" />
+                                        @endif
+                                    </span>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @endif
+                </x-card>
+
                 <x-card title="Avance por docente" shadow class="mt-4">
                     <div class="overflow-x-auto">
                         <table class="table table-sm">
-                            <thead><tr><th>#</th><th>Docente</th><th>Turno</th><th>Estado</th><th>Horas</th><th>Grupos</th></tr></thead>
+                            <thead><tr><th>#</th><th>Docente</th><th>Turno</th><th>Estado</th><th>Horas</th><th>Grupos</th><th>Acceso</th></tr></thead>
                             <tbody>
                                 @foreach ($monitor['rows'] as $row)
                                     <tr wire:key="mon-{{ $row['entry']->id }}" @class(['bg-info/10' => $row['current']])>
@@ -384,6 +414,7 @@
                                         <td>{{ $row['current'] ? 'En turno' : $row['entry']->status->label() }}</td>
                                         <td><span class="font-mono">{{ $row['hours'] }}</span> <span class="text-neutral">de {{ $row['entry']->base_hours }} h</span></td>
                                         <td class="font-mono text-xs">{{ $row['groups'] === [] ? '—' : implode(', ', $row['groups']) }}</td>
+                                        <td @class(['text-xs', 'font-semibold text-warning' => in_array($row['access'], ['pending', 'no_email'], true)])>{{ $accessLabels[$row['access']] }}</td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -409,5 +440,20 @@
                 </div>
             </div>
         @endif
+    @endif
+
+    @if ($cancellable)
+        <x-modal wire:model="showCancel" title="¿Cancelar la selección?" box-class="max-w-lg">
+            @if ($draft)
+                <p>Se descarta el borrador y no se avisa a nadie. Puedes abrir otra después.</p>
+            @else
+                <p>Los turnos ya no corren. Los docentes de la cola reciben el aviso por la campana y por correo.</p>
+                <p class="mt-2 text-sm text-neutral">Las cargas que ya pasaron a asignación se quedan así. Puedes preparar y publicar otra selección después.</p>
+            @endif
+            <x-slot:actions>
+                <x-button label="Volver" wire:click="$set('showCancel', false)" />
+                <x-button label="Cancelar la selección" class="btn-error" wire:click="cancel" spinner="cancel" />
+            </x-slot:actions>
+        </x-modal>
     @endif
 </div>

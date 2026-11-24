@@ -20,6 +20,11 @@ final class MailKinds
         'LoadRepublished' => 'Carga republicada',
         'ChangeAlternativeMovesCareerGroup' => 'Grupo movido por una solicitud de cambio',
         'ChangeRequestMovedTeacherGroups' => 'Cambió el horario de tus grupos',
+        'SelectionTurnPublished' => 'Turno de selección publicado',
+        'SelectionTurnStarting' => 'Turno de selección por empezar',
+        'SelectionExtraRoundScheduled' => 'Ronda extra de selección',
+        'SelectionFinishedWithPending' => 'Selección terminada con pendientes',
+        'SelectionCancelled' => 'Selección cancelada',
     ];
 
     public static function knows(string $kind): bool

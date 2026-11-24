@@ -258,9 +258,21 @@ it('sin selección viva HC-16 y HC-08 se exigen como antes', function (Selection
         ->and($this->group->fresh()->teacher_id)->toBeNull();
 })->with([
     'borrador' => [SelectionStatus::Draft],
-    'terminada' => [SelectionStatus::Finished],
     'cancelada' => [SelectionStatus::Cancelled],
 ]);
+
+it('HC-16 con la selección de la carga terminada: el jefe asigna sin motivo (el orden reemplaza al ranking), pero HC-08 vuelve a ser duro', function () {
+    assignTeacherSelection($this->load, SelectionStatus::Finished);
+    $short = Teacher::factory()->create();
+    TeacherPosition::factory()->for($short)->asignatura(1)->create();
+
+    $third = assignTeacher($this->group, $this->teachers[2], $this->actor);
+    $hours = assignmentErrors(fn () => assignTeacher($this->group, $short, $this->actor, 'Es el único disponible.'));
+
+    expect($third)->ranking_position_at_assignment->toBe(3)->reason->toBe(AssignTeacher::SELECTION_REASON)
+        ->and(implode(' ', $hours['teacher'] ?? []))->toContain('se pasa por')
+        ->and($this->group->fresh()->teacher_id)->toBe($this->teachers[2]->id);
+});
 
 it('una selección viva de otra carga no cambia las reglas del grupo', function () {
     $other = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id]);

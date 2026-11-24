@@ -3,6 +3,8 @@
     horario y su salón; un grupo sin salón dice «Este grupo queda sin salón; lo asigna la jefatura» (se puede terminar
     así). Dentro de la banda, el aviso en `success`. Fuera, el aviso en `warning`, la casilla obligatoria y qué pasa:
     con menos horas, la ronda extra; con más, que quedan justificadas. El botón espera la casilla.
+    Con la selección terminada es «¿Confirmar tu carga?» (SEL-14): lo mismo, solo lectura de sus grupos, y confirma con lo
+    que lleva (con menos horas ya no hay ronda).
     Espera $data, $band y $selection.
 --}}
 @use('App\Modules\Staffing\Rules\LoadBand')
@@ -13,8 +15,9 @@
     $high = $base + LoadBand::MARGIN;
     $out = $band !== null && $band !== 'within';
     $groups = $data['my_groups'];
+    $confirming = $selection->status === \App\Modules\Staffing\Enums\SelectionStatus::Finished;
 @endphp
-<x-modal wire:model="showFinish" title="¿Terminar tu carga?" box-class="max-w-xl" data-testid="selection-finish-modal">
+<x-modal wire:model="showFinish" :title="$confirming ? '¿Confirmar tu carga?' : '¿Terminar tu carga?'" box-class="max-w-xl" data-testid="selection-finish-modal">
     <div class="space-y-3">
         <p>Llevas <b class="font-mono">{{ $hours }}</b> h en {{ count($groups) }} {{ count($groups) === 1 ? 'grupo' : 'grupos' }} · tu base <b class="font-mono">{{ $base }}</b> (±2): de {{ $low }} a {{ $high }} h.</p>
 
@@ -51,7 +54,9 @@
                 <p class="text-sm font-semibold text-error" role="alert">{{ $message }}</p>
             @enderror
             <p class="flex gap-2 text-sm text-neutral">
-                @if ($band === 'under' && $selection->status !== \App\Modules\Staffing\Enums\SelectionStatus::ExtraRound)
+                @if ($band === 'under' && $confirming)
+                    <x-icon name="o-information-circle" class="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" /><span>La selección ya terminó: confirmas con las horas que llevas.</span>
+                @elseif ($band === 'under' && $selection->status !== \App\Modules\Staffing\Enums\SelectionStatus::ExtraRound)
                     <x-icon name="o-arrow-path" class="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" /><span>Con menos horas pasas a la <b>ronda extra</b>: cuando termine la primera ronda, en el mismo orden, eliges otra vez de lo que quede.</span>
                 @elseif ($band === 'under')
                     <x-icon name="o-information-circle" class="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" /><span>Es la ronda extra: si terminas con menos horas, ya no hay otra ronda.</span>
@@ -64,13 +69,18 @@
                 <x-icon name="o-check-circle" class="mt-0.5 h-5 w-5" aria-hidden="true" />
                 <div>
                     <p class="font-semibold">Estás dentro de tu margen</p>
-                    <p>Al terminar, tus grupos quedan a tu nombre y ya no los cambias en la selección.</p>
+                    <p>{{ $confirming ? 'Al confirmar' : 'Al terminar' }}, tus grupos quedan a tu nombre y ya no los cambias en la selección.</p>
                 </div>
             </div>
         @endif
     </div>
     <x-slot:actions>
-        <x-button label="Seguir eligiendo" class="btn-ghost" @click="$wire.showFinish = false" />
-        <x-button label="Terminar mi carga" icon="o-check" class="btn-primary" wire:click="finish" spinner="finish" :disabled="$out && ! $acknowledged" data-testid="selection-finish-confirm" />
+        @if ($confirming)
+            <x-button label="Volver" class="btn-ghost" @click="$wire.showFinish = false" />
+            <x-button label="Confirmar mi carga" icon="o-check" class="btn-primary" wire:click="confirm" spinner="confirm" :disabled="$out && ! $acknowledged" data-testid="selection-confirm-submit" />
+        @else
+            <x-button label="Seguir eligiendo" class="btn-ghost" @click="$wire.showFinish = false" />
+            <x-button label="Terminar mi carga" icon="o-check" class="btn-primary" wire:click="finish" spinner="finish" :disabled="$out && ! $acknowledged" data-testid="selection-finish-confirm" />
+        @endif
     </x-slot:actions>
 </x-modal>

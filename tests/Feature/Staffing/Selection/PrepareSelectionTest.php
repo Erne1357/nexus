@@ -186,6 +186,24 @@ it('programar guarda la ventana y calcula los turnos de cada renglón', function
         ->and($entries[1]->slot_ends_at->equalTo($start->addMinutes(60)))->toBeTrue();
 });
 
+it('SEL-08: programar rechaza una ventana diaria más corta que un turno, con un mensaje y sin cambiar nada', function () {
+    $selection = prepSelection();
+    prepTeacher($selection, 'Ana Pérez');
+    $start = CarbonImmutable::parse('2027-01-11 09:00', 'America/Ciudad_Juarez');
+
+    try {
+        app(ScheduleSelection::class)->handle($selection, $start, '09:00', '09:20', [1, 2, 3, 4, 5], $this->actor);
+        $this->fail('Debía rechazar la ventana.');
+    } catch (ValidationException $e) {
+        expect($e->errors())->toBe(['window_starts' => ['La ventana diaria debe durar al menos 30 minutos, lo que dura un turno.']]);
+    }
+
+    expect($selection->fresh()->starts_at)->toBeNull();
+
+    app(ScheduleSelection::class)->handle($selection, $start, '09:00', '09:30', [1, 2, 3, 4, 5], $this->actor);
+    expect($selection->fresh()->starts_at->equalTo($start))->toBeTrue();
+});
+
 it('un nombre que solo empata con un docente de otro departamento queda sin resolver', function () {
     $selection = prepSelection();
     Teacher::factory()->adscribedTo(Department::factory()->create())->create(['name' => 'Persona Ajena']);

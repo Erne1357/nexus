@@ -10,6 +10,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Enums\SelectionStatus;
+use App\Modules\Staffing\Jobs\InviteSelectionTeachersJob;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Notifications\SelectionTurnPublished;
 use Illuminate\Support\Collection;
@@ -24,11 +25,16 @@ use Throwable;
  * (OpenLoadForSelection), deja la selección publicada y, ya confirmada, avisa a cada docente con cuenta su hora.
  *
  * Toma primero el candado de la selección (pg_advisory_xact_lock sobre `staffing_selection:{id}`), el mismo que usan
- * los turnos de los docentes y el reloj, antes de cualquier bloqueo de fila.
+ * los turnos de los docentes y el reloj, antes de cualquier bloqueo de fila. Ya con el candado recalcula la cola
+ * (RecomputeSelectionOrder): así entra al final quien se adscribió al departamento después del último CSV (SEL-10).
+ * Ya confirmada, encola las invitaciones de acceso de la cola (InviteSelectionTeachersJob, SEL-13).
  */
 final class PublishSelection
 {
-    public function __construct(private readonly OpenLoadForSelection $openLoad) {}
+    public function __construct(
+        private readonly OpenLoadForSelection $openLoad,
+        private readonly RecomputeSelectionOrder $recompute,
+    ) {}
 
     /**
      * @throws ValidationException
@@ -39,6 +45,14 @@ final class PublishSelection
             DB::select('select pg_advisory_xact_lock(hashtext(?))', ["staffing_selection:{$selection->getKey()}"]);
 
             $selection->setRawAttributes(Selection::query()->lockForUpdate()->findOrFail($selection->getKey())->getAttributes(), sync: true);
+
+            if ($selection->status !== SelectionStatus::Draft) {
+                throw ValidationException::withMessages(['status' => "La selección está {$selection->status->label()}: solo se publica un borrador."]);
+            }
+
+            // La cola se congela con lo de este momento (SEL-10): un docente adscrito después del último CSV o de la
+            // última programación entra al final. Si algo de abajo rechaza publicar, la transacción lo deshace.
+            $this->recompute->handle($selection);
 
             $this->guard($selection);
 
@@ -60,13 +74,18 @@ final class PublishSelection
             return $selection;
         });
 
+        // SEL-13: los docentes de la cola sin acceso reciben su invitación, en la cola y ya confirmada la publicación.
+        InviteSelectionTeachersJob::dispatch((string) $published->getKey(), (string) $actor->getKey());
+
+        $department = (string) $published->department()->value('name');
+
         foreach ($published->entries()->with('teacher.user')->get() as $entry) {
             if ($entry->slot_starts_at === null || $entry->slot_ends_at === null || $entry->teacher?->user === null) {
                 continue;
             }
 
             try {
-                $entry->teacher->user->notify(new SelectionTurnPublished($published, $entry));
+                $entry->teacher->user->notify(new SelectionTurnPublished($published->term_id, $published->modality_id, $department, $entry->slot_starts_at, $entry->slot_ends_at));
             } catch (Throwable $e) {
                 report($e);
             }

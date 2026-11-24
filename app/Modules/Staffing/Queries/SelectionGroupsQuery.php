@@ -45,12 +45,29 @@ final class SelectionGroupsQuery
      */
     public function liveSelectionFor(?AcademicLoad $load): ?Selection
     {
+        return $this->selectionFor($load, SelectionStatus::live());
+    }
+
+    /**
+     * La selección terminada que incluye la carga, o null: su orden sigue reemplazando al ranking de esa carga (HC-16,
+     * decisión del coordinador del riel del 24 de noviembre de 2026).
+     */
+    public function finishedSelectionFor(?AcademicLoad $load): ?Selection
+    {
+        return $this->selectionFor($load, [SelectionStatus::Finished]);
+    }
+
+    /**
+     * @param  list<SelectionStatus>  $statuses
+     */
+    private function selectionFor(?AcademicLoad $load, array $statuses): ?Selection
+    {
         if ($load === null) {
             return null;
         }
 
         return Selection::query()
-            ->whereIn('status', array_map(fn (SelectionStatus $status): string => $status->value, SelectionStatus::live()))
+            ->whereIn('status', array_map(fn (SelectionStatus $status): string => $status->value, $statuses))
             ->whereHas('loads', fn (Builder $loads) => $loads->whereKey($load->getKey()))
             ->first();
     }

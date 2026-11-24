@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Actions\GrantPositionPermission;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -11,8 +12,10 @@ use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Enums\SelectionStatus;
+use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
+use App\Modules\Staffing\Notifications\SelectionCancelled;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
@@ -196,4 +199,150 @@ it('un seleccion desconocido en la URL arranca de cero', function () {
         ->assertSet('step', 1)
         ->call('goTo', 3)
         ->assertSet('step', 1);
+});
+
+it('SEL-11: el admin cancela desde el monitor una selección publicada que aún no empieza, con un modal, y se avisa a la cola', function () {
+    Notification::fake();
+    $selection = Selection::factory()->create(['status' => SelectionStatus::Published, 'starts_at' => now()->addDay(), 'published_at' => now()]);
+    $user = User::factory()->create();
+    SelectionEntry::factory()->for($selection)->create([
+        'teacher_id' => Teacher::factory()->create(['name' => 'Rosa Medina Soto', 'user_id' => $user->id])->id, 'position' => 1, 'slot_index' => 0,
+        'slot_starts_at' => now()->addDay(), 'slot_ends_at' => now()->addDay()->addMinutes(30),
+    ]);
+
+    Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin', ['seleccion' => $selection->id])
+        ->assertSet('tab', 'monitor')
+        ->assertSeeHtml('data-testid="monitor-cancel"')
+        ->call('$set', 'showCancel', true)
+        ->assertSee('Los docentes de la cola reciben el aviso')
+        ->call('cancel')
+        ->assertHasNoErrors()
+        ->assertSet('selectionId', '');
+
+    expect($selection->fresh()->status)->toBe(SelectionStatus::Cancelled);
+    Notification::assertSentTo($user, SelectionCancelled::class);
+});
+
+it('el monitor no ofrece cancelar una selección que ya empezó', function () {
+    $selection = Selection::factory()->create(['status' => SelectionStatus::Running, 'starts_at' => now()->subHour()]);
+
+    Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin', ['seleccion' => $selection->id])
+        ->assertSee('Avance por docente')
+        ->assertDontSeeHtml('data-testid="monitor-cancel"');
+});
+
+/**
+ * Un jefe del departamento de `$scope` al que el admin le dio `staffing.selection.manage` (los puestos se editan en 1.22):
+ * maneja solo las selecciones de su departamento.
+ *
+ * @param  array{department: Department}  $scope
+ */
+function scopedSelectionManager(array $scope): User
+{
+    app(GrantPositionPermission::class)->handle(Role::JefeDepartamento, StaffingPermission::SelectionManage);
+
+    return User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $scope['department']->id])->create();
+}
+
+it('start() revisa el permiso sobre el departamento antes de crear el borrador', function () {
+    $own = adminScope();
+    $other = Department::factory()->create();
+    $manager = scopedSelectionManager($own);
+
+    Livewire::actingAs($manager)->test('staffing::pages.selection-admin')
+        ->set('termId', $own['term']->id)
+        ->set('modalityId', $own['modality']->id)
+        ->set('departmentId', $other->id)
+        ->call('start')
+        ->assertForbidden();
+
+    expect(Selection::query()->count())->toBe(0);
+
+    Livewire::actingAs($manager)->test('staffing::pages.selection-admin')
+        ->set('termId', $own['term']->id)
+        ->set('modalityId', $own['modality']->id)
+        ->set('departmentId', $own['department']->id)
+        ->call('start')
+        ->assertHasNoErrors();
+
+    expect(Selection::query()->sole()->department_id)->toBe($own['department']->id);
+});
+
+it('una selección de otro departamento puesta a mano en `selectionId` da 403 y no se muestra', function () {
+    $own = adminScope();
+    $manager = scopedSelectionManager($own);
+    $foreign = Selection::factory()->create(['term_id' => $own['term']->id, 'modality_id' => $own['modality']->id, 'department_id' => Department::factory()->create()->id, 'status' => SelectionStatus::Running, 'starts_at' => now()->subHour()]);
+    SelectionEntry::factory()->for($foreign)->create(['teacher_id' => Teacher::factory()->create(['name' => 'Docente Ajeno Ficticio'])->id, 'position' => 1]);
+
+    Livewire::actingAs($manager)->test('staffing::pages.selection-admin')
+        ->set('selectionId', $foreign->id)
+        ->assertForbidden();
+
+    Livewire::actingAs($manager)->test('staffing::pages.selection-admin', ['seleccion' => $foreign->id])
+        ->assertForbidden();
+});
+
+it('SEL-08: en la página, una ventana más corta que un turno se dice en el campo y no rompe', function () {
+    $s = adminScope();
+
+    Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin')
+        ->set('termId', $s['term']->id)
+        ->set('modalityId', $s['modality']->id)
+        ->set('departmentId', $s['department']->id)
+        ->call('start')
+        ->set('startsOn', now()->addDays(3)->format('Y-m-d'))
+        ->set('windowStarts', '09:00')
+        ->set('windowEnds', '09:15')
+        ->assertHasErrors(['window_starts' => 'La ventana diaria debe durar al menos 30 minutos, lo que dura un turno.']);
+});
+
+describe('el CSV temporal (lleva datos personales) se borra siempre', function () {
+    beforeEach(function () {
+        $this->scope = adminScope();
+        $this->page = Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin')
+            ->set('termId', $this->scope['term']->id)
+            ->set('modalityId', $this->scope['modality']->id)
+            ->set('departmentId', $this->scope['department']->id)
+            ->call('start')
+            ->call('goTo', 2);
+    });
+
+    it('cuando el archivo no pasa la validación', function () {
+        $this->page->set('csvFile', UploadedFile::fake()->createWithContent('criterios.xlsx', ADMIN_HEADER."ana perez lara;40;si;si;si;si;12\n"));
+        $file = $this->page->get('csvFile');
+        expect($file->exists())->toBeTrue();
+
+        $this->page->call('importCsv')->assertHasErrors('csvFile')->assertSet('csvFile', null);
+
+        expect($file->exists())->toBeFalse();
+    });
+
+    it('cuando se sube otro en su lugar', function () {
+        $this->page->set('csvFile', UploadedFile::fake()->createWithContent('primero.csv', ADMIN_HEADER));
+        $first = $this->page->get('csvFile');
+
+        $this->page->set('csvFile', UploadedFile::fake()->createWithContent('segundo.csv', ADMIN_HEADER));
+
+        expect($first->exists())->toBeFalse()
+            ->and($this->page->get('csvFile')->exists())->toBeTrue();
+    });
+
+    it('cuando sale del paso sin importarlo', function () {
+        $this->page->set('csvFile', UploadedFile::fake()->createWithContent('criterios.csv', ADMIN_HEADER));
+        $file = $this->page->get('csvFile');
+
+        $this->page->call('goTo', 1)->assertSet('csvFile', null);
+
+        expect($file->exists())->toBeFalse();
+    });
+
+    it('después de importarlo', function () {
+        Teacher::factory()->adscribedTo($this->scope['department'])->create(['name' => 'Ana Pérez Lara']);
+        $this->page->set('csvFile', UploadedFile::fake()->createWithContent('criterios.csv', ADMIN_HEADER."ana perez lara;40;si;si;si;si;12\n"));
+        $file = $this->page->get('csvFile');
+
+        $this->page->call('importCsv')->assertHasNoErrors()->assertSet('csvFile', null);
+
+        expect($file->exists())->toBeFalse();
+    });
 });
