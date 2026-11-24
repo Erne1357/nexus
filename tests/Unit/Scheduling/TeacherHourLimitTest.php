@@ -34,3 +34,17 @@ it('a un docente de honorarios lo topa staffing.honorarios_max_hours cuando exis
 
     expect(TeacherHourLimit::of($state, 'T1'))->limit->toBe(12);
 });
+
+it('SEL-12: las horas autorizadas del periodo suben el límite cuando pasan de base más tolerancia', function () {
+    $state = States::builder()
+        ->setting('staffing.extra_hours_tolerance', 2)
+        ->teacher(States::teacher('T1', base: 20, allowance: 26))
+        ->teacher(States::teacher('T2', base: 20, allowance: 10))
+        ->teacher(States::teacher('T3', base: 40, honorarios: true, allowance: 15))
+        ->setting('staffing.honorarios_max_hours', 12)
+        ->build();
+
+    expect(TeacherHourLimit::of($state, 'T1'))->limit->toBe(26)
+        ->and(TeacherHourLimit::of($state, 'T2'))->limit->toBe(22)
+        ->and(TeacherHourLimit::of($state, 'T3'))->limit->toBe(15);
+});

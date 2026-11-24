@@ -100,6 +100,7 @@ Qué rechaza, sin la marca:
 - Columnas `NOT NULL` sin `default()` agregadas con `Schema::table` a una tabla existente (usa `nullable()` o `default()`; `Schema::create` queda libre).
 - `dropColumn`, `renameColumn`, `drop`, `dropIfExists`, `rename` y `->change()`.
 - SQL crudo (`DB::statement`, `DB::unprepared`) con `DROP`, `RENAME`, `ALTER … TYPE` o `SET NOT NULL`.
+- `ALTER COLUMN … DROP NOT NULL` es expansión (el release anterior sigue escribiendo el valor); `DROP DEFAULT` sí es contracción.
 
 Cómo marcar una contracción: pon `#[Contract('qué release dejó de usarlo')]` (`App\Modules\Core\Database\Contract`) en la clase, `return new #[Contract('…')] class extends Migration { … };`, y súbela en un release posterior al que dejó de usar lo que borra. Un rollback que cruce ese release exige restaurar el respaldo.
 

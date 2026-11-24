@@ -71,7 +71,18 @@
                 @elseif ($resetReason !== null)
                     <x-core::row-menu-item label="Restablecer contraseña" :reason="$resetReason" disabled data-testid="reset-password" />
                 @endif
-                @if ($inviteReason === '' && $invited)
+                @if ($personalInvite !== null)
+                    <x-core::row-menu-item
+                        label="Reenviar al correo personal"
+                        wire:click="resendToPersonal"
+                        x-confirm="No tiene correo institucional y está en una orden de selección: se manda un enlace nuevo a {{ $personalInvite }}; el anterior deja de servir."
+                        data-confirm-title="¿Reenviar la invitación de {{ $record->teacher->rfc }} a su correo personal?"
+                        data-confirm-button="Reenviar"
+                        data-confirm-tone="primary"
+                        spinner="resendToPersonal"
+                        data-testid="resend-personal-invitation"
+                    />
+                @elseif ($inviteReason === '' && $invited)
                     <x-core::row-menu-item
                         label="Reenviar invitación"
                         wire:click="resendInvitation"
@@ -181,6 +192,9 @@
                         </span>
                         <span class="max-md:col-start-2 max-md:row-start-1 max-md:justify-self-end">
                             <x-core::status-badge :tone="$qualification->level === \App\Modules\Faculty\Enums\QualificationLevel::Preferente ? 'primary' : 'neutral'" :label="$qualification->level->label()" />
+                            @if ($qualification->source === \App\Modules\Faculty\Enums\QualificationSource::History)
+                                <x-badge value="Del historial" class="badge-ghost badge-sm" data-testid="qualification-from-history" />
+                            @endif
                         </span>
                         <span class="max-md:col-span-2 md:text-right"><span class="font-mono font-semibold tabular-nums">{{ $qualification->taught_count }}</span> {{ $qualification->taught_count === 1 ? 'vez' : 'veces' }}<span class="text-neutral md:hidden"> impartida</span></span>
                         <span class="min-w-0 text-sm text-neutral max-md:col-span-2">Calificó <span class="text-base-content">{{ $qualification->qualifier?->name ?? '—' }}</span>, {{ $qualification->updated_at->format('d/m/Y') }}</span>
@@ -290,6 +304,8 @@
                     @endforelse
                 </section>
             </div>
+        @elseif ($tab === 'carga')
+            @include('faculty::teachers.load-tab', ['weekly' => $weekly])
         @elseif ($tab === 'disponibilidad')
             @include('faculty::teachers.availability-tab', ['teacher' => $record->teacher, 'term' => $record->term, 'availability' => $availability, 'editReason' => $availabilityReason, 'back' => $this->validationReturnParams()])
         @else

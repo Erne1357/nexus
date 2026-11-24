@@ -26,10 +26,13 @@ use App\Modules\Core\Settings\SettingType;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
+use App\Modules\Faculty\Events\HourAllowanceChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
+use App\Modules\Faculty\Queries\SelectionQueueMembership;
+use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupMovedToCampus;
@@ -41,6 +44,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
 use App\Modules\Scheduling\Queries\PendingPlacements;
 use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
+use App\Modules\Staffing\Console\AdvanceSelectionsCommand;
 use App\Modules\Staffing\Console\RankTerm;
 use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
 use App\Modules\Staffing\Database\Seeders\ChangeRequestsDemoSeeder;
@@ -61,14 +65,20 @@ use App\Modules\Staffing\Listeners\RerankOnGroupChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupsCreated;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
+use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Models\TeacherTermLoad;
 use App\Modules\Staffing\Policies\ChangeRequestPolicy;
+use App\Modules\Staffing\Policies\SelectionPolicy;
 use App\Modules\Staffing\Queries\ChosenAlternativePlacementsQuery;
+use App\Modules\Staffing\Queries\SelectionQueueMembershipQuery;
+use App\Modules\Staffing\Queries\SelectionTimetableQuery;
+use App\Modules\Staffing\Queries\TeacherWeeklyLoadQuery;
 use App\Modules\Staffing\Rules\RankingWindowSizes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * Módulo Staffing: ranking docente y asignación de docentes a los grupos (docs/dominio/modelo-de-datos.md,
@@ -89,6 +99,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         GroupsCreated::class,
         PositionChanged::class,
         ExternalLoadChanged::class,
+        HourAllowanceChanged::class,
         TeacherUpdated::class,
         AdscriptionChanged::class,
     ];
@@ -98,6 +109,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
      */
     protected array $policies = [
         ChangeRequest::class => ChangeRequestPolicy::class,
+        Selection::class => SelectionPolicy::class,
     ];
 
     /**
@@ -109,6 +121,8 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         parent::register();
 
         $this->app->bind(PendingPlacements::class, ChosenAlternativePlacementsQuery::class);
+        $this->app->bind(TeacherWeeklyLoad::class, TeacherWeeklyLoadQuery::class);
+        $this->app->bind(SelectionQueueMembership::class, SelectionQueueMembershipQuery::class);
     }
 
     public function boot(): void
@@ -120,7 +134,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         }
 
         if ($this->app->runningInConsole()) {
-            $this->commands([RankTerm::class, RefreshTeacherLoadsCommand::class]);
+            $this->commands([RankTerm::class, RefreshTeacherLoadsCommand::class, AdvanceSelectionsCommand::class]);
         }
 
         Event::listen(LoadTransitioning::class, BlockClosingWithPendingChangeRequests::class);
@@ -140,22 +154,41 @@ final class StaffingServiceProvider extends ModuleServiceProvider
      * de la carga» para quienes cierran la carga de algún departamento (`academic_load.load.close`: el jefe y
      * Subdirección) y «Avance del cierre» para quienes la reabren (`academic_load.load.reopen`: Subdirección y el admin).
      *
+     * «Mi espacio › Orden de selección» (decisión 8 de la 1.33) lleva al horario de la selección (`staffing.offer`) a
+     * quien la ve con `staffing.selection.view` sin ser docente (el jefe, el JPD, directivos y Subdirección): no es del
+     * área Carga académica, así que sigue en el menú con la carga oculta (MN-05), y solo sale mientras hay una selección
+     * suya a la vista (viva, o la última terminada de su periodo de carga). El docente llega por «Oferta» y el admin, que
+     * la maneja, por «Administración › Orden de selección».
+     *
      * @return list<NavigationItem>
      */
     public function navigation(): array
     {
         // MN-02: la misma closure en todos los módulos que la usan, así el menú consulta una vez.
         $loadInProgress = LoadProgressQuery::menuCondition();
+        $selectionOnScreen = static function (Actor $context): ?string {
+            $gate = Gate::forUser($context->user());
+
+            return app(SelectionTimetableQuery::class)->onScreen($context->loadTerm())->contains(fn (Selection $selection): bool => $gate->allows('view', $selection))
+                ? null
+                : 'No hay una orden de selección de tu departamento';
+        };
 
         return [
             new NavigationItem('Asignación docente', 'staffing.assign', 'o-user-plus', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::RankingView)),
+            new NavigationItem('Orden de selección', 'staffing.selection.admin', 'o-queue-list', NavigationArea::Administracion, group: NavigationGroup::Configuracion, order: -1,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::SelectionManage)),
             new NavigationItem('Carga por docente', 'staffing.teacher-loads', 'o-user-group', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::TeacherLoadView)),
             new NavigationItem('Mi carga', 'staffing.my-load', 'o-calendar-days', NavigationArea::MiEspacio,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::MyLoadView)),
             new NavigationItem('Oferta', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::OfferView)),
+            new NavigationItem('Orden de selección', 'staffing.offer', 'o-queue-list', NavigationArea::MiEspacio, whyUnavailable: $selectionOnScreen,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::SelectionView)
+                    && ! $context->allowsAny(StaffingPermission::OfferView)
+                    && ! $context->allowsAny(StaffingPermission::SelectionManage)),
             new NavigationItem('Solicitudes de cambio', 'staffing.change-requests', 'o-arrow-path-rounded-square', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::ChangeRequestView)
                     || $context->allowsAny(StaffingPermission::ChangeRequestDecide)
@@ -224,22 +257,26 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 StaffingPermission::OfferView,
                 StaffingPermission::MyLoadView,
                 StaffingPermission::ChangeRequestRequestOwn,
+                StaffingPermission::SelectionPickOwn,
             ],
             Role::Directivo->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherLoadView,
                 StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
             ],
             Role::Subdireccion->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherLoadView,
                 StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
             ],
             Role::JefeDepartamento->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherAssign,
                 StaffingPermission::TeacherLoadView,
                 StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
                 StaffingPermission::ChangeRequestDecide,
                 StaffingPermission::ChangeRequestApplyRoom,
             ],
@@ -248,6 +285,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 StaffingPermission::TeacherAssign,
                 StaffingPermission::TeacherLoadView,
                 StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
             ],
             Role::Coordinador->value => [
                 StaffingPermission::ChangeRequestRequest,

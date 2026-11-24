@@ -75,7 +75,7 @@ function offerRank(Group $group, Teacher $teacher, int $rank, array $breakdown =
 }
 
 it('HC-17: muestra todos los grupos del departamento en todos los campus con su docente, horario y salón', function () {
-    $mine = offerGroup($this->sc, $this->c2, ['code' => '1A', 'semester' => 1, 'teacher_id' => $this->colleague->id]);
+    $mine = offerGroup($this->sc, $this->c2, ['code' => '1-A', 'semester' => 1, 'teacher_id' => $this->colleague->id]);
     $free = offerGroup($this->sc, $this->c1, ['code' => '3B', 'semester' => 3]);
     GroupSession::factory()->on(2, '11:00', '13:00')->create(['group_id' => $mine->id]);
     GroupSession::factory()->on(5, '11:00', '13:00')->create(['group_id' => $mine->id]);
@@ -84,53 +84,53 @@ it('HC-17: muestra todos los grupos del departamento en todos los campus con su 
         ->assertOk()
         ->assertSee('Semestre 1')
         ->assertSee('Semestre 3')
-        ->assertSeeInOrder(['1A', 'Ma Vi', '11:00–13:00', 'Óscar Nájera'])
+        ->assertSeeInOrder(['1-A', 'Ma Vi', '11:00–13:00', 'Óscar Nájera'])
         ->assertSee('Sin docente')
         ->assertSee('C1')
         ->assertSee('C2');
 });
 
 it('HC-17: no muestra la oferta mientras la carga está en borrador o propuesta, y sí desde staffing en adelante', function () {
-    offerGroup($this->sc, $this->c2, ['code' => 'DR1'], LoadStatus::Draft);
-    offerGroup($this->sc, $this->c1, ['code' => 'PR1'], LoadStatus::Proposed);
+    offerGroup($this->sc, $this->c2, ['code' => 'DR-1'], LoadStatus::Draft);
+    offerGroup($this->sc, $this->c1, ['code' => 'PR-1'], LoadStatus::Proposed);
 
-    Livewire::actingAs($this->user)->test('staffing::pages.offer')->assertDontSee('DR1')->assertDontSee('PR1');
+    Livewire::actingAs($this->user)->test('staffing::pages.offer')->assertDontSee('DR-1')->assertDontSee('PR-1');
 
     foreach ([LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published, LoadStatus::Reanalysis] as $status) {
         AcademicLoad::query()->where('department_id', $this->sc->id)->update(['status' => $status]);
 
-        Livewire::actingAs($this->user)->test('staffing::pages.offer')->assertSee('DR1')->assertSee('PR1');
+        Livewire::actingAs($this->user)->test('staffing::pages.offer')->assertSee('DR-1')->assertSee('PR-1');
     }
 });
 
 it('no muestra grupos cancelados ni de otros periodos ni de departamentos donde no está asignado', function () {
-    offerGroup($this->sc, $this->c2, ['code' => 'CAN1', 'status' => 'cancelled']);
-    offerGroup($this->other, $this->c2, ['code' => 'OTR1']);
+    offerGroup($this->sc, $this->c2, ['code' => 'CAN-1', 'status' => 'cancelled']);
+    offerGroup($this->other, $this->c2, ['code' => 'OTR-1']);
     $later = Term::factory()->create(['code' => '20272']);
-    $stray = offerGroup($this->sc, $this->c2, ['code' => 'FUT1']);
+    $stray = offerGroup($this->sc, $this->c2, ['code' => 'FUT-1']);
     $stray->update(['term_id' => $later->id]);
 
     Livewire::actingAs($this->user)->test('staffing::pages.offer')
-        ->assertDontSee('CAN1')->assertDontSee('OTR1')->assertDontSee('FUT1')->assertDontSee('Industrial');
+        ->assertDontSee('CAN-1')->assertDontSee('OTR-1')->assertDontSee('FUT-1')->assertDontSee('Industrial');
 });
 
 it('con varios departamentos hay una pestaña por cada uno y ?depto= elige', function () {
     $this->me->adscriptions()->create(['department_id' => $this->cb->id, 'is_primary' => false]);
-    offerGroup($this->sc, $this->c2, ['code' => 'SCG1']);
-    offerGroup($this->cb, $this->c2, ['code' => 'CBG1']);
+    offerGroup($this->sc, $this->c2, ['code' => 'SCG-1']);
+    offerGroup($this->cb, $this->c2, ['code' => 'CBG-1']);
 
     Livewire::actingAs($this->user)->test('staffing::pages.offer')
         ->assertSee('Sistemas y Computación')->assertSee('Ciencias Básicas')
-        ->assertSee('CBG1')->assertDontSee('SCG1')
+        ->assertSee('CBG-1')->assertDontSee('SCG-1')
         ->set('department', 'SC')
-        ->assertSee('SCG1')->assertDontSee('CBG1');
+        ->assertSee('SCG-1')->assertDontSee('CBG-1');
 
-    Livewire::actingAs($this->user)->withQueryParams(['depto' => 'SC'])->test('staffing::pages.offer')->assertSee('SCG1')->assertDontSee('CBG1');
+    Livewire::actingAs($this->user)->withQueryParams(['depto' => 'SC'])->test('staffing::pages.offer')->assertSee('SCG-1')->assertDontSee('CBG-1');
 });
 
 it('muestra su propio lugar («3 de 18»), «tu mejor lugar» por materia y «Asignado a ti»', function () {
     $subject = Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Fundamentos']);
-    $first = offerGroup($this->sc, $this->c2, ['code' => '1A', 'subject' => $subject]);
+    $first = offerGroup($this->sc, $this->c2, ['code' => '1-A', 'subject' => $subject]);
     $second = offerGroup($this->sc, $this->c2, ['code' => '1B', 'subject' => $subject, 'teacher_id' => $this->me->id]);
     offerRank($first, $this->me, 3);
     offerRank($first, $this->colleague, 1);
@@ -145,7 +145,7 @@ it('muestra su propio lugar («3 de 18»), «tu mejor lugar» por materia y «As
 });
 
 it('el panel muestra solo SU desglose y nada de los demás docentes', function () {
-    $group = offerGroup($this->sc, $this->c2, ['code' => '1A']);
+    $group = offerGroup($this->sc, $this->c2, ['code' => '1-A']);
     offerRank($group, $this->me, 2, ['history_count' => 5, 'evaluation' => 4.5, 'remaining_hours' => 8, 'remaining_after_hours' => 4]);
     $rival = offerRank($group, $this->colleague, 1, ['history_count' => 77, 'evaluation' => 3.37, 'base_hours' => 99]);
     $rival->update(['score' => 123.45]);
@@ -166,7 +166,7 @@ it('el panel muestra solo SU desglose y nada de los demás docentes', function (
 });
 
 it('el panel de un docente sin evaluación dice «sin evaluación» y sin ranking dice que no está', function () {
-    $ranked = offerGroup($this->sc, $this->c2, ['code' => '1A']);
+    $ranked = offerGroup($this->sc, $this->c2, ['code' => '1-A']);
     $unranked = offerGroup($this->sc, $this->c2, ['code' => '1B']);
     offerRank($ranked, $this->me, 1, ['evaluation' => null, 'flags' => ['sin_evaluacion', 'choque']]);
 
@@ -176,7 +176,7 @@ it('el panel de un docente sin evaluación dice «sin evaluación» y sin rankin
 });
 
 it('HC-01: el panel dice con cuál de SUS grupos choca el grupo y a qué hora', function () {
-    $offered = offerGroup($this->sc, $this->c2, ['code' => '1A']);
+    $offered = offerGroup($this->sc, $this->c2, ['code' => '1-A']);
     GroupSession::factory()->on(1, '07:00', '09:00')->create(['group_id' => $offered->id]);
     GroupSession::factory()->on(3, '07:00', '09:00')->create(['group_id' => $offered->id]);
     $mine = offerGroup($this->sc, $this->c1, ['code' => 'A4', 'teacher_id' => $this->me->id, 'subject' => Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Ingeniería Económica'])]);
@@ -193,30 +193,30 @@ it('HC-01: el panel dice con cuál de SUS grupos choca el grupo y a qué hora', 
 });
 
 it('el panel tiene su botón para cerrar', function () {
-    $group = offerGroup($this->sc, $this->c2, ['code' => '1A']);
+    $group = offerGroup($this->sc, $this->c2, ['code' => '1-A']);
 
     Livewire::actingAs($this->user)->test('staffing::pages.offer')->call('open', $group->id)->assertSeeHtml('aria-label="Cerrar el panel"');
 });
 
 it('abrir el panel con el id de un grupo que no es de su oferta no muestra nada', function () {
-    $foreign = offerGroup($this->other, $this->c2, ['code' => 'OTR1']);
+    $foreign = offerGroup($this->other, $this->c2, ['code' => 'OTR-1']);
 
-    Livewire::actingAs($this->user)->test('staffing::pages.offer')->call('open', $foreign->id)->assertDontSee('OTR1');
+    Livewire::actingAs($this->user)->test('staffing::pages.offer')->call('open', $foreign->id)->assertDontSee('OTR-1');
 });
 
 it('filtra por materia (?q=), semestre, «Sin docente» y «Entre tus 3 primeros»', function () {
-    $algebra = offerGroup($this->sc, $this->c2, ['code' => 'AL1', 'semester' => 1, 'teacher_id' => $this->colleague->id, 'subject' => Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Álgebra Lineal'])]);
-    $redes = offerGroup($this->sc, $this->c2, ['code' => 'RE1', 'semester' => 5, 'subject' => Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Redes'])]);
-    $bd = offerGroup($this->sc, $this->c2, ['code' => 'BD1', 'semester' => 5, 'subject' => Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Bases de Datos'])]);
+    $algebra = offerGroup($this->sc, $this->c2, ['code' => 'AL-1', 'semester' => 1, 'teacher_id' => $this->colleague->id, 'subject' => Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Álgebra Lineal'])]);
+    $redes = offerGroup($this->sc, $this->c2, ['code' => 'RE-1', 'semester' => 5, 'subject' => Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Redes'])]);
+    $bd = offerGroup($this->sc, $this->c2, ['code' => 'BD-1', 'semester' => 5, 'subject' => Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Bases de Datos'])]);
     offerRank($algebra, $this->me, 9);
     offerRank($redes, $this->me, 2);
     offerRank($bd, $this->me, 7);
 
     Livewire::actingAs($this->user)->withQueryParams(['q' => 'algebra'])->test('staffing::pages.offer')
-        ->assertSee('AL1')->assertDontSee('RE1')->assertDontSee('BD1')
-        ->call('clearFilters')->set('semester', '5')->assertDontSee('AL1')->assertSee('RE1')->assertSee('BD1')
-        ->call('clearFilters')->set('state', 'sin')->assertDontSee('AL1')->assertSee('RE1')
-        ->call('clearFilters')->set('state', 'top')->assertSee('RE1')->assertDontSee('AL1')->assertDontSee('BD1')
+        ->assertSee('AL-1')->assertDontSee('RE-1')->assertDontSee('BD-1')
+        ->call('clearFilters')->set('semester', '5')->assertDontSee('AL-1')->assertSee('RE-1')->assertSee('BD-1')
+        ->call('clearFilters')->set('state', 'sin')->assertDontSee('AL-1')->assertSee('RE-1')
+        ->call('clearFilters')->set('state', 'top')->assertSee('RE-1')->assertDontSee('AL-1')->assertDontSee('BD-1')
         ->assertSee('Quitar filtros');
 });
 
@@ -278,33 +278,33 @@ describe('alcance', function () {
 
     it('un jefe de departamento sin ficha de docente recibe 403', function () {
         $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
-        offerGroup($this->sc, $this->c2, ['code' => '1A']);
+        offerGroup($this->sc, $this->c2, ['code' => '1-A']);
 
         Livewire::actingAs($jefe)->test('staffing::pages.offer')->assertForbidden();
     });
 
     it('un docente sin ficha ligada a su usuario ve un aviso y ningún grupo', function () {
         $loose = User::factory()->withRole(Role::Docente)->create();
-        offerGroup($this->sc, $this->c2, ['code' => '1A']);
+        offerGroup($this->sc, $this->c2, ['code' => '1-A']);
 
-        Livewire::actingAs($loose)->test('staffing::pages.offer')->assertOk()->assertSee('no está ligado a una ficha de docente')->assertDontSee('1A');
+        Livewire::actingAs($loose)->test('staffing::pages.offer')->assertOk()->assertSee('no está ligado a una ficha de docente')->assertDontSee('1-A');
     });
 
     it('un docente de otro departamento no ve la oferta de este', function () {
         $industrial = Teacher::factory()->adscribedTo($this->other)->create();
         $user = User::factory()->withRole(Role::Docente)->create();
         $industrial->update(['user_id' => $user->id]);
-        offerGroup($this->sc, $this->c2, ['code' => 'SCG1']);
+        offerGroup($this->sc, $this->c2, ['code' => 'SCG-1']);
         offerGroup($this->other, $this->c2, ['code' => 'INDG1']);
 
-        Livewire::actingAs($user)->test('staffing::pages.offer')->assertDontSee('SCG1')->assertSee('INDG1');
+        Livewire::actingAs($user)->test('staffing::pages.offer')->assertDontSee('SCG-1')->assertSee('INDG1');
     });
 
     it('un docente sin asignaciones vigentes ve un aviso', function () {
         $this->me->adscriptions()->delete();
-        offerGroup($this->sc, $this->c2, ['code' => '1A']);
+        offerGroup($this->sc, $this->c2, ['code' => '1-A']);
 
-        Livewire::actingAs($this->user)->test('staffing::pages.offer')->assertSee('No estás asignado')->assertDontSee('1A');
+        Livewire::actingAs($this->user)->test('staffing::pages.offer')->assertSee('No estás asignado')->assertDontSee('1-A');
     });
 
     it('la ruta pide sesión y aparece en Carga académica solo para el docente (MN-05)', function () {

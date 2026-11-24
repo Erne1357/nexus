@@ -107,6 +107,15 @@ enum LoadStatus: string
         return in_array($this, [self::Staffing, self::Adjusting, self::Reanalysis], true);
     }
 
+    /**
+     * Si la carga todavía puede abrirse a la selección por turnos de los docentes (SEL-11): Borrador, Propuesta y
+     * Ajustes. Asignación ya está abierta; de Cerrada en adelante la carga ya no se asigna.
+     */
+    public function opensForSelection(): bool
+    {
+        return in_array($this, [self::Draft, self::Proposed, self::Adjusting], true);
+    }
+
     public function canTransitionTo(self $to, ModalityProfile $profile): bool
     {
         return in_array($to, $this->transitions($profile), true);

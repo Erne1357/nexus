@@ -115,10 +115,11 @@ final class ImportSiiGroupHistory
                     $report['invalid_capacity'] += $capacity === null ? 1 : 0;
 
                     $groupId = (string) Str::uuid7();
+                    $groupRfc = ($rfc = strtoupper(trim((string) $group->rfc))) === '' ? null : $rfc;
 
                     foreach ($sessions[$code."\0".trim((string) $group->grupo)] ?? [] as $session) {
                         $report['sessions']++;
-                        $sessionRows[] = ['id' => (string) Str::uuid7(), 'historical_group_id' => $groupId, ...$session, 'created_at' => $now, 'updated_at' => $now];
+                        $sessionRows[] = ['id' => (string) Str::uuid7(), 'historical_group_id' => $groupId, ...$session, 'teacher_rfc' => $session['teacher_rfc'] ?? $groupRfc, 'created_at' => $now, 'updated_at' => $now];
                     }
 
                     $rows[] = [
@@ -265,6 +266,8 @@ final class ImportSiiGroupHistory
      * (el SII cuenta el domingo como 1; solo valen lunes a sábado, 2 a 7); los demás valores, o una hora ilegible o sin
      * fin posterior al inicio, se ignoran y se cuentan en `$ignored`. El aula va normalizada como RoomRules (sin espacios
      * y en mayúsculas; vacía es nula; AcademicLoad no depende de Facilities, por eso se replica aquí) y el RFC recortado.
+     * Una sesión sin RFC en el horario toma el del grupo (`grupos.rfc`) al armar las filas (D-01): en 20263 el 22 % de las
+     * sesiones del SII traía el RFC vacío aunque su grupo sí lo tenía, y el mapa y «Mi carga» no veían esas clases.
      *
      * @return array<string, list<array{day: int, starts_at: string, ends_at: string, room_code: ?string, teacher_rfc: ?string}>>
      */

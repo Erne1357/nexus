@@ -14,6 +14,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Facilities\Console\SetRoomTypesCommand;
 use App\Modules\Facilities\Console\SyncCampusMapCommand;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Facilities\Enums\FacilitiesPermission;
@@ -60,7 +61,7 @@ final class FacilitiesServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([SyncCampusMapCommand::class]);
+            $this->commands([SyncCampusMapCommand::class, SetRoomTypesCommand::class]);
         }
 
         Event::listen(DepartmentDeleting::class, BlockDepartmentDeletionWithRooms::class);

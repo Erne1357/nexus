@@ -38,6 +38,7 @@ use App\Modules\Facilities\Events\RoomBlockRemoved;
 use App\Modules\Facilities\Events\RoomUpdated;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
+use App\Modules\Faculty\Events\HourAllowanceChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Console\ImportLoadProjectionCommand;
@@ -95,7 +96,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
 
     /**
      * Lo que dispara el recálculo de choques: sesiones, docentes y grupos de Scheduling, salones y bloqueos de
-     * Facilities, disponibilidad, horas externas y plazas de Faculty, y el perfil de una modalidad de Core.
+     * Facilities, disponibilidad, horas externas, horas autorizadas y plazas de Faculty, y el perfil de una modalidad de Core.
      */
     private const array RECOMPUTE_ON = [
         GroupsCreated::class,
@@ -107,6 +108,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         RoomBlockRemoved::class,
         AvailabilityChanged::class,
         ExternalLoadChanged::class,
+        HourAllowanceChanged::class,
         PositionChanged::class,
         ModalityUpdated::class,
     ];

@@ -28,6 +28,9 @@ enum StaffingPermission: string implements Permission
     case ChangeRequestDecide = 'staffing.change_request.decide';
     case ChangeRequestApplySchedule = 'staffing.change_request.apply_schedule';
     case ChangeRequestApplyRoom = 'staffing.change_request.apply_room';
+    case SelectionManage = 'staffing.selection.manage';
+    case SelectionView = 'staffing.selection.view';
+    case SelectionPickOwn = 'staffing.selection.pick_own';
 
     public function label(): string
     {
@@ -43,6 +46,9 @@ enum StaffingPermission: string implements Permission
             self::ChangeRequestDecide => 'Aprobar o rechazar una solicitud de cambio',
             self::ChangeRequestApplySchedule => 'Aplicar un cambio de horario aprobado',
             self::ChangeRequestApplyRoom => 'Aplicar un cambio de salón aprobado',
+            self::SelectionManage => 'Manejar el orden de selección de carga',
+            self::SelectionView => 'Ver el orden de selección de carga de un departamento',
+            self::SelectionPickOwn => 'Elegir mis grupos en mi turno de selección',
         };
     }
 
@@ -53,10 +59,10 @@ enum StaffingPermission: string implements Permission
         }
 
         return match ($this) {
-            self::RankingView, self::TeacherLoadView, self::ChangeRequestView, self::ChangeRequestDecide => [Dimension::Modality, Dimension::Unit],
+            self::RankingView, self::TeacherLoadView, self::ChangeRequestView, self::ChangeRequestDecide, self::SelectionManage, self::SelectionView => [Dimension::Modality, Dimension::Unit],
             self::TeacherAssign, self::ChangeRequestApplyRoom => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
             self::ChangeRequestRequest, self::ChangeRequestApplySchedule => [Dimension::Modality, Dimension::Campus, Dimension::Career],
-            self::OfferView, self::MyLoadView, self::ChangeRequestRequestOwn => [],
+            self::OfferView, self::MyLoadView, self::ChangeRequestRequestOwn, self::SelectionPickOwn => [],
         };
     }
 
@@ -67,7 +73,7 @@ enum StaffingPermission: string implements Permission
     public function isPersonal(): bool
     {
         return match ($this) {
-            self::OfferView, self::MyLoadView, self::ChangeRequestRequestOwn => true,
+            self::OfferView, self::MyLoadView, self::ChangeRequestRequestOwn, self::SelectionPickOwn => true,
             default => false,
         };
     }

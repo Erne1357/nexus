@@ -5,11 +5,14 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Actions\AssignTeacher;
+use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
+use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\StaffingRanking;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -191,4 +194,91 @@ it('toma la carga con FOR SHARE antes de revisar su estado y de bloquear el grup
     expect($lockLoad)->not->toBeFalse()
         ->and($lockGroup)->not->toBeFalse()
         ->and($lockLoad)->toBeLessThan($lockGroup);
+});
+
+function assignTeacherSelection(AcademicLoad $load, SelectionStatus $status): Selection
+{
+    $selection = Selection::factory()->create([
+        'term_id' => $load->term_id, 'modality_id' => $load->modality_id, 'department_id' => $load->department_id, 'status' => $status,
+    ]);
+    $selection->loads()->attach($load->id);
+
+    return $selection;
+}
+
+it('con selección viva el jefe asigna sin motivo de HC-16 y HC-08 solo avisa', function (SelectionStatus $status) {
+    assignTeacherSelection($this->load, $status);
+    $short = Teacher::factory()->create();
+    TeacherPosition::factory()->for($short)->asignatura(1)->create();
+
+    $third = assignTeacher($this->group, $this->teachers[2], $this->actor);
+    $outsider = assignTeacher($this->group, $short, $this->actor);
+
+    expect($third)->ranking_position_at_assignment->toBe(3)->reason->toBe(AssignTeacher::SELECTION_REASON)
+        ->and($outsider)->ranking_position_at_assignment->toBeNull()->reason->toBe(AssignTeacher::SELECTION_REASON)
+        ->and($this->group->fresh()->teacher_id)->toBe($short->id);
+})->with([
+    'publicada' => [SelectionStatus::Published],
+    'en curso' => [SelectionStatus::Running],
+    'ronda extra' => [SelectionStatus::ExtraRound],
+]);
+
+it('con selección viva HC-01 sigue siendo duro para el jefe', function () {
+    assignTeacherSelection($this->load, SelectionStatus::Running);
+    $busy = Group::factory()->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'teacher_id' => $this->teachers[0]->id, 'code' => 'F']);
+    GroupSession::factory()->for($busy)->on(1, '11:00', '13:00')->create();
+
+    $errors = assignmentErrors(fn () => assignTeacher($this->group, $this->teachers[0], $this->actor));
+
+    expect($errors)->toHaveKey('teacher')
+        ->and($this->group->fresh()->teacher_id)->toBeNull();
+});
+
+it('con selección viva HC-09 sigue siendo duro para el jefe', function () {
+    assignTeacherSelection($this->load, SelectionStatus::Running);
+    TeacherAvailability::factory()->create(['teacher_id' => $this->teachers[0]->id, 'term_id' => $this->group->term_id, 'day' => 1, 'starts_at' => '10:00', 'ends_at' => '11:00']);
+
+    $errors = assignmentErrors(fn () => assignTeacher($this->group, $this->teachers[0], $this->actor));
+
+    expect($errors)->toHaveKey('teacher')
+        ->and($this->group->fresh()->teacher_id)->toBeNull()
+        ->and(GroupTeacherAssignment::query()->count())->toBe(0);
+});
+
+it('sin selección viva HC-16 y HC-08 se exigen como antes', function (SelectionStatus $status) {
+    assignTeacherSelection($this->load, $status);
+    $short = Teacher::factory()->create();
+    TeacherPosition::factory()->for($short)->asignatura(1)->create();
+
+    $reason = assignmentErrors(fn () => assignTeacher($this->group, $this->teachers[2], $this->actor));
+    $hours = assignmentErrors(fn () => assignTeacher($this->group, $short, $this->actor, 'Es el único disponible.'));
+
+    expect($reason)->toHaveKey('reason')
+        ->and(implode(' ', $hours['teacher'] ?? []))->toContain('se pasa por')
+        ->and($this->group->fresh()->teacher_id)->toBeNull();
+})->with([
+    'borrador' => [SelectionStatus::Draft],
+    'cancelada' => [SelectionStatus::Cancelled],
+]);
+
+it('HC-16 con la selección de la carga terminada: el jefe asigna sin motivo (el orden reemplaza al ranking), pero HC-08 vuelve a ser duro', function () {
+    assignTeacherSelection($this->load, SelectionStatus::Finished);
+    $short = Teacher::factory()->create();
+    TeacherPosition::factory()->for($short)->asignatura(1)->create();
+
+    $third = assignTeacher($this->group, $this->teachers[2], $this->actor);
+    $hours = assignmentErrors(fn () => assignTeacher($this->group, $short, $this->actor, 'Es el único disponible.'));
+
+    expect($third)->ranking_position_at_assignment->toBe(3)->reason->toBe(AssignTeacher::SELECTION_REASON)
+        ->and(implode(' ', $hours['teacher'] ?? []))->toContain('se pasa por')
+        ->and($this->group->fresh()->teacher_id)->toBe($this->teachers[2]->id);
+});
+
+it('una selección viva de otra carga no cambia las reglas del grupo', function () {
+    $other = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id]);
+    assignTeacherSelection($other, SelectionStatus::Running);
+
+    $errors = assignmentErrors(fn () => assignTeacher($this->group, $this->teachers[2], $this->actor));
+
+    expect($errors)->toHaveKey('reason');
 });

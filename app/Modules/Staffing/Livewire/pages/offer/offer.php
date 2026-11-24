@@ -3,14 +3,29 @@
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Staffing\Actions\Selection\FinishMyLoad;
 use App\Modules\Staffing\Enums\RankingMark;
+use App\Modules\Staffing\Enums\SelectionEntryStatus;
+use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
+use App\Modules\Staffing\Models\GroupTeacherAssignment;
+use App\Modules\Staffing\Models\Selection;
+use App\Modules\Staffing\Models\SelectionEntry;
+use App\Modules\Staffing\Queries\SelectionOrderQuery;
+use App\Modules\Staffing\Queries\SelectionTimetableQuery;
 use App\Modules\Staffing\Queries\TeacherOfferQuery;
+use App\Modules\Staffing\Rules\LoadBand;
 use App\Modules\Staffing\Support\PublishedStamps;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
+use Mary\Traits\Toast;
 
 /**
  * Oferta del departamento (HC-17, tarea 3.10): lo que un docente ve de los departamentos donde está adscrito, con su
@@ -28,15 +43,41 @@ use Livewire\Component;
  * Con la carga del departamento publicada, las fichas son las de su última versión publicada (P8) y el encabezado lo
  * dice en una línea discreta, «Publicado el 8 dic. 2026 · v2» (PublishedStamps); si la pestaña junta cargas de varios
  * campus, cada línea lleva su campus.
+ *
+ * **Orden de selección** (tarea 1.33, diseño 6.4 a 6.7; maqueta A «Franjas por hora» con el orden en un drawer, como la
+ * B): con una selección viva (publicada, en curso o en ronda extra) que el usuario ve (SelectionPolicy::view: el docente
+ * con renglón en la cola de su departamento, o la jefatura y el JPD con `staffing.selection.view`), la pantalla es el
+ * horario de la selección y no la oferta de arriba. El periodo de una viva es el de la selección, no el de la credencial.
+ * Ya terminada (decisión 8), sigue a la vista la última de cada departamento en el periodo de carga, o la de
+ * `?seleccion=` (el aviso de pendientes) en cualquier periodo: de solo lectura para el docente y, para quien asigna,
+ * con «Asignar a…» y «Quitar docente». Quien solo tiene `staffing.selection.view` (el jefe, el JPD) llega por «Mi
+ * espacio › Orden de selección», aunque la carga académica esté oculta (MN-05). Un
+ * renglón por hora de 7:00 a 21:00 con los grupos como fichas (SelectionTimetableQuery), la barra del turno pegada
+ * arriba con la cuenta regresiva (Alpine, desde `ends_at` del servidor), la cuenta de horas contra la base (SEL-05),
+ * «Orden de selección» (SelectionOrderQuery, en un drawer) y «Terminar mi carga» (FinishMyLoad, en un modal con la
+ * casilla fuera del margen y el aviso de cada grupo sin salón); con la selección terminada, quien quedó sin resolver
+ * usa el mismo modal como «Confirmar mi carga» (SEL-14, FinishMyLoad::confirm). Se refresca cada 5 s. Al tocar una ficha se abre el
+ * drawer del grupo (`staffing::components.selection-group-drawer`), que toma, suelta o, para quien tiene
+ * `staffing.teacher.assign` sobre el grupo, asigna a mano. El docente sale siempre del usuario de la sesión. Filtros:
+ * materia en `?q=` y «Todos · Libres · Míos» en `?grupos=`. Con varias selecciones a la vista, `?depto=` elige.
  */
 new #[Title('Oferta del departamento')] class extends Component
 {
+    use Toast;
+
     /** Valores de `?estado=`. */
     private const array STATES = ['todos', 'sin', 'top'];
+
+    /** Valores de `?grupos=` en el horario de selección. */
+    private const array PICK_FILTERS = ['todos', 'libres', 'mios'];
 
     /** Código del departamento de la pestaña; '' el primero. */
     #[Url(as: 'depto')]
     public string $department = '';
+
+    /** Una selección en particular (`?seleccion=<id>`, el enlace del aviso de pendientes), viva o terminada; '' ninguna. */
+    #[Url(as: 'seleccion')]
+    public string $selectionKey = '';
 
     #[Url(as: 'q')]
     public string $search = '';
@@ -48,21 +89,120 @@ new #[Title('Oferta del departamento')] class extends Component
     #[Url(as: 'estado')]
     public string $state = 'todos';
 
+    /** En el horario de selección: 'todos', 'libres' o 'mios'. */
+    #[Url(as: 'grupos')]
+    public string $picks = 'todos';
+
     #[Locked]
     public ?string $groupId = null;
 
     public bool $showDrawer = false;
 
+    /** El drawer «Orden de selección». */
+    public bool $showOrder = false;
+
+    /** El modal «Terminar mi carga» y su casilla de responsabilidad (SEL-05). */
+    public bool $showFinish = false;
+
+    public bool $acknowledged = false;
+
+    /** La selección de esta petición, para no buscarla dos veces (no viaja al navegador). */
+    private ?Selection $selectionMemo = null;
+
+    private bool $selectionResolved = false;
+
+    /** La ficha de docente del usuario y su renglón en la cola de la selección, una vez por petición. */
+    private ?Teacher $teacherMemo = null;
+
+    private ?SelectionEntry $entryMemo = null;
+
     public function mount(Actor $context): void
     {
-        abort_unless($context->allowsAny(StaffingPermission::OfferView), 403);
+        abort_unless($context->allowsAny(StaffingPermission::OfferView) || $context->allowsAny(StaffingPermission::SelectionView), 403);
 
         $this->updatedState();
+        $this->updatedPicks();
     }
 
     public function updatedState(): void
     {
         $this->state = in_array($this->state, self::STATES, true) ? $this->state : 'todos';
+    }
+
+    public function updatedPicks(): void
+    {
+        $this->picks = in_array($this->picks, self::PICK_FILTERS, true) ? $this->picks : 'todos';
+    }
+
+    public function updatedShowFinish(): void
+    {
+        $this->acknowledged = false;
+        $this->resetValidation('acknowledged');
+    }
+
+    /**
+     * El drawer del grupo tomó, soltó o asignó: se vuelve a pintar el horario sin esperar el refresco.
+     */
+    #[On('selection-changed')]
+    public function selectionChanged(): void {}
+
+    /**
+     * «Terminar mi carga» (SEL-05): el docente de la sesión, en su turno, con la casilla si está fuera del margen.
+     */
+    public function finish(Actor $context, SelectionTimetableQuery $timetable, FinishMyLoad $action): void
+    {
+        $user = $context->user() ?? abort(403);
+        $selection = $this->selection($context, $timetable) ?? abort(404);
+        $this->authorize('pickOwn', $selection);
+        $teacher = $this->teacherMemo ?? abort(403);
+        $this->resetValidation();
+
+        try {
+            $entry = $action->handle($selection, $teacher, $this->acknowledged, $user);
+        } catch (ValidationException $e) {
+            foreach ($e->errors() as $key => $messages) {
+                $this->addError($key, $messages[0]);
+            }
+
+            $this->error('No se terminó tu carga', e(collect($e->errors())->flatten()->first()));
+
+            return;
+        }
+
+        $this->showFinish = false;
+        $this->acknowledged = false;
+        $entry->status === SelectionEntryStatus::Done
+            ? $this->success('Terminaste tu carga', "{$entry->closed_hours} h. Tus grupos quedan a tu nombre.")
+            : $this->warning('Cerraste con menos horas', 'Vuelves a elegir en la ronda extra, en el mismo orden.');
+    }
+
+    /**
+     * «Confirmar mi carga» (SEL-14): el docente que quedó sin resolver al terminar la selección cierra con lo que lleva,
+     * con la casilla si está fuera del margen; no toma ni suelta nada.
+     */
+    public function confirm(Actor $context, SelectionTimetableQuery $timetable, FinishMyLoad $action): void
+    {
+        $context->user() ?? abort(403);
+        $selection = $this->selection($context, $timetable) ?? abort(404);
+        $this->authorize('pickOwn', $selection);
+        $teacher = $this->teacherMemo ?? abort(403);
+        $this->resetValidation();
+
+        try {
+            $entry = $action->confirm($selection, $teacher, $this->acknowledged, $context->user());
+        } catch (ValidationException $e) {
+            foreach ($e->errors() as $key => $messages) {
+                $this->addError($key, $messages[0]);
+            }
+
+            $this->error('No se confirmó tu carga', e(collect($e->errors())->flatten()->first()));
+
+            return;
+        }
+
+        $this->showFinish = false;
+        $this->acknowledged = false;
+        $this->success('Confirmaste tu carga', "{$entry->closed_hours} h. Tus grupos quedan a tu nombre.");
     }
 
     public function open(string $id): void
@@ -76,8 +216,14 @@ new #[Title('Oferta del departamento')] class extends Component
         $this->reset('search', 'semester', 'state');
     }
 
-    public function with(Actor $context, TeacherOfferQuery $query): array
+    public function with(Actor $context, TeacherOfferQuery $query, SelectionTimetableQuery $timetable, SelectionOrderQuery $order): array
     {
+        $selection = $this->selection($context, $timetable);
+
+        if ($selection !== null) {
+            return $this->selectionView($selection, $timetable, $order, $context);
+        }
+
         $user = $context->user();
         abort_unless($user !== null && $context->allows(StaffingPermission::OfferView, Target::ownedBy((string) $user->getKey())), 403);
 
@@ -85,7 +231,7 @@ new #[Title('Oferta del departamento')] class extends Component
         $teacher = Teacher::query()->where('user_id', $user->getKey())->where('is_active', true)->first();
 
         if ($term === null || $teacher === null) {
-            return ['term' => $term, 'teacher' => $teacher, 'offer' => null, 'departments' => [], 'current' => null, 'groups' => [], 'visible' => [], 'semesters' => [], 'counts' => [], 'mine' => 0, 'published' => [], 'selected' => null, 'clashes' => []];
+            return ['selection' => null, 'term' => $term, 'teacher' => $teacher, 'offer' => null, 'departments' => [], 'current' => null, 'groups' => [], 'visible' => [], 'semesters' => [], 'counts' => [], 'mine' => 0, 'published' => [], 'selected' => null, 'clashes' => []];
         }
 
         $offer = $query->forTeacher($teacher, $term);
@@ -106,6 +252,7 @@ new #[Title('Oferta del departamento')] class extends Component
         $selected = $this->groupId === null ? null : collect($all)->firstWhere('id', $this->groupId);
 
         return [
+            'selection' => null,
             'term' => $term,
             'teacher' => $teacher,
             'offer' => $offer,
@@ -120,6 +267,169 @@ new #[Title('Oferta del departamento')] class extends Component
             'selected' => $selected,
             'clashes' => $selected !== null && in_array(RankingMark::Clash, $selected['marks'], true) ? $query->clashesWith($teacher, $term, $selected['id']) : [],
         ];
+    }
+
+    /**
+     * La selección que ve el usuario (SelectionPolicy::view), o null: la de `?seleccion=` si la ve; si no, de las que se
+     * muestran (SelectionTimetableQuery::onScreen: las vivas y la última terminada de su periodo de carga, decisión 8)
+     * primero una donde está en la cola y, con varias, la del departamento de `?depto=` o la primera. Las vivas van antes
+     * que las terminadas.
+     */
+    private function selection(Actor $context, SelectionTimetableQuery $timetable): ?Selection
+    {
+        if ($this->selectionResolved) {
+            return $this->selectionMemo;
+        }
+
+        $this->selectionResolved = true;
+        $user = $context->user();
+
+        if ($user === null) {
+            return null;
+        }
+
+        $visible = $timetable->onScreen($context->loadTerm())->filter(fn (Selection $selection): bool => Gate::allows('view', $selection))->values();
+        $explicit = $this->selectionKey === '' ? null : $timetable->shownSelection($this->selectionKey);
+        $explicit = $explicit !== null && Gate::allows('view', $explicit) ? $explicit : null;
+
+        if ($explicit !== null) {
+            $visible = $visible->reject(fn (Selection $selection): bool => $selection->is($explicit))->prepend($explicit)->values();
+        }
+
+        $this->teacherMemo = $visible->isEmpty() ? null : $timetable->activeTeacherOf($user);
+        $entries = $this->teacherMemo === null ? collect() : $timetable->entriesOf($visible, $this->teacherMemo);
+        [$own, $others] = $visible->partition(fn (Selection $selection): bool => $entries->has($selection->getKey()));
+        $pool = $own->merge($others);
+        $this->selectionMemo = $explicit
+            ?? $pool->first(fn (Selection $selection): bool => $selection->department?->code === $this->department)
+            ?? $pool->first();
+        $this->entryMemo = $this->selectionMemo === null ? null : $entries->get($this->selectionMemo->getKey());
+
+        return $this->selectionMemo;
+    }
+
+    /**
+     * Lo que pinta el horario de selección.
+     *
+     * @return array<string, mixed>
+     */
+    private function selectionView(Selection $selection, SelectionTimetableQuery $timetable, SelectionOrderQuery $order, Actor $context): array
+    {
+        $now = CarbonImmutable::now();
+        // Ya terminada, quien la ve como jefatura (el jefe o el JPD que también está en la cola) la ve como jefatura y no
+        // como «Solo consulta» (decisión 8): su renglón ya no le deja elegir nada.
+        $managing = $selection->status === SelectionStatus::Finished
+            && $context->allows(StaffingPermission::SelectionView, Target::of(modality: $selection->modality_id, unit: $selection->department_id));
+        $entry = $managing ? null : $this->entryMemo;
+        $teacher = $entry === null ? null : $this->teacherMemo;
+        $data = $timetable->forTeacher($selection, $teacher, $now, $entry);
+        $assignable = [];
+        $canAssign = function (array $card) use (&$assignable): bool {
+            $key = "{$card['modality_id']}|{$card['campus_id']}|{$card['department_id']}";
+
+            return $assignable[$key] ??= Gate::allows('create', [GroupTeacherAssignment::class, new Group(['modality_id' => $card['modality_id'], 'campus_id' => $card['campus_id'], 'department_id' => $card['department_id']])]);
+        };
+
+        $needle = self::fold($this->search);
+        $matches = fn (array $card): bool => $needle === '' || str_contains(self::fold("{$card['subject_name']} {$card['subject_code']} {$card['group_code']}"), $needle);
+        $filters = [
+            'todos' => fn (array $card): bool => true,
+            'libres' => fn (array $card): bool => $card['teacher'] === null,
+            'mios' => fn (array $card): bool => $card['mine'],
+        ];
+        $strips = array_map(fn (array $strip): array => $strip + [
+            'visible' => array_values(array_filter($strip['groups'], fn (array $card): bool => $matches($card) && $filters[$this->picks]($card))),
+        ], SelectionTimetableQuery::strips($data));
+        $all = collect($strips)->flatMap(fn (array $strip): array => $strip['groups'])->filter($matches)->unique('group_id');
+        $strips = array_map(fn (array $strip): array => ['visible' => array_map(fn (array $card): array => $card + ['can_assign' => $canAssign($card)], $strip['visible'])] + $strip, $strips);
+        $turn = $data['turn'];
+
+        return [
+            'selection' => $selection,
+            'teacher' => $teacher,
+            'data' => $data,
+            'strips' => $strips,
+            'pickCounts' => array_map(fn (Closure $filter): int => $all->filter($filter)->count(), $filters),
+            'shown' => array_sum(array_map(fn (array $strip): int => count($strip['visible']), $strips)),
+            'assigns' => collect($strips)->flatMap(fn (array $strip): array => $strip['visible'])->contains('can_assign', true),
+            'bar' => $this->turnBar($selection, $entry !== null, $turn, $data, $now),
+            'band' => $entry === null ? null : LoadBand::classify($data['my_hours'], $data['base_hours']),
+            'order' => $this->showOrder ? $order->forSelection($selection, $now) : [],
+        ];
+    }
+
+    /**
+     * Lo que dice la barra del turno, ya con sus horas en texto. `kind`: `finished` (la selección terminó: solo consulta
+     * para el docente; la jefatura asigna o quita lo que quedó sin resolver), `mine` (su turno), `other` (el de otro),
+     * `published` (aún no empieza), `idle` (en curso sin nadie en turno), `done` (ya terminó), `extra` (cerró con menos
+     * y espera la ronda extra) o `manager` (la jefatura sin renglón en la cola).
+     *
+     * @param  array<string, mixed>  $turn
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function turnBar(Selection $selection, bool $inQueue, array $turn, array $data, CarbonImmutable $now): array
+    {
+        $at = fn (?string $iso): ?CarbonImmutable => $iso === null ? null : CarbonImmutable::parse($iso)->setTimezone(config('app.timezone'));
+        $extra = $selection->status === SelectionStatus::ExtraRound;
+        $mySlot = $at($extra ? $turn['my_extra_slot'] : $turn['my_slot']);
+        $mySlotEnds = $at($turn['my_slot_ends']);
+        $endsAt = $at($turn['ends_at']);
+        $left = $endsAt === null ? null : max(0, (int) ceil($now->diffInSeconds($endsAt, false)));
+
+        $kind = match (true) {
+            $selection->status === SelectionStatus::Finished => 'finished',
+            ! $inQueue => 'manager',
+            $turn['is_mine'] => 'mine',
+            $turn['entry_status'] === SelectionEntryStatus::Done->value || $turn['entry_status'] === SelectionEntryStatus::Unresolved->value => 'done',
+            $turn['entry_status'] === SelectionEntryStatus::PendingExtra->value && ! $extra => 'extra',
+            $selection->status === SelectionStatus::Published => 'published',
+            $turn['current'] !== null => 'other',
+            default => 'idle',
+        };
+
+        return [
+            'kind' => $kind,
+            'current' => $turn['current'],
+            'until' => $endsAt?->format('G:i'),
+            'ends_at' => $turn['ends_at'],
+            'ends_ms' => $endsAt?->getTimestampMs(),
+            'now_ms' => $now->getTimestampMs(),
+            'left' => $left === null ? null : intdiv($left, 60).':'.str_pad((string) ($left % 60), 2, '0', STR_PAD_LEFT),
+            'mine_day' => $mySlot === null ? null : $mySlot->isoFormat('dddd D'),
+            'mine_time' => $mySlot === null ? null : $mySlot->format('G:i').($mySlotEnds === null ? '' : '–'.$mySlotEnds->format('G:i')),
+            'mine_in' => $mySlot === null || $mySlot->lessThanOrEqualTo($now) ? null : self::minutesFrom($now, $mySlot),
+            'starts' => $selection->starts_at?->setTimezone(config('app.timezone')),
+            'published' => $selection->published_at?->setTimezone(config('app.timezone')),
+            'next' => $turn['next'] === null ? null : ['name' => $turn['next']['name'], 'at' => $at($turn['next']['at'])],
+            'position' => $turn['position'],
+            'current_position' => $turn['current_position'],
+            'total' => $turn['total'],
+            'done' => $turn['done'],
+            'unresolved' => $turn['unresolved'],
+            'in_queue' => $inQueue,
+            'confirmable' => $selection->status === SelectionStatus::Finished && $turn['entry_status'] === SelectionEntryStatus::Unresolved->value,
+            'extra' => $extra,
+        ];
+    }
+
+    /**
+     * Cuánto falta para su turno, como se dice: hoy, «en 43 min» o «en 2 h 10 min»; el día siguiente, «mañana» (la hora
+     * va justo arriba); después, «en 3 días», por días de calendario.
+     */
+    private static function minutesFrom(CarbonImmutable $now, CarbonImmutable $then): string
+    {
+        $days = (int) round($now->startOfDay()->diffInDays($then->setTimezone($now->getTimezone())->startOfDay()));
+
+        if ($days >= 1) {
+            return $days === 1 ? 'mañana' : "en {$days} días";
+        }
+
+        $minutes = (int) ceil($now->diffInSeconds($then) / 60);
+
+        return $minutes < 60
+            ? "en {$minutes} min"
+            : 'en '.intdiv($minutes, 60).' h'.($minutes % 60 === 0 ? '' : ' '.($minutes % 60).' min');
     }
 
     /**

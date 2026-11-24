@@ -103,6 +103,7 @@ function dimensionTables(): array
         'staffing.teacher' => 'group_teacher_assignments',
         'staffing.teacher_load' => 'teacher_term_loads',
         'staffing.change_request' => 'change_requests',
+        'staffing.selection' => 'staffing_selections',
         'solver.department_run' => 'solver_runs',
         'solver.career_run' => 'solver_runs',
     ];

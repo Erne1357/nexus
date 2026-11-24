@@ -160,7 +160,7 @@ final class AcademicLoadVisibility
             'core',
             'Módulos',
             label: 'Mostrar la carga académica',
-            help: 'Apagado, la carga académica (propuesta, demanda, horarios y choques, acuerdos, asignación docente, carga por docente, solicitudes de cambio, corridas del motor, cierre, publicación, sin «Mi carga» ni «Oferta», que siempre se ven) sale del menú y sus pantallas no abren, ni la consulta pública de horarios, para nadie más que el admin. No se borra ni se detiene nada.',
+            help: 'Apagado, la carga académica (propuesta, demanda, horarios y choques, acuerdos, asignación docente, carga por docente, solicitudes de cambio, corridas del motor, cierre, publicación, sin «Mi carga», «Oferta» ni el horario de la orden de selección, que siempre se ven) sale del menú y sus pantallas no abren, ni la consulta pública de horarios, para nadie más que el admin. No se borra ni se detiene nada.',
             type: SettingType::Boolean,
             default: self::DEFAULT_VISIBLE,
             permission: CorePermission::AcademicLoadToggle,

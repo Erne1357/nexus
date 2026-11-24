@@ -27,6 +27,7 @@ use App\Modules\Core\Settings\SettingType;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Staffing\Notifications\ChangeAlternativeMovesCareerGroup;
 use App\Modules\Staffing\Notifications\ChangeRequestMovedTeacherGroups;
+use App\Modules\Staffing\Notifications\SelectionNotice;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -351,7 +352,8 @@ describe('MN-05: las rutas', function () {
     it('la lista nombra rutas que existen y cubre las del área Carga académica y todas las de sus módulos; ninguna otra área lleva a ellas', function () {
         $items = collect(app(Navigation::class)->items());
         $routesOf = fn (NavigationItem $item): array => [$item->route, ...$item->childRoutes];
-        $alwaysVisible = ['staffing.my-load', 'staffing.offer'];
+        // La orden de selección corre aunque la carga esté oculta, 1.33.
+        $alwaysVisible = ['staffing.my-load', 'staffing.offer', 'staffing.selection.admin'];
         $inArea = $items->filter(fn (NavigationItem $item): bool => $item->area === NavigationArea::CargaAcademica)->flatMap($routesOf)->unique();
         $elsewhere = $items->reject(fn (NavigationItem $item): bool => $item->area === NavigationArea::CargaAcademica)->flatMap($routesOf)->unique();
         $ofLoadModules = collect(array_keys(Route::getRoutes()->getRoutesByName()))
@@ -565,8 +567,9 @@ describe('MN-05: la campana', function () {
             foreach (glob(app_path("Modules/{$module}/Notifications/*.php")) as $file) {
                 $class = "App\\Modules\\{$module}\\Notifications\\".basename($file, '.php');
 
-                // El aviso al docente lleva a «Mi carga», que siempre se ve: no es de la carga que se oculta.
-                if (method_exists($class, 'toMail') && ! is_subclass_of($class, AcademicLoadNotice::class) && $class !== ChangeRequestMovedTeacherGroups::class) {
+                // El aviso al docente lleva a «Mi carga», que siempre se ve: no es de la carga que se oculta. Los de la orden de
+                // selección (SelectionNotice) llevan a «Oferta», que tampoco se oculta (SelectionNoticesTest lo revisa).
+                if (method_exists($class, 'toMail') && ! is_subclass_of($class, AcademicLoadNotice::class) && $class !== ChangeRequestMovedTeacherGroups::class && ! is_subclass_of($class, SelectionNotice::class)) {
                     $unmarked[] = $class;
                 }
             }

@@ -119,6 +119,8 @@ final class MigrationSafetyScanner
             $sql = implode(' ', array_map(fn (String_ $s) => $s->value, (new NodeFinder)->findInstanceOf($call->args, String_::class)));
             $encapsed = (new NodeFinder)->findInstanceOf($call->args, Node\InterpolatedStringPart::class);
             $sql .= ' '.implode(' ', array_map(fn (Node\InterpolatedStringPart $p) => $p->value, $encapsed));
+            /** Quitar el NOT NULL relaja la columna: el release anterior sigue escribiendo el valor, así que es expansión (ADR-0033). */
+            $sql = (string) preg_replace('/\bDROP\s+NOT\s+NULL\b/i', '', $sql);
 
             foreach (self::RAW_SQL_PATTERNS as $pattern => $label) {
                 if (preg_match($pattern, $sql) === 1) {

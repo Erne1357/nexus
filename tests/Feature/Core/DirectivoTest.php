@@ -129,6 +129,7 @@ function directivoFactoryReads(): array
         'solver.department_run.view',
         'staffing.change_request.view',
         'staffing.ranking.view',
+        'staffing.selection.view',
         'staffing.teacher_load.view',
         'students.student.view',
     ];
@@ -298,6 +299,7 @@ describe('R-V2-4: nada que escriba', function () {
             'staffing.my_load.view',
             'staffing.offer.view',
             'staffing.ranking.view',
+            'staffing.selection.view',
             'staffing.teacher_load.view',
             'students.my_record.view',
             'students.student.view',
