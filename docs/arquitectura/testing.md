@@ -91,6 +91,20 @@ La base es ancha en unit: las reglas de negocio son lo que más cambia y lo más
 - **Ids de registros que la prueba no crea:** `fakeKey(10)` (`tests/Pest.php`) da un uuid fijo y válido. Lo usan los departamentos y carreras de los alcances mientras Academic no tenga sus tablas; un id que no es uuid lo rechaza PostgreSQL ([ADR-0014](../decisiones/0014-uuidv7-como-llave-primaria.md)).
 - **Nunca datos personales reales en el repositorio.** Las exportaciones reales viven solo en el servidor de pruebas y en las máquinas del equipo, fuera de `git`.
 
+## Migraciones sin caída
+
+Durante un despliegue conviven el código nuevo y el anterior sobre la misma base (blue/green, ADR-0033), así que toda migración nueva debe funcionar con el release anterior. `tests/Arch/MigrationSafetyTest.php` lo revisa con `Tests\Support\MigrationSafetyScanner`, que analiza el método `up()` de cada migración que no esté en la línea base (`tests/Arch/migrations-baseline.txt`, las que ya existían al crear el riel de despliegue).
+
+Qué rechaza, sin la marca:
+
+- Columnas `NOT NULL` sin `default()` agregadas con `Schema::table` a una tabla existente (usa `nullable()` o `default()`; `Schema::create` queda libre).
+- `dropColumn`, `renameColumn`, `drop`, `dropIfExists`, `rename` y `->change()`.
+- SQL crudo (`DB::statement`, `DB::unprepared`) con `DROP`, `RENAME`, `ALTER … TYPE` o `SET NOT NULL`.
+
+Cómo marcar una contracción: pon `#[Contract('qué release dejó de usarlo')]` (`App\Modules\Core\Database\Contract`) en la clase, `return new #[Contract('…')] class extends Migration { … };`, y súbela en un release posterior al que dejó de usar lo que borra. Un rollback que cruce ese release exige restaurar el respaldo.
+
+Por qué: si la migración borra o vuelve obligatoria una columna antes de que el código viejo deje de usarla, el color que sigue atendiendo falla en pleno despliegue. La línea base no se amplía para saltar la guardia: una prueba verifica que no crece ni pierde entradas.
+
 ## Base de datos de pruebas
 
 Las pruebas corren contra **PostgreSQL** en la base `nexus_test` (creada por el script de inicialización de `docker/postgres/`), con `RefreshDatabase` para aislar cada test. Las pruebas unitarias no tocan base de datos.
@@ -256,7 +270,7 @@ Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su ram
 | Job | Contenido | Bloquea el merge |
 |---|---|---|
 | `lint` | Pint en modo verificación (`./vendor/bin/pint --test`) | Sí |
-| `tests` | Unit, feature y arquitectura contra PostgreSQL y Valkey, en tres shards (`tests 1/3`, `tests 2/3`, `tests 3/3`); el job `tests` los junta: reporte de cobertura por módulo y las 20 pruebas y los 10 archivos más lentos de los tres en su resumen (`--log-junit` y `.github/scripts/slowest-tests.py`, informativo) | Sí |
+| `tests` | Unit, feature y arquitectura contra PostgreSQL y Valkey, en cuatro shards (`tests 1/4`…`tests 4/4`); el job `tests` los junta: reporte de cobertura por módulo y las 20 pruebas y los 10 archivos más lentos de los cuatro en su resumen (`--log-junit` y `.github/scripts/slowest-tests.py`, informativo) | Sí |
 | `browser` | Browser tests de Pest 5 en el contenedor `dev` con Chromium, en tres shards (`browser 1/3`…); el job `browser` junta sus resultados | Sí |
 | `rendimiento` | Presupuestos de rendimiento (aún no existe) | No (informa; ver arriba) |
 
@@ -264,17 +278,26 @@ Los nombres `lint`, `tests` y `browser` son los checks requeridos de la protecci
 
 ### Shards
 
-Desde el 10 de noviembre de 2026, `tests` y `browser` corren cada uno en tres runners a la vez con `--shard=<n>/3` de Pest: cada shard toma un tercio de las clases de prueba de su suite. Las reparte por tiempo con `tests/.pest/shards.json`, que guarda cuánto tarda cada clase; una clase nueva que el archivo no trae se reparte por turno y Pest avisa «shards.json is out of date» en el log, sin fallar. Cada shard de `tests` sigue en paralelo dentro de su runner (`--parallel --processes=$(nproc)`). Un archivo de pruebas siempre corre entero en un proceso, así que el shard más lento nunca baja de lo que tarda su archivo más pesado: un archivo que pase de unos 2 minutos se parte en varios, como `AcademicDemoSeederTest`, que tardaba unos 10 y se partió en cinco (`AcademicDemo*Test`; `AcademicDemoMassiveTest` lleva sola la prueba más lenta de la suite), y el browser `PlanGridTest`, que tardaba unos 6 y se partió en tres (`PlanGrid*Test`, cada prueba siembra `DemoSeeder`).
+Desde el 10 de noviembre de 2026, `tests` y `browser` corren en runners a la vez con `--shard=<n>/<total>` de Pest (`tests` en cuatro desde el 24 de noviembre, `browser` en tres): cada shard toma su parte de las clases de prueba de su suite. Las reparte por tiempo con `tests/.pest/shards.json`, que guarda cuánto tarda cada clase; una clase nueva que el archivo no trae se reparte por turno y Pest avisa «shards.json is out of date» en el log, sin fallar. Cada shard de `tests` sigue en paralelo dentro de su runner (`--parallel --processes=$(nproc)`). Un archivo de pruebas siempre corre entero en un proceso, así que el shard más lento nunca baja de lo que tarda su archivo más pesado: un archivo que pase de unos 2 minutos se parte en varios, como `AcademicDemoSeederTest`, que tardaba unos 10 y se partió en cinco (`AcademicDemo*Test`; `AcademicDemoMassiveTest` lleva sola la prueba más lenta de la suite), `ChangeRequestsDemoSeederTest`, que tardaba unos 450 s y se partió en cuatro (`ChangeRequestsDemo*Test`, atajos en `tests/Support/Staffing/ChangeRequestsWorld.php`), y el browser `PlanGridTest`, que tardaba unos 6 y se partió en tres (`PlanGrid*Test`, cada prueba siembra `DemoSeeder`).
 
-Para medir los tiempos de nuevo (cuando el aviso aparece seguido o un shard tarda mucho más que los otros), lo mejor es tomarlos de una corrida verde del CI: cada shard de `tests` sube su JUnit, con el tiempo de cada prueba en el runner y con cobertura, que es lo que se reparte. Los de Browser se miden en local (sus shards no suben JUnit y sin cobertura la proporción local sí sirve):
+Para medir los tiempos de nuevo (cuando el aviso aparece seguido o un shard tarda mucho más que los otros), lo mejor es tomarlos de una corrida verde del CI: cada shard de `tests` sube su JUnit, con el tiempo de cada prueba en el runner y con cobertura, que es lo que se reparte. Los de Browser también: cada shard sube `browser-shard-<n>` (`junit-browser.xml`) desde el 24 de noviembre:
 
 ```bash
-gh run download <run-id> -p 'tests-shard-*' -D /tmp/ci-run
-docker compose exec -T -e DB_DATABASE=nexus_test_<x> -w /app/.worktrees/<rama> app ./vendor/bin/pest --testsuite=Browser --update-shards
-python3 .github/scripts/merge-shard-timings.py tests/.pest/shards.json tests/.pest/shards.json /tmp/ci-run/tests-shard-*/junit.xml
+gh run download <run-id> -p 'tests-shard-*' -p 'browser-shard-*' -D /tmp/ci-run
+python3 -I .github/scripts/merge-shard-timings.py tests/.pest/shards.json tests/.pest/shards.json /tmp/ci-run/tests-shard-*/junit.xml /tmp/ci-run/browser-shard-*/junit-browser.xml
 ```
 
 `merge-shard-timings.py` junta `shards.json` y JUnit (de un `.xml` toma la suma de las pruebas de cada clase; si una clase sale en varias entradas, queda la última). `--update-shards` reescribe el archivo solo con las clases de esa corrida; va con `./vendor/bin/pest`: `php artisan test` no siempre lo acepta (con `--filter` dice que la opción no existe), y en paralelo Pest recibe una sola ruta. Sin una corrida del CI, también se pueden medir Unit/Feature/Arch en local (`--testsuite=Unit,Feature,Arch --parallel --processes=6 --update-shards`, guardando el archivo antes de medir Browser), pero en el runner no guardan la proporción: con los tiempos locales, el primer reparto (#401) dejó un shard en 10 minutos y otro en 3.
+
+**Medición del 24 de noviembre de 2026 (tarea 1.31, PR #791).** Duración de cada job según `gh api repos/Erne1357/nexus/actions/runs/<id>/jobs` (`completed_at` menos `started_at`, con instalación de imagen y dependencias incluida). Antes, corrida 45141877658 y vecinas, con `shards.json` del 11 de noviembre (le faltaban 305 de 808 clases); después, corrida 45334081582, con los tiempos de los JUnit de las corridas del CI:
+
+| Job | Antes | Después |
+|---|---|---|
+| `tests` (shards) | 3 shards: 350-536 s y uno de 849-1423 s | 4 shards: 394, 445, 445 y 471 s (el más lento, 1.20 veces el más rápido) |
+| `browser` (shards) | 458-711 s | 437, 544 y 725 s (el 725 fue un golpe del runner: en las dos corridas anteriores ese shard tardó 477 y 480 s) |
+| `lint` | 295-479 s (Pint, 229 s en un proceso) | 200 s (Pint con `--parallel`; mismo resultado que sin la opción, 2614 archivos) |
+
+El reparto por tiempos no basta por sí solo: un proceso de pruebas que corre varias siembras del demo las encuentra cada vez más lentas (ver el pendiente de abajo), así que la suma de tiempos de un shard con muchas siembras sale el doble de lo medido en otro. Lo que funcionó fue volver a medir con un JUnit del CI (las clases pesadas quedan marcadas con su costo real y se separan), usar cuatro shards y partir `ChangeRequestsDemoSeederTest`. Con el reparto de 3 shards y los tiempos nuevos, el shard 3 tardó 1022 s; con 4 shards, 799 s por ese archivo (448 s) en el shard 1; partido el archivo, 806 s por la mala suerte de juntar tres siembras en el shard 3, y con los tiempos de esa corrida, 471 s.
 
 **Pendiente: las siembras del demo se vuelven más lentas en un proceso que ya corrió otras.** La prueba del seeder masivo (`AcademicDemoMassiveTest`) tarda unos 35 s sola en local, unos 225 s si corre después de `AcademicDemoReseedTest` en el mismo proceso y unos 500 s en el CI, después de otras clases. Algo se acumula entre pruebas (estado estático del proceso, o filas muertas en PostgreSQL tras cada rollback de `RefreshDatabase`). Averiguarlo bajaría el shard más lento del CI de unos 8 minutos de pruebas a 2 o 3.
 
