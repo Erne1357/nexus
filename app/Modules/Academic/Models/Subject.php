@@ -3,6 +3,7 @@
 namespace App\Modules\Academic\Models;
 
 use App\Modules\Academic\Database\Factories\SubjectFactory;
+use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Academic\Enums\SubjectKind;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * Materia global, con el departamento que la imparte. `code` es la clave natural. Su posición y su
  * seriación son de cada plan. `kind` puede venir vacío: la exportación del SII no lo trae.
  */
-#[Fillable(['code', 'name', 'department_id', 'theory_hours', 'practice_hours', 'credits', 'kind', 'needs_lab', 'is_active'])]
+#[Fillable(['code', 'name', 'department_id', 'theory_hours', 'practice_hours', 'credits', 'kind', 'needs_lab', 'required_space', 'is_active'])]
 #[UseFactory(SubjectFactory::class)]
 class Subject extends Model
 {
@@ -36,6 +37,7 @@ class Subject extends Model
             'credits' => 'integer',
             'kind' => SubjectKind::class,
             'needs_lab' => 'boolean',
+            'required_space' => RequiredSpace::class,
             'is_active' => 'boolean',
         ];
     }

@@ -7,6 +7,7 @@ use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\Academic\Enums\AcademicPermission;
 use App\Modules\Academic\Enums\PrerequisiteKind;
+use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
@@ -109,7 +110,7 @@ final class AcademicServiceProvider extends ModuleServiceProvider
     public function activityAttributes(): array
     {
         return [
-            Subject::class => ['kind' => ['Tipo de materia', SubjectKind::class], 'theory_hours' => 'Horas de teoría', 'practice_hours' => 'Horas de práctica', 'credits' => 'Créditos', 'needs_lab' => 'Requiere laboratorio'],
+            Subject::class => ['kind' => ['Tipo de materia', SubjectKind::class], 'theory_hours' => 'Horas de teoría', 'practice_hours' => 'Horas de práctica', 'credits' => 'Créditos', 'needs_lab' => 'Requiere laboratorio', 'required_space' => ['Tipo de espacio', RequiredSpace::class]],
             SubjectPrerequisite::class => ['kind' => ['Tipo de seriación', PrerequisiteKind::class]],
             StudyPlan::class => ['version' => 'Versión', 'semesters_count' => 'Semestres', 'total_credits' => 'Créditos totales', 'is_historical' => 'Histórico', 'valid_from' => 'Vigente desde'],
             StudyPlanSubject::class => ['is_required' => 'Obligatoria', 'position' => 'Posición'],
