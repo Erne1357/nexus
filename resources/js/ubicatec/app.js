@@ -288,7 +288,7 @@ function enablePick(o){const el=o?.eligible||[],rj=o?.rejected||{};
   if(S.selRoom&&!PK.el.has(S.selRoom))S.selRoom=null}
 function disablePick(){if(!PK.on)return;PK.on=false;HL.hover=HL.hoverRoom=HL.hoverSet=null;PK.el=new Set();PK.rej=new Map();PK.bEl=new Set();PK.bAll=new Set();rootEl.classList.remove('ut-pickmode');S.selRoom=null;tip.style.opacity=0}
 function pickTap({bid,sid}){
-  if(sid){const s=SP[sid];if(PK.el.has(sid)){S.selRoom=sid;window.dispatchEvent(new CustomEvent('room-picked',{detail:{key:SID2KEY[sid]}}))}else toast(PK.rej.has(sid)?`${s.name}: ${PK.rej.get(sid)}`:`${s.name} no está entre los salones disponibles`);return}
+  if(sid){const s=SP[sid];if(PK.el.has(sid)){S.selRoom=sid;{const n=performance.now();if(PK.last&&PK.last.sid===sid&&n-PK.last.t<300)return;PK.last={sid,t:n}}window.dispatchEvent(new CustomEvent('room-picked',{detail:{key:SID2KEY[sid]}}))}else toast(PK.rej.has(sid)?`${s.name}: ${PK.rej.get(sid)}`:`${s.name} no está entre los salones disponibles`);return}
   if(bid){if(!PK.bAll.has(bid)){toast(`${B[bid].name}: sin salones para elegir`);return}
     const fl=[...PK.el,...PK.rej.keys()].map(i=>SP[i]).filter(s=>s.building===bid).map(s=>s.floor).sort()[0]||1;openInterior(bid,fl)}}
 
