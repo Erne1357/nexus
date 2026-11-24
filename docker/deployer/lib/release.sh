@@ -106,7 +106,8 @@ prepare_release() {
 # descarga (`pull_policy: never`) y las imágenes de terceros usan la etiqueta local con que viajaron.
 write_release_compose() {
     local sha=$1 source=$2 dir="$RELEASES_DIR/$1" services
-    services=$(compose_base "$sha" config --format json | jq -c '.services | map_values(.image)') ||
+    # --profile '*': también los servicios con perfil (migrate, que corre con `run`).
+    services=$(compose_base "$sha" --profile '*' config --format json | jq -c '.services | map_values(.image)') ||
         die "$E_ENV" "docker compose config falló con el .env del servidor (¿falta una variable obligatoria?)"
     jq -n --argjson services "$services" --slurpfile manifest "$dir/manifest.json" --arg source "$source" '
         ($manifest[0]) as $m
