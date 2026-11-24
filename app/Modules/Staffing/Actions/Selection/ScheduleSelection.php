@@ -12,6 +12,8 @@ use Illuminate\Validation\ValidationException;
 /**
  * SEL-08. Guarda cuándo empieza la selección y su ventana diaria (hora de inicio y fin, días de la semana ISO) y
  * recalcula el turno de cada renglón y el fin de la primera ronda. Solo con la selección en borrador.
+ *
+ * Toma primero el candado de la selección (`staffing_selection:{id}`) porque recalcula el orden.
  */
 final class ScheduleSelection
 {
@@ -40,6 +42,8 @@ final class ScheduleSelection
         }
 
         return DB::transaction(function () use ($selection, $startsAt, $windowStarts, $windowEnds, $weekdays, $actor): Selection {
+            DB::select('select pg_advisory_xact_lock(hashtext(?))', ["staffing_selection:{$selection->getKey()}"]);
+
             $selection->setRawAttributes(Selection::query()->lockForUpdate()->findOrFail($selection->getKey())->getAttributes(), sync: true);
 
             if ($selection->status !== SelectionStatus::Draft) {

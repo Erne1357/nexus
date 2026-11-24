@@ -22,6 +22,9 @@ use Throwable;
  * los grupos de las cargas incluidas tenga revisado su tipo de espacio (`subjects.required_space` no nulo; confirmar un
  * aula guarda `aula`). En una transacción abre cada carga incluida a la asignación sin HC-14
  * (OpenLoadForSelection), deja la selección publicada y, ya confirmada, avisa a cada docente con cuenta su hora.
+ *
+ * Toma primero el candado de la selección (pg_advisory_xact_lock sobre `staffing_selection:{id}`), el mismo que usan
+ * los turnos de los docentes y el reloj, antes de cualquier bloqueo de fila.
  */
 final class PublishSelection
 {
@@ -33,6 +36,8 @@ final class PublishSelection
     public function handle(Selection $selection, User $actor): Selection
     {
         $published = DB::transaction(function () use ($selection, $actor): Selection {
+            DB::select('select pg_advisory_xact_lock(hashtext(?))', ["staffing_selection:{$selection->getKey()}"]);
+
             $selection->setRawAttributes(Selection::query()->lockForUpdate()->findOrFail($selection->getKey())->getAttributes(), sync: true);
 
             $this->guard($selection);

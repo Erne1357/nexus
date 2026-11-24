@@ -15,6 +15,8 @@ use Illuminate\Validation\ValidationException;
  * SEL-06. Resuelve a mano un renglón del CSV sin docente: lo empata con el docente dado o, con null, lo descarta de la
  * cola. Si el docente ya estaba agregado al final por no venir en el CSV, ese renglón se quita (ahora tiene sus
  * criterios); si ya tiene un renglón del CSV, se rechaza. Solo con la selección en borrador.
+ *
+ * Toma primero el candado de la selección (`staffing_selection:{id}`) porque recalcula el orden.
  */
 final class ResolveSelectionEntry
 {
@@ -24,6 +26,8 @@ final class ResolveSelectionEntry
     public function handle(SelectionEntry $entry, ?Teacher $teacher, User $actor): void
     {
         DB::transaction(function () use ($entry, $teacher, $actor): void {
+            DB::select('select pg_advisory_xact_lock(hashtext(?))', ["staffing_selection:{$entry->selection_id}"]);
+
             $selection = Selection::query()->lockForUpdate()->findOrFail($entry->selection_id);
 
             if ($selection->status !== SelectionStatus::Draft) {

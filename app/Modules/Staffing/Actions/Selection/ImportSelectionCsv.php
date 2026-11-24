@@ -19,6 +19,8 @@ use Illuminate\Validation\ValidationException;
  * departamento que el CSV no trae y recalcula el orden y los turnos. Un nombre sin empate, o dos renglones que empatan
  * con el mismo docente, quedan sin docente (`unresolved`) y bloquean publicar hasta resolverlos a mano. Un CSV sin
  * renglones válidos no toca la cola y devuelve sus errores.
+ *
+ * Toma primero el candado de la selección (`staffing_selection:{id}`) porque recalcula el orden.
  */
 final class ImportSelectionCsv
 {
@@ -36,6 +38,8 @@ final class ImportSelectionCsv
         }
 
         return DB::transaction(function () use ($selection, $parsed, $actor): array {
+            DB::select('select pg_advisory_xact_lock(hashtext(?))', ["staffing_selection:{$selection->getKey()}"]);
+
             $selection->setRawAttributes(Selection::query()->lockForUpdate()->findOrFail($selection->getKey())->getAttributes(), sync: true);
 
             if ($selection->status !== SelectionStatus::Draft) {

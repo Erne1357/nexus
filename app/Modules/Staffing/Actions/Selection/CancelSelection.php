@@ -11,6 +11,9 @@ use Illuminate\Validation\ValidationException;
 /**
  * Cancela una selección antes de su primera hora (diseño 6.2). Las cargas que la publicación ya pasó a asignación se
  * quedan como están: el jefe sigue asignando a mano. No se borra nada.
+ *
+ * Toma primero el candado de la selección (pg_advisory_xact_lock sobre `staffing_selection:{id}`), el mismo que usan
+ * los turnos de los docentes y el reloj, antes de cualquier bloqueo de fila.
  */
 final class CancelSelection
 {
@@ -20,6 +23,8 @@ final class CancelSelection
     public function handle(Selection $selection, User $actor): void
     {
         DB::transaction(function () use ($selection, $actor): void {
+            DB::select('select pg_advisory_xact_lock(hashtext(?))', ["staffing_selection:{$selection->getKey()}"]);
+
             $selection->setRawAttributes(Selection::query()->lockForUpdate()->findOrFail($selection->getKey())->getAttributes(), sync: true);
 
             if (! in_array($selection->status, [SelectionStatus::Draft, SelectionStatus::Published], true)) {
