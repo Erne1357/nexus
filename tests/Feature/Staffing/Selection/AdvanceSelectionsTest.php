@@ -131,6 +131,7 @@ it('SEL-09: arma la ronda extra al menos 30 minutos después con los pendientes 
     $rows[2]->update(['slot_index' => 1, 'slot_starts_at' => $rows[1]->slot_starts_at, 'slot_ends_at' => $rows[1]->slot_ends_at]);
     $selection->update(['first_round_ends_at' => clockAt('10:00')]);
     $rows[0]->update(['status' => SelectionEntryStatus::Done, 'closed_at' => clockAt('09:10')]);
+    $rows0 = $rows[0];
     $extra = SelectionEntry::factory()->for($selection)->create([
         'teacher_id' => Teacher::factory()->create(['user_id' => User::factory()->withRole(Role::Docente)->create()->id])->id,
         'position' => 3, 'slot_index' => 2,
@@ -155,7 +156,9 @@ it('SEL-09: arma la ronda extra al menos 30 minutos después con los pendientes 
 
     Notification::assertSentTo($rows[0]->teacher->user, SelectionExtraRoundScheduled::class);
     Notification::assertSentTo($extra->teacher->user, SelectionExtraRoundScheduled::class);
-    Notification::assertNotSentTo(SelectionEntry::query()->find(SelectionEntry::query()->where('status', 'done')->value('id'))->teacher->user, SelectionExtraRoundScheduled::class);
+    $done = $rows0->fresh();
+    expect($done->status)->toBe(SelectionEntryStatus::Done)->and($done->extra_slot_starts_at)->toBeNull();
+    Notification::assertNotSentTo($done->teacher->user, SelectionExtraRoundScheduled::class);
 
     // Idempotente: otra corrida no rearma ni reenvía.
     $before = $selection->fresh();

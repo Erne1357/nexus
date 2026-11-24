@@ -66,6 +66,9 @@ final class AdvanceSelections
      */
     private function advance(string $id, CarbonImmutable $now): array
     {
+        // Mismo candado que PickSelectionGroup y el cierre de carga: primero el de la selección, luego su fila y sus renglones.
+        DB::select('select pg_advisory_xact_lock(hashtext(?))', [$id]);
+
         $selection = Selection::query()->whereKey($id)->lockForUpdate()->first();
         $result = ['advanced' => 0, 'notices' => 0];
 
@@ -97,7 +100,7 @@ final class AdvanceSelections
             $end = $selection->first_round_ends_at ?? ($selection->entries()->max('slot_ends_at') === null ? null : CarbonImmutable::parse($selection->entries()->max('slot_ends_at')));
 
             if ($end !== null && $end <= $now) {
-                $result = $this->add($result, ...$this->closeFirstRound($selection, $end));
+                $result = $this->add($result, ...$this->closeFirstRound($selection, $end, $now));
             }
         }
 
@@ -155,7 +158,7 @@ final class AdvanceSelections
      *
      * @return array{0: int, 1: int}
      */
-    private function closeFirstRound(Selection $selection, CarbonImmutable $firstRoundEnd): array
+    private function closeFirstRound(Selection $selection, CarbonImmutable $firstRoundEnd, CarbonImmutable $now): array
     {
         $pending = $selection->entries()
             ->with('teacher.user')
@@ -164,7 +167,7 @@ final class AdvanceSelections
             ->get();
 
         if ($pending->isEmpty()) {
-            $selection->update(['status' => SelectionStatus::Finished, 'finished_at' => CarbonImmutable::now()]);
+            $selection->update(['status' => SelectionStatus::Finished, 'finished_at' => $now]);
 
             return [1, 0];
         }
@@ -178,12 +181,11 @@ final class AdvanceSelections
             $selection->slot_minutes,
             $groups->count(),
         );
-        $now = CarbonImmutable::now();
         $notices = 0;
 
         foreach ($groups as $i => $group) {
             foreach ($group as $entry) {
-                $entry->update([
+                $changed = $selection->entries()->whereKey($entry->getKey())->where('status', SelectionEntryStatus::PendingExtra)->update([
                     'extra_slot_starts_at' => $slots[$i]['starts_at'],
                     'extra_slot_ends_at' => $slots[$i]['ends_at'],
                     'notified_soon_at' => null,
@@ -191,7 +193,7 @@ final class AdvanceSelections
                     'notified_extra_at' => $now,
                 ]);
 
-                if ($entry->teacher?->user !== null) {
+                if ($changed > 0 && $entry->teacher?->user !== null) {
                     $this->notifyTeacher($entry->teacher->user, new SelectionExtraRoundScheduled($selection->term_id, $selection->modality_id, $slots[$i]['starts_at']));
                     $notices++;
                 }
