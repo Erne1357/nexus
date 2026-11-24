@@ -41,6 +41,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
 use App\Modules\Scheduling\Queries\PendingPlacements;
 use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
+use App\Modules\Staffing\Console\AdvanceSelectionsCommand;
 use App\Modules\Staffing\Console\RankTerm;
 use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
 use App\Modules\Staffing\Database\Seeders\ChangeRequestsDemoSeeder;
@@ -123,7 +124,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         }
 
         if ($this->app->runningInConsole()) {
-            $this->commands([RankTerm::class, RefreshTeacherLoadsCommand::class]);
+            $this->commands([RankTerm::class, RefreshTeacherLoadsCommand::class, AdvanceSelectionsCommand::class]);
         }
 
         Event::listen(LoadTransitioning::class, BlockClosingWithPendingChangeRequests::class);
