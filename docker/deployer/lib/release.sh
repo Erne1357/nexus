@@ -49,6 +49,31 @@ release_from_bundle() {
     printf '%s\n' "$sha"
 }
 
+# Con internet (DEPLOY_SOURCE=github): el release sale del payload de un Deployment de GitHub
+# ({"sha", "images": {"app", "solver", "deployer"}}, cada una por digest) y la infraestructura del tarball de ese
+# SHA en codeload (repo público; respeta HTTPS_PROXY). Imprime el SHA.
+release_from_github() {
+    local payload=$1 sha work ref
+    sha=$(jq -er '.sha' "$payload") || die "$E_BUNDLE" "el Deployment no trae el sha del release"
+    work=$(mktemp -d "$RELEASES_DIR/.incoming.XXXXXX")
+    for ref in $(jq -r '.images[]' "$payload"); do
+        docker image inspect "$ref" >/dev/null 2>&1 || docker pull -q "$ref" >/dev/null ||
+            { rm -rf -- "$work"; die "$E_BUNDLE" "no se pudo descargar $ref"; }
+    done
+    mkdir -p "$work/tree"
+    curl -fsSL "${DEPLOY_GITHUB_CODELOAD:-https://codeload.github.com}/${DEPLOY_REPOSITORY:-Erne1357/nexus}/tar.gz/$sha" |
+        tar -xz -C "$work/tree" --strip-components=1 --wildcards \
+            '*/compose.yaml' '*/compose.prod.yaml' '*/.env.production.example' '*/docker/*' ||
+        { rm -rf -- "$work"; die "$E_BUNDLE" "no se pudo descargar la infraestructura de $(short "$sha")"; }
+    tar -cf "$work/infra.tar" -C "$work/tree" compose.yaml compose.prod.yaml docker .env.production.example
+    jq --arg created "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+        '{sha, created_at: $created, images: (.images | map_values({ref: .})), third_party: []}' \
+        "$payload" >"$work/manifest.json"
+    materialize_release "$sha" "$work/infra.tar" "$work/manifest.json" github
+    rm -rf -- "$work"
+    printf '%s\n' "$sha"
+}
+
 load_image() {
     case "$1" in
         *.zst) zstd -dcq "$1" | docker load -q >/dev/null ;;

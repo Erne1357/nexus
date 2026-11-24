@@ -26,6 +26,7 @@ Uso: nexus-deploy <comando>
 
   deploy --bundle <paquete.tar> [--force]   despliega un paquete (verifica su .sha256)
   deploy --sha <sha> [--force]              vuelve a desplegar un release que ya está en el servidor
+  deploy --github-payload <archivo.json>    despliega el payload de un Deployment de GitHub (lo usa el agente)
   rollback [<sha>|previous] [--restore --yes]
                                             vuelve a un release anterior; --restore restaura el respaldo previo
                                             cuando hay contracciones de por medio (se pierde lo escrito después)
@@ -41,16 +42,17 @@ EOF
 }
 
 cmd_deploy() {
-    local bundle="" sha="" force=0
+    local bundle="" sha="" payload="" force=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --bundle) bundle=${2:?falta el paquete}; shift 2 ;;
             --sha) sha=${2:?falta el sha}; shift 2 ;;
+            --github-payload) payload=${2:?falta el archivo}; shift 2 ;;
             --force) force=1; shift ;;
             *) usage; exit "$E_USAGE" ;;
         esac
     done
-    [ -n "$bundle$sha" ] || { usage; exit "$E_USAGE"; }
+    [ -n "$bundle$sha$payload" ] || { usage; exit "$E_USAGE"; }
     state_init
     take_lock
     if is_paused && [ "$force" != 1 ]; then
@@ -58,6 +60,8 @@ cmd_deploy() {
     fi
     if [ -n "$bundle" ]; then
         sha=$(release_from_bundle "$bundle")
+    elif [ -n "$payload" ]; then
+        sha=$(release_from_github "$payload")
     else
         sha=$(resolve_sha "$sha")
     fi

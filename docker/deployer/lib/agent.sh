@@ -86,7 +86,68 @@ agent_run() {
     return 0
 }
 
-# DEPLOY_SOURCE=github: tarea 1.31 (#790).
+# DEPLOY_SOURCE=github (con salida a internet): los Deployments del ambiente `production` que crea deploy.yml. Toma
+# el más nuevo que siga en cola, marca como inactivos los anteriores que nadie atendió y publica el resultado.
+github_api() {
+    local method=$1 path=$2
+    shift 2
+    curl -fsS -X "$method" --max-time 30 \
+        -H "Authorization: Bearer $DEPLOY_GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
+        "${DEPLOY_GITHUB_API:-https://api.github.com}$path" "$@"
+}
+
+github_status() {
+    local id=$1 state=$2 description=${3:-}
+    jq -n --arg state "$state" --arg description "${description:0:140}" \
+        --arg url "https://${APP_DOMAIN:-localhost}" \
+        '{state: $state, description: $description, environment: "production"}
+         + (if $state == "success" then {environment_url: $url} else {} end)' |
+        github_api POST "/repos/$GITHUB_REPOSITORY_PATH/deployments/$id/statuses" --data-binary @- >/dev/null
+}
+
 agent_tick_github() {
-    die "$E_USAGE" "DEPLOY_SOURCE=github todavía no está disponible en esta versión del deployer"
+    local deployments id state candidate="" payload code=0 log_file action
+    [ -n "${DEPLOY_GITHUB_TOKEN:-}" ] || die "$E_USAGE" "Falta DEPLOY_GITHUB_TOKEN para DEPLOY_SOURCE=github"
+    GITHUB_REPOSITORY_PATH=${DEPLOY_REPOSITORY:-Erne1357/nexus}
+
+    deployments=$(github_api GET "/repos/$GITHUB_REPOSITORY_PATH/deployments?environment=production&per_page=10")
+    for id in $(jq -r '.[].id' <<<"$deployments"); do
+        state=$(github_api GET "/repos/$GITHUB_REPOSITORY_PATH/deployments/$id/statuses?per_page=1" | jq -r '.[0].state // "pending"')
+        case "$state" in
+            queued | pending)
+                if [ -z "$candidate" ]; then
+                    candidate=$id
+                else
+                    log "el Deployment $id quedó atrás de uno más nuevo: inactivo"
+                    github_status "$id" inactive "Reemplazado por un despliegue más nuevo."
+                fi
+                ;;
+        esac
+    done
+    [ -n "$candidate" ] || return 0
+
+    payload=$(mktemp)
+    jq --argjson id "$candidate" '.[] | select(.id == $id) | .payload' <<<"$deployments" >"$payload"
+    action=$(jq -r '.action // "deploy"' "$payload")
+    if [ "$action" = deploy ] && is_paused; then
+        rm -f "$payload"
+        return 0
+    fi
+
+    log "Deployment $candidate de GitHub: $action"
+    github_status "$candidate" in_progress "Desplegando en el servidor."
+    log_file=$(mktemp)
+    if [ "$action" = rollback ]; then
+        "$NEXUS_DEPLOY_BIN" rollback "$(jq -r '.target // "previous"' "$payload")" >"$log_file" 2>&1 || code=$?
+    else
+        "$NEXUS_DEPLOY_BIN" deploy --github-payload "$payload" >"$log_file" 2>&1 || code=$?
+    fi
+    cat "$log_file" >&2
+    if [ "$code" = 0 ]; then
+        github_status "$candidate" success "Listo: atiende $(short "$(state_get ACTIVE_SHA)")."
+    else
+        github_status "$candidate" failure "Código $code: $(grep -m1 'ERROR:' "$log_file" | sed 's/.*ERROR: //')"
+    fi
+    rm -f "$payload" "$log_file"
 }
