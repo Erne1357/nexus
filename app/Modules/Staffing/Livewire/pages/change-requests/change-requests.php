@@ -205,7 +205,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
     public function updatedModalidad(Actor $context, ChangeRequestsQuery $query): void
     {
         $modality = $this->requiredModality();
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
 
         if ($term === null || ! $query->departmentsFor($context, $term->id, $modality->getKey(), $this->campusFilter()?->getKey(), $this->campusesOf($modality)->modelKeys())->contains('code', $this->department)) {
             $this->department = '';
@@ -488,7 +488,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $this->resetStructuredProposal();
 
         if ($this->requestGroupId !== '' && $this->modalityId !== null) {
-            $group = $query->requestableGroup($context, (string) $context->activeTerm()?->id, $this->modalityId, $this->campusId, $this->requestGroupId);
+            $group = $query->requestableGroup($context, (string) $context->loadTerm()?->id, $this->modalityId, $this->campusId, $this->requestGroupId);
             $group === null || $this->prefillProposedSessions($group);
         }
     }
@@ -513,7 +513,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
         ]);
 
         abort_if($this->modalityId === null, 404);
-        $group = $query->requestableGroup($context, (string) $context->activeTerm()?->id, $this->modalityId, $this->campusId, $this->requestGroupId) ?? abort(404);
+        $group = $query->requestableGroup($context, (string) $context->loadTerm()?->id, $this->modalityId, $this->campusId, $this->requestGroupId) ?? abort(404);
         $this->authorize('create', [ChangeRequest::class, $group]);
 
         try {
@@ -540,7 +540,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
      */
     public function with(Actor $context, ChangeRequestsQuery $query, ChangeAlternativesQuery $alternatives): array
     {
-        $termId = (string) $context->activeTerm()?->id;
+        $termId = (string) $context->loadTerm()?->id;
         $modality = $this->modalityId === null ? null : $this->modalityOptions()->first(fn (Modality $option): bool => $option->getKey() === $this->modalityId);
         $campuses = $modality === null ? collect() : $this->campusesOf($modality);
         $canRequest = $this->canRequest($context) && $modality !== null;
@@ -590,7 +590,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
             'alternatives' => $view,
             'approvedLines' => $chosen !== null ? $alternatives->approvedLines($selected, $chosen['option']) : [],
             ...$scope,
-            'termName' => $context->activeTerm()?->name,
+            'termName' => $context->loadTerm()?->name,
             ...$requesting,
         ];
     }
@@ -625,7 +625,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
      */
     private function canRequest(Actor $context): bool
     {
-        return $context->allowsAny(StaffingPermission::ChangeRequestRequest) && $context->activeTerm() !== null;
+        return $context->allowsAny(StaffingPermission::ChangeRequestRequest) && $context->loadTerm() !== null;
     }
 
     /**
@@ -660,7 +660,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $this->termId = $this->modalityId = $this->campusId = $this->departmentId = null;
         $this->departments = [];
 
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
 
         if ($this->requestId !== '' && $term !== null && blank($this->modalidad)) {
             $modalityId = $query->modalityIdOf($this->requestId, $term->id);

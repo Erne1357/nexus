@@ -22,6 +22,7 @@ use App\Modules\Core\Queries\NotificationQuery;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Students\Models\Student;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -36,8 +37,9 @@ use Spatie\Activitylog\Models\Activity;
 */
 
 beforeEach(function () {
+    $this->travelTo(CarbonImmutable::parse('2027-02-01 10:00', 'America/Ciudad_Juarez'));
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-05-28']);
     // Validación abierta y carga en curso (MN-03 y MN-04): así el menú depende solo del permiso de cada puesto.
     CatalogReview::factory()->for($term)->create();
     AcademicLoad::factory()->for($term)->create();

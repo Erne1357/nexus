@@ -5,6 +5,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use Carbon\CarbonImmutable;
 use Livewire\Livewire;
 
 /*
@@ -15,8 +16,9 @@ use Livewire\Livewire;
 */
 
 beforeEach(function () {
+    $this->travelTo(CarbonImmutable::parse('2027-02-01 10:00', 'America/Ciudad_Juarez'));
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
+    Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-05-28']);
 });
 
 describe('banda', function () {

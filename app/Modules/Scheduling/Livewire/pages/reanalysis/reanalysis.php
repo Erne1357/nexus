@@ -260,7 +260,7 @@ new #[Title('Re-análisis de la carga')] class extends Component
         $this->loadId = null;
         $this->loads = [];
         $this->showChanges = false;
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
 
         if ($term === null) {
             $this->message = 'No hay un periodo activo: elige uno en tu credencial.';

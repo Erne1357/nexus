@@ -681,7 +681,7 @@ new #[Title('Corridas del motor')] class extends Component
      */
     private function resolve(Actor $context, RunScreenQuery $screen, ?SolverRun $run): void
     {
-        $term = $run !== null ? KeyLookup::find(Term::query(), $run->term_id) : $context->activeTerm();
+        $term = $run !== null ? KeyLookup::find(Term::query(), $run->term_id) : $context->loadTerm();
         $modality = $this->requiredModality();
         $this->modalidad = $modality->code;
 

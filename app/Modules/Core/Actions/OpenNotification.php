@@ -5,6 +5,7 @@ namespace App\Modules\Core\Actions;
 use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\TermSlot;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -100,7 +101,7 @@ final class OpenNotification
         }
 
         if ($message->termId !== null || $modality !== null || $campus !== null) {
-            $term = $message->termId === null ? $this->context->activeTerm() : KeyLookup::find(Term::query(), $message->termId);
+            $term = $message->termId === null ? $this->context->loadTerm() : KeyLookup::find(Term::query(), $message->termId);
 
             if (! $term instanceof Term) {
                 return NotificationTarget::unavailable('El periodo de ese aviso ya no existe.');
@@ -139,13 +140,13 @@ final class OpenNotification
     }
 
     /**
-     * Deja la credencial en el periodo del aviso. El periodo actual se deja como el de omisión, igual que en el
-     * selector de la credencial. Si ya está ahí, no la toca (cambiarla olvida las últimas pantallas del menú).
+     * Deja el periodo de carga de la credencial en el periodo del aviso (los avisos son de la carga). El periodo vigente
+     * se deja como el de omisión, igual que en el selector de la credencial. Si ya está ahí, no la toca (cambiarla olvida las últimas pantallas del menú).
      */
     private function moveTerm(Term $term): void
     {
-        if (! $term->is($this->context->activeTerm())) {
-            $this->setActiveContext->handle($term->is_current ? null : $term);
+        if (! $term->is($this->context->loadTerm())) {
+            $this->setActiveContext->handle($term->is_current ? null : $term, TermSlot::Load);
         }
     }
 }

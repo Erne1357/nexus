@@ -250,10 +250,10 @@ describe('admin', function () {
         $this->get(route('academic.plans'))->assertOk();
         $queries = count(DB::getQueryLog());
 
-        // 9 medidas: constante con el número de planes (sesión, auth, carreras, página, conteo, relaciones,
+        // 10 medidas: constante con el número de planes (sesión, auth, carreras, página, conteo, relaciones,
         // cuántos planes tienen materias por validar, y el menú, si la carga académica está oculta, MN-05; las de cada
-        // plan van en la consulta de la página). La credencial ya no consulta campus (#415).
-        expect($queries)->toBe(9);
+        // plan van en la consulta de la página). La credencial ya no consulta campus (#415) y sí los dos periodos, el de consulta y el de carga (TP-04).
+        expect($queries)->toBe(10);
     });
 });
 
