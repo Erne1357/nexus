@@ -5,12 +5,13 @@ namespace App\Modules\Staffing\Actions;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
-use App\Modules\Scheduling\Actions\SetGroupTeacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
+use App\Modules\Scheduling\Validation\ValidationResult;
+use App\Modules\Scheduling\Validation\Violation;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
-use App\Modules\Staffing\Models\StaffingRanking;
+use App\Modules\Staffing\Queries\SelectionGroupsQuery;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -21,13 +22,23 @@ use Illuminate\Validation\ValidationException;
  * (confirmado el 7 de noviembre de 2026), el docente activo y que las reglas duras del docente pasen (HC-01, HC-08 y
  * HC-09 por ScheduleValidator::checkTeacher; el motivo no las salva, supuesto por confirmar). HC-16: si el docente no
  * ocupa el primer lugar del ranking del grupo, o no está en él, exige un motivo. Asignar al docente vigente no cambia
- * nada y devuelve su asignación (supuesto por confirmar). Si no, reemplaza la asignación vigente, cambia
- * `groups.teacher_id` con SetGroupTeacher, crea la nueva fila y deja bitácora con el lugar y el motivo. Quién puede lo
- * decide GroupTeacherAssignmentPolicy::create antes de llamarla.
+ * nada y devuelve su asignación (supuesto por confirmar). Si no, escribe con RecordTeacherAssignment: reemplaza la
+ * asignación vigente, cambia `groups.teacher_id` con SetGroupTeacher, crea la nueva fila y deja bitácora con el lugar y
+ * el motivo. Quién puede lo decide GroupTeacherAssignmentPolicy::create antes de llamarla.
+ *
+ * Con una selección viva (publicada, en curso o en ronda extra) que incluye la carga del grupo, el orden de selección
+ * reemplaza al ranking: HC-16 no se exige y HC-08 solo avisa (no veta); HC-01 y HC-09 siguen siendo duros (diseño 1.33,
+ * 6.7, supuesto por confirmar). Sin motivo, el historial guarda SELECTION_REASON: la base exige un motivo cuando el
+ * docente no es el primer lugar (`group_teacher_assignments_hc16_check`).
  */
 final class AssignTeacher
 {
-    public function __construct(private readonly SetGroupTeacher $setGroupTeacher) {}
+    public const string SELECTION_REASON = 'Asignación durante la orden de selección';
+
+    public function __construct(
+        private readonly RecordTeacherAssignment $record,
+        private readonly SelectionGroupsQuery $groups,
+    ) {}
 
     /**
      * @throws ValidationException
@@ -54,7 +65,12 @@ final class AssignTeacher
                 throw ValidationException::withMessages(['teacher' => 'El docente no está activo.']);
             }
 
-            [$position, $size] = $this->rankingPosition($group, $teacher);
+            [$position, $size] = $this->record->rankingPosition($group, $teacher);
+            $inSelection = $this->groups->liveSelectionFor($load) !== null;
+
+            if ($inSelection && $position !== 1) {
+                $reason ??= self::SELECTION_REASON;
+            }
 
             if ($position !== 1 && $reason === null) {
                 throw ValidationException::withMessages(['reason' => $position === null
@@ -66,42 +82,15 @@ final class AssignTeacher
             $validator->forget();
             $result = $validator->checkTeacher($group, $teacher);
 
+            if ($inSelection) {
+                $result = new ValidationResult(array_filter($result->violations(), fn (Violation $violation): bool => $violation->rule !== 'HC-08'));
+            }
+
             if ($result->hasHard()) {
                 throw ValidationException::withMessages(['teacher' => $result->messages()]);
             }
 
-            $current?->update(['replaced_at' => now(), 'replaced_by' => $actor->getKey()]);
-
-            $this->setGroupTeacher->handle($group, $teacher, $actor);
-
-            $assignment = GroupTeacherAssignment::query()->create([
-                'term_id' => $group->term_id,
-                'modality_id' => $group->modality_id,
-                'group_id' => $group->id,
-                'teacher_id' => $teacher->id,
-                'assigned_by' => $actor->getKey(),
-                'assigned_at' => now(),
-                'ranking_position_at_assignment' => $position,
-                'ranking_size_at_assignment' => $size,
-                'reason' => $reason,
-            ]);
-
-            $place = $position === null ? 'fuera del ranking' : "lugar {$position} de {$size}";
-
-            activity()
-                ->performedOn($group)
-                ->causedBy($actor)
-                ->event('teacher_assigned')
-                ->withProperties([
-                    'teacher_id' => $teacher->id,
-                    'previous_teacher_id' => $current?->teacher_id,
-                    'assignment_id' => $assignment->id,
-                    'position' => $place,
-                    'reason' => $reason,
-                ])
-                ->log("Asignó a {$teacher->name} al grupo {$group->code} ({$place})");
-
-            return $assignment;
+            return $this->record->handle($group, $teacher, $actor, $reason, $position, $size);
         }), 'group');
     }
 
@@ -115,20 +104,5 @@ final class AssignTeacher
 
             throw ValidationException::withMessages(['group' => "La carga está en {$label}: los docentes se asignan en Asignación, Ajustes o Re-análisis."]);
         }
-    }
-
-    /**
-     * @return array{0: ?int, 1: ?int} lugar del docente en el ranking del grupo (null si no está) y tamaño del ranking
-     *                                 (null si el grupo todavía no tiene ranking)
-     */
-    private function rankingPosition(Group $group, Teacher $teacher): array
-    {
-        $rankings = StaffingRanking::query()->where('group_id', $group->id);
-        $size = $rankings->count();
-
-        return [
-            (clone $rankings)->where('teacher_id', $teacher->id)->value('rank'),
-            $size > 0 ? $size : null,
-        ];
     }
 }

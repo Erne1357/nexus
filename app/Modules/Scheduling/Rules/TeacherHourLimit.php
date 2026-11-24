@@ -8,8 +8,9 @@ use App\Modules\Scheduling\Validation\ScheduleState;
  * La cuenta de horas de un docente en el periodo que usa HC-08, para todos los que la necesitan (la regla, el ranking
  * y `teacher_term_loads` de Staffing): horas asignadas = teoría + práctica de la materia de cada grupo activo suyo, en
  * todos los campus (supuesto por confirmar); límite = horas base + `staffing.extra_hours_tolerance`, o
- * `staffing.honorarios_max_hours` si es de honorarios y el parámetro existe. `$exceptGroupId` no cuenta ese grupo:
- * así el ranking pregunta cuántas horas le quedarían a un candidato sin contarse a sí mismo.
+ * `staffing.honorarios_max_hours` si es de honorarios y el parámetro existe, o las horas autorizadas del docente en el
+ * periodo si son más (SEL-12: su total de HC-08 al terminar su carga en la orden de selección). `$exceptGroupId`
+ * no cuenta ese grupo: así el ranking pregunta cuántas horas le quedarían a un candidato sin contarse a sí mismo.
  */
 final class TeacherHourLimit
 {
@@ -36,6 +37,7 @@ final class TeacherHourLimit
 
         $assigned = array_sum($groups);
         $limit = $teacher->isHonorarios && $cap !== null ? (int) $cap : $teacher->baseHours + $tolerance;
+        $limit = max($limit, $teacher->allowanceHours ?? $limit);
 
         return [
             'base_hours' => $teacher->baseHours,

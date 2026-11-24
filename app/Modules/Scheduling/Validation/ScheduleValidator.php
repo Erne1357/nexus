@@ -119,13 +119,30 @@ final class ScheduleValidator
      */
     public function validateTeacher(Teacher $teacher, Term $term): ValidationResult
     {
+        return $this->validate($this->teacherState($teacher, $term), ValidationScope::teacher($teacher->id));
+    }
+
+    /**
+     * La cuenta de HC-08 del docente en el periodo, con sus grupos de todos los campus y modalidades y sus horas
+     * externas (TeacherHourLimit); null si el docente está borrado. La usa la orden de selección para autorizar al
+     * cerrar justo las horas que HC-08 le cuenta (SEL-12).
+     *
+     * @return array{base_hours: int, external_hours: int, assigned_hours: int, tolerance: int, limit: int, remaining_hours: int, groups: array<string, int>}|null
+     */
+    public function teacherTermHours(Teacher $teacher, Term $term): ?array
+    {
+        return TeacherHourLimit::of($this->teacherState($teacher, $term), $teacher->id);
+    }
+
+    /**
+     * La foto del periodo sin modalidad (los grupos con docente de todo el periodo) con el docente, aunque no tenga
+     * grupos.
+     */
+    private function teacherState(Teacher $teacher, Term $term): ScheduleState
+    {
         $state = $this->stateFor($term->id, null);
 
-        if ($state->teacher($teacher->id) === null) {
-            $state = $state->withTeachers($this->query->teachers($term, [$teacher->id]));
-        }
-
-        return $this->validate($state, ValidationScope::teacher($teacher->id));
+        return $state->teacher($teacher->id) === null ? $state->withTeachers($this->query->teachers($term, [$teacher->id])) : $state;
     }
 
     /**

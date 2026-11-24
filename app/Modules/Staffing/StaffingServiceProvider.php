@@ -26,6 +26,7 @@ use App\Modules\Core\Settings\SettingType;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
+use App\Modules\Faculty\Events\HourAllowanceChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
@@ -94,6 +95,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         GroupsCreated::class,
         PositionChanged::class,
         ExternalLoadChanged::class,
+        HourAllowanceChanged::class,
         TeacherUpdated::class,
         AdscriptionChanged::class,
     ];
