@@ -12,6 +12,7 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Scheduling\Queries\CampusMapQuery;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /*
@@ -45,13 +46,13 @@ function siiGroup(array $attributes, array $sessions): HistoricalGroup
     return $group;
 }
 
-it('toma el periodo que contiene el día y junta las sesiones del SII en clases por hora con sus días', function () {
+it('toma el periodo dado y junta las sesiones del SII en clases por hora con sus días', function () {
     siiGroup(
         ['term_code' => '20263', 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'group_code' => 'C'],
         collect(range(1, 5))->map(fn (int $day): array => ['day' => $day, 'starts_at' => '09:00', 'ends_at' => '10:00', 'room_code' => '701', 'teacher_rfc' => 'AAAA800101AA1'])->all(),
     );
 
-    $map = app(CampusMapQuery::class)->forDay($this->day);
+    $map = app(CampusMapQuery::class)->forTerm($this->term);
 
     expect($map['term'])->toBe(['code' => '20263', 'name' => 'Ago-Dic 2026'])
         ->and($map['source'])->toBe('sii')
@@ -79,7 +80,7 @@ it('deja sin salón del mapa ni docente lo que no se resuelve, sin perder la cla
         [['day' => 2, 'starts_at' => '07:00', 'ends_at' => '08:40', 'room_code' => 'LABA1', 'teacher_rfc' => 'ZZZZ000000ZZ0']],
     );
 
-    $class = app(CampusMapQuery::class)->forDay($this->day)['classes'][0];
+    $class = app(CampusMapQuery::class)->forTerm($this->term)['classes'][0];
 
     expect($class)->toMatchArray(['room' => null, 'roomLabel' => 'LABA1', 'prof' => null, 'days' => [1], 'hour' => 7, 'end' => 9]);
 });
@@ -90,22 +91,22 @@ it('solo trae las clases del campus del mapa y del periodo en curso', function (
     siiGroup(['term_code' => '20261', 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'group_code' => 'B'],
         [['day' => 1, 'starts_at' => '08:00', 'ends_at' => '09:00', 'room_code' => '701', 'teacher_rfc' => null]]);
 
-    $map = app(CampusMapQuery::class)->forDay($this->day);
+    $map = app(CampusMapQuery::class)->forTerm($this->term);
 
     expect($map['classes'])->toBe([])->and($map['groups'])->toBe([]);
 });
 
-it('sin periodo que contenga el día toma el último que terminó (S1, supuesto por confirmar)', function () {
-    $map = app(CampusMapQuery::class)->forDay(CarbonImmutable::parse('2026-12-20', 'America/Ciudad_Juarez'));
+it('sin periodo el mapa sale vacío (MP-01)', function () {
+    $map = app(CampusMapQuery::class)->forTerm(null);
 
-    expect($map['term']['code'])->toBe('20263');
+    expect($map['term'])->toBeNull()->and($map['classes'])->toBe([])->and($map['source'])->toBeNull();
 });
 
 it('sin edificios del mapa no trae salones ni clases', function () {
     Building::query()->update(['map_key' => null]);
     Room::query()->update(['map_key' => null]);
 
-    $map = app(CampusMapQuery::class)->forDay($this->day);
+    $map = app(CampusMapQuery::class)->forTerm($this->term);
 
     expect($map['source'])->toBeNull()->and($map['rooms'])->toBe([])->and($map['classes'])->toBe([]);
 });
@@ -117,7 +118,7 @@ it('da la ubicación y el contacto de los departamentos con su edificio y oficin
         'email' => 'jefatura_syc@cdjuarez.tecnm.mx',
     ]);
 
-    $department = collect(app(CampusMapQuery::class)->forDay($this->day)['departments'])->firstWhere('id', '110600');
+    $department = collect(app(CampusMapQuery::class)->forTerm($this->term)['departments'])->firstWhere('id', '110600');
 
     expect($department)->toMatchArray([
         'name' => 'Sistemas y Computación',
@@ -133,12 +134,79 @@ it('toma la carrera del grupo histórico para el grupo del mapa', function () {
     siiGroup(['term_code' => '20263', 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'group_code' => 'N', 'career_id' => $career->id],
         [['day' => 1, 'starts_at' => '20:00', 'ends_at' => '21:00', 'room_code' => '701', 'teacher_rfc' => null]]);
 
-    expect(app(CampusMapQuery::class)->forDay($this->day)['groups'][0])->toMatchArray(['career' => 'ISC', 'turno' => 'Vespertino']);
+    expect(app(CampusMapQuery::class)->forTerm($this->term)['groups'][0])->toMatchArray(['career' => 'ISC', 'turno' => 'Vespertino']);
 });
 
 it('manda el correo institucional del docente a todo el que tiene sesión (confirmado el 20 de noviembre de 2026)', function () {
     siiGroup(['term_code' => '20263', 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'group_code' => 'C'],
         [['day' => 1, 'starts_at' => '09:00', 'ends_at' => '10:00', 'room_code' => '701', 'teacher_rfc' => 'AAAA800101AA1']]);
 
-    expect(json_encode(app(CampusMapQuery::class)->forDay($this->day)))->toContain('uno@cdjuarez.tecnm.mx');
+    expect(json_encode(app(CampusMapQuery::class)->forTerm($this->term)))->toContain('uno@cdjuarez.tecnm.mx');
+});
+
+it('MP-01: cada periodo trae sus clases y uno sin clases sale vacío', function () {
+    $older = Term::factory()->create(['code' => '20253', 'name' => 'Ago-Dic 2025', 'starts_on' => '2025-08-18', 'ends_on' => '2025-12-12']);
+    siiGroup(['term_code' => '20253', 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'group_code' => 'Z'],
+        [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '08:00', 'room_code' => '701', 'teacher_rfc' => null]]);
+
+    $query = app(CampusMapQuery::class);
+
+    expect($query->forTerm($older)['classes'])->toHaveCount(1)
+        ->and($query->forTerm($older)['term']['code'])->toBe('20253')
+        ->and($query->forTerm($this->term)['classes'])->toBe([])
+        ->and($query->forTerm($this->term)['source'])->toBe('sii');
+});
+
+it('MP-01: un periodo estable se guarda 30 días y uno reciente 10 minutos', function () {
+    $ttls = [];
+    Cache::shouldReceive('remember')->andReturnUsing(function (string $key, int $ttl, Closure $callback) use (&$ttls) {
+        $ttls[$key] = $ttl;
+
+        return $callback();
+    });
+
+    $query = app(CampusMapQuery::class);
+
+    $this->travelTo(CarbonImmutable::parse('2026-08-20 10:00', 'America/Ciudad_Juarez'));
+    $query->forTerm($this->term);
+    $recent = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v2:'));
+
+    $this->travelTo(CarbonImmutable::parse('2026-08-24 10:00', 'America/Ciudad_Juarez'));
+    $ttls = [];
+    $query->forTerm($this->term);
+    $sevenDays = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v2:'));
+
+    $this->travelTo(CarbonImmutable::parse('2027-01-10 10:00', 'America/Ciudad_Juarez'));
+    $ttls = [];
+    $query->forTerm($this->term);
+    $ended = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v2:'));
+
+    expect($recent)->toBe(CampusMapQuery::LIVE_TTL_SECONDS)
+        ->and($sevenDays)->toBe(CampusMapQuery::STABLE_TTL_SECONDS)
+        ->and($ended)->toBe(CampusMapQuery::STABLE_TTL_SECONDS);
+});
+
+it('MP-01: un cambio en una sesión de la carga publicada se ve pasada la ventana de la huella', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-20 10:00', 'America/Ciudad_Juarez'));
+    $other = Room::factory()->create(['building_id' => $this->building->id, 'code' => '702', 'map_key' => 'Edificio Sistemas|702']);
+    $group = HistoricalGroup::factory()->fromSii()->create(['term_code' => '20263', 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'group_code' => 'H']);
+    $sessionId = DB::table('historical_group_sessions')->insertGetId([
+        'historical_group_id' => $group->id, 'day' => 1, 'starts_at' => '09:00', 'ends_at' => '10:00', 'room_code' => '701',
+        'teacher_rfc' => null, 'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $query = app(CampusMapQuery::class);
+    $before = $query->fingerprint($this->term, $this->campus->id);
+
+    expect($query->forTerm($this->term)['classes'][0]['room'])->toBe('Edificio Sistemas|701');
+
+    $this->travel(5)->seconds();
+    DB::table('historical_group_sessions')->where('id', $sessionId)->update(['room_code' => '702', 'updated_at' => now()]);
+
+    // Dentro de la ventana de 60 s la huella vieja sigue; pasada, la llave cambia y el salón nuevo aparece.
+    expect($query->fingerprint($this->term, $this->campus->id))->toBe($before);
+
+    $this->travel(61)->seconds();
+
+    expect($query->fingerprint($this->term, $this->campus->id))->not->toBe($before)
+        ->and($query->forTerm($this->term)['classes'][0]['room'])->toBe('Edificio Sistemas|702');
 });

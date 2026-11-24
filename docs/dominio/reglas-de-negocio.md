@@ -728,6 +728,7 @@ Tarea 1.21 (14 de noviembre de 2026). Inicio saluda y muestra el bloque del perf
 |---|---|---|---|
 | IN-01 | El Inicio de quien trabaja como docente no muestra el calendario del periodo: solo lo suyo (confirmado el 14 de noviembre de 2026). Su bloque lleva su acceso: su usuario, su correo institucional (o «Sin correo institucional») y «Cambiar contraseña». Su disponibilidad del periodo no va, porque en R1 la capturan los jefes, no el docente; tampoco sus departamentos, que son de Faculty (supuestos por confirmar). Lo decide el perfil activo: un jefe que también es docente ve el calendario con el perfil de jefe. | Core | R1 |
 | IN-02 | El bloque de un perfil puede llevar atajos a entradas del menú, que solo aparecen si el usuario ve esa entrada en su menú (MN-02). El del jefe de departamento lleva «Materias por colocar», que solo ve el jefe de Servicios Escolares (tarea 1.21, supuesto por confirmar). | Core | R1 |
+| MP-01 | El mapa del Inicio sigue el periodo de consulta de la credencial (TP-04) y guarda lo que calcula en caché por periodo, campus y huella de sus datos (conteo y última modificación de cada tabla que lee), hasta que algún dato cambia (confirmado el 23 de noviembre de 2026). Un periodo estable (terminado o con siete días o más desde su inicio) vive 30 días en caché y uno reciente diez minutos. La huella se recalcula cada 60 segundos: un cambio puede tardar hasta un minuto en verse (decisión nuestra). Un periodo sin clases abre el mapa vacío, sin error. | Scheduling | R1 |
 
 ## Pantalla de acceso
 

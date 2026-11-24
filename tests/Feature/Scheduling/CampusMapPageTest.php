@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 
 /*
@@ -66,4 +67,15 @@ it('un usuario con sesión pero sin puesto también ve el mapa (D6: el Inicio es
         ->get('/')
         ->assertOk()
         ->assertSee('data-testid="campus-map"', false);
+});
+
+it('MP-01: un periodo sin clases abre el mapa sin error', function () {
+    config(['nexus.campus_map_3d' => true]);
+    Term::factory()->create(['code' => '20263', 'starts_on' => now()->subMonth()->toDateString(), 'ends_on' => now()->addMonth()->toDateString()]);
+    $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
+
+    actingAsRole($user, Role::Docente)
+        ->get('/')
+        ->assertOk()
+        ->assertSee('id="ubicatec-data"', false);
 });
