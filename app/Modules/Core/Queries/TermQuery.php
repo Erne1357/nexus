@@ -51,10 +51,14 @@ final class TermQuery
      */
     public function inProgress(CarbonInterface $day): ?Term
     {
-        $regular = fn (): Builder => Term::query()->whereIn(DB::raw('right(code, 1)'), TermRules::REGULAR_SUFFIXES);
-
-        return $regular()->containing($day)->orderByDesc('code')->first()
-            ?? $regular()->whereDate('ends_on', '<', $day)->orderByDesc('ends_on')->first();
+        // Entre los regulares que ya empezaron, primero el que todavía no termina; si ninguno, el de código mayor, que es
+        // el que terminó más recientemente (los códigos del SII siguen el orden cronológico). Una sola consulta.
+        return Term::query()
+            ->whereIn(DB::raw('right(code, 1)'), TermRules::REGULAR_SUFFIXES)
+            ->whereDate('starts_on', '<=', $day)
+            ->orderByRaw('ends_on >= ? desc', [$day->toDateString()])
+            ->orderByDesc('code')
+            ->first();
     }
 
     /**
