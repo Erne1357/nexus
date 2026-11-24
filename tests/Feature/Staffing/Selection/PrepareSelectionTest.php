@@ -46,7 +46,6 @@ beforeEach(function () {
 
 it('incluye por defecto la carga de CEA con grupos de ISC', function () {
     $term = Term::factory()->create();
-    $campus = Campus::factory()->create();
     $modality = Modality::factory()->create();
     $isc = Department::factory()->create();
     $cea = Department::factory()->create();
@@ -58,10 +57,10 @@ it('incluye por defecto la carga de CEA con grupos de ISC', function () {
     $strangerLoad = AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $modality->id, 'department_id' => $strangerDepartment->id]);
     $ceaSubject = Subject::factory()->create(['department_id' => $cea->id]);
     $strangerSubject = Subject::factory()->create(['department_id' => $strangerDepartment->id]);
-    Group::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'modality_id' => $modality->id, 'subject_id' => $ceaSubject->id, 'owner_career_id' => $career->id]);
-    Group::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'modality_id' => $modality->id, 'subject_id' => $strangerSubject->id, 'owner_career_id' => $otherCareer->id]);
+    Group::factory()->create(['term_id' => $term->id, 'campus_id' => Campus::factory()->create()->id, 'modality_id' => $modality->id, 'subject_id' => $ceaSubject->id, 'owner_career_id' => $career->id]);
+    Group::factory()->create(['term_id' => $term->id, 'campus_id' => Campus::factory()->create()->id, 'modality_id' => $modality->id, 'subject_id' => $strangerSubject->id, 'owner_career_id' => $otherCareer->id]);
 
-    $selection = app(CreateSelection::class)->handle($term, $modality, $isc, $campus, $this->actor);
+    $selection = app(CreateSelection::class)->handle($term, $modality, $isc, $this->actor);
 
     expect($selection->loads()->pluck('academic_loads.id')->all())->toEqualCanonicalizing([$ownLoad->id, $ceaLoad->id])
         ->and($selection->loads()->pluck('academic_loads.id')->all())->not->toContain($strangerLoad->id)
@@ -70,10 +69,10 @@ it('incluye por defecto la carga de CEA con grupos de ISC', function () {
         ->and(Activity::query()->where('event', 'selection_created')->count())->toBe(1);
 });
 
-it('no crea una segunda selección viva del mismo periodo, modalidad, departamento y campus', function () {
+it('no crea una segunda selección viva del mismo periodo, modalidad, departamento', function () {
     $selection = Selection::factory()->create();
 
-    app(CreateSelection::class)->handle($selection->term, $selection->modality, $selection->department, $selection->campus, $this->actor);
+    app(CreateSelection::class)->handle($selection->term, $selection->modality, $selection->department, $this->actor);
 })->throws(ValidationException::class);
 
 it('SEL-10: importar agrega al final a los docentes del departamento que no vienen en el CSV', function () {

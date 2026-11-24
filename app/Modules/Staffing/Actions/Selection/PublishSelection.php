@@ -107,7 +107,7 @@ final class PublishSelection
             }
         }
 
-        $unreviewed = $loads->isEmpty() ? [] : $this->unreviewedSubjects($loads, $selection->campus_id);
+        $unreviewed = $loads->isEmpty() ? [] : $this->unreviewedSubjects($loads);
 
         if ($unreviewed !== []) {
             $reasons[] = 'Falta revisar el tipo de espacio de: '.implode(', ', $unreviewed).'.';
@@ -122,7 +122,7 @@ final class PublishSelection
      * @param  Collection<int, AcademicLoad>  $loads
      * @return list<string> códigos de las materias de los grupos de las cargas con el tipo de espacio sin revisar
      */
-    private function unreviewedSubjects($loads, string $campusId): array
+    private function unreviewedSubjects($loads): array
     {
         $loads->load('department');
 
@@ -130,7 +130,6 @@ final class PublishSelection
             ->whereNull('required_space')
             ->whereIn('id', Group::query()
                 ->where('status', '!=', GroupStatus::Cancelled->value)
-                ->where('campus_id', $campusId)
                 ->where(fn ($query) => $loads->each(fn (AcademicLoad $load) => $query->orWhere(fn ($pair) => $pair
                     ->where('term_id', $load->term_id)
                     ->where('modality_id', $load->modality_id)

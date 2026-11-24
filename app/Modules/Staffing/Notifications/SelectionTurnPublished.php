@@ -36,7 +36,6 @@ final class SelectionTurnPublished extends NexusNotification
             icon: 'o-clock',
             route: 'staffing.offer',
             termId: $this->selection->term_id,
-            campusId: $this->selection->campus_id,
             tone: 'info',
             modalityId: $this->selection->modality_id,
         );

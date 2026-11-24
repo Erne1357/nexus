@@ -36,7 +36,7 @@ function pubScenario(LoadStatus $loadStatus = LoadStatus::Draft, ?string $space 
     ]);
     $selection->loads()->attach($load->id);
     $subject = Subject::factory()->create(['department_id' => $selection->department_id, 'required_space' => $space]);
-    Group::factory()->create(['term_id' => $selection->term_id, 'campus_id' => $selection->campus_id, 'modality_id' => $selection->modality_id, 'subject_id' => $subject->id]);
+    Group::factory()->create(['term_id' => $selection->term_id, 'modality_id' => $selection->modality_id, 'subject_id' => $subject->id]);
     $user = User::factory()->create();
     $teacher = Teacher::factory()->create(['user_id' => $user->id]);
     $entry = SelectionEntry::factory()->for($selection)->create([
@@ -148,13 +148,14 @@ it('cancelar después de la primera hora se rechaza', function () {
     expect($s['selection']->fresh()->status)->toBe(SelectionStatus::Draft);
 });
 
-it('una materia sin revisar de otro campus no impide publicar', function () {
+it('una materia sin revisar de otro campus también impide publicar', function () {
     Notification::fake();
     $s = pubScenario();
     $other = Subject::factory()->create(['department_id' => $s['selection']->department_id, 'required_space' => null]);
     Group::factory()->create(['term_id' => $s['selection']->term_id, 'campus_id' => Campus::factory()->create()->id, 'modality_id' => $s['selection']->modality_id, 'subject_id' => $other->id]);
 
-    expect(app(PublishSelection::class)->handle($s['selection'], $this->actor)->status)->toBe(SelectionStatus::Published);
+    expect(fn () => app(PublishSelection::class)->handle($s['selection'], $this->actor))->toThrow(ValidationException::class);
+    expect($s['selection']->fresh()->status)->toBe(SelectionStatus::Draft);
 });
 
 it('sin cargas incluidas no se publica y lo dice', function () {
