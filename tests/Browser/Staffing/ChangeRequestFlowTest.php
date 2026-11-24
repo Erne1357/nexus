@@ -37,6 +37,9 @@ function crSignIn(string $username)
 }
 
 it('la docente pide un cambio de horario, el jefe lo aprueba y la coordinadora lo marca como aplicado', function () {
+    // Mi carga muestra el periodo en curso (P9, TP-03): el día cae en Ene-Jun 2027, el de su carga.
+    $this->travelTo('2027-02-01 10:00:00');
+
     crSignIn('marisol')
         ->navigate('/mi-espacio/mi-carga')
         ->assertSee('Mis solicitudes')

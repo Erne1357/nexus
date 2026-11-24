@@ -114,7 +114,7 @@ final class TeacherQuery
                 ? $adscription->where('department_id', $departmentId)
                 : $adscription->whereRaw('false')))
             ->when($kind !== null, fn (Builder $query) => $query->whereHas('positions', fn (Builder $position) => $position
-                ->currentOn($context->activeTerm()?->starts_on ?? today())
+                ->currentOn($context->loadTerm()?->starts_on ?? today())
                 ->where('kind', $kind)));
     }
 

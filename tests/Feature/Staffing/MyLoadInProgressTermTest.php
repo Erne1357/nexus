@@ -114,14 +114,30 @@ function mlTermSessions(): array
     ];
 }
 
-it('el periodo en curso es el que contiene hoy por sus fechas, en la zona del Tec, y no el activo', function () {
-    expect(Term::query()->containing(now('America/Ciudad_Juarez'))->orderByDesc('code')->first()->code)->toBe('20263');
+it('TP-03: el periodo en curso es el de consulta de la credencial: el que contiene hoy y, entre semestres, el que acaba de terminar', function () {
+    $this->actingAs($this->user);
+
+    expect(app(Actor::class)->viewTerm()?->code)->toBe('20263');
 
     $this->travelTo(CarbonImmutable::parse('2027-02-01 10:00', 'America/Ciudad_Juarez'));
-    expect(Term::query()->containing(now('America/Ciudad_Juarez'))->orderByDesc('code')->first()->code)->toBe('20271');
+    app(Actor::class)->refresh();
+    expect(app(Actor::class)->viewTerm()?->code)->toBe('20271');
 
     $this->travelTo(CarbonImmutable::parse('2026-12-20 10:00', 'America/Ciudad_Juarez'));
-    expect(Term::query()->containing(now('America/Ciudad_Juarez'))->orderByDesc('code')->first())->toBeNull();
+    app(Actor::class)->refresh();
+    expect(app(Actor::class)->viewTerm()?->code)->toBe('20263');
+});
+
+it('TP-04: Mi carga en curso sigue el periodo de consulta elegido en la credencial', function () {
+    $old = Term::factory()->create(['code' => '20253', 'name' => 'Ago-Dic 2025', 'starts_on' => '2025-08-18', 'ends_on' => '2025-12-12']);
+    $group = HistoricalGroup::factory()->fromSii()->create(['term_code' => '20253', 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'group_code' => 'V']);
+    DB::table('historical_group_sessions')->insert(['day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'room_code' => '701', 'teacher_rfc' => 'AAAA800101AA1', 'historical_group_id' => $group->id, 'created_at' => now(), 'updated_at' => now()]);
+    mlTermSii(mlTermSessions());
+
+    session([Actor::VIEW_TERM => $old->id]);
+
+    Livewire::actingAs($this->user)->test('staffing::pages.my-load')
+        ->assertSee('Tus grupos de Ago-Dic 2025');
 });
 
 it('con el SII muestra el horario del periodo en curso por RFC, con materia, grupo, horario y salón, en solo lectura', function () {

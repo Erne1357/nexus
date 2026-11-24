@@ -233,7 +233,7 @@ new #[Title('Ficha del docente')] class extends Component
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('view', $teacher);
 
-        $record = $records->for($teacher, $context->activeTerm());
+        $record = $records->for($teacher, $context->loadTerm());
         $adscriptionCount = $record->adscriptions->count();
 
         // «Quitar de <depto>» es de quien cubre ese departamento (y nadie a sí mismo); a quien ocupa un puesto solo lo
@@ -935,7 +935,7 @@ new #[Title('Ficha del docente')] class extends Component
 
     private function activeTermOrFail(Actor $context): Term
     {
-        return $context->activeTerm() ?? abort(403, 'Elige un periodo en la credencial.');
+        return $context->loadTerm() ?? abort(403, 'Elige un periodo en la credencial.');
     }
 
     /**

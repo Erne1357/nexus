@@ -55,7 +55,7 @@ final class StartTeachersReviewOnFacultyCapture
         }
 
         $departments = $this->departmentsOf($event);
-        $term = $this->termOf($event) ?? $context->activeTerm()?->getKey();
+        $term = $this->termOf($event) ?? $context->loadTerm()?->getKey();
 
         if ($departments->isEmpty() || $term === null) {
             return;

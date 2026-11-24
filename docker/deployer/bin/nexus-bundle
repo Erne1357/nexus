@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Arma el paquete de un release para un servidor sin internet (ADR-0033): las imágenes (propias y de terceros) y
+# la infraestructura del SHA en un .tar, con su .sha256. Corre en el CI o en cualquier máquina con Docker, jq,
+# zstd y tar; también dentro de la imagen del deployer.
+#
+#   nexus-bundle --sha <sha> --app <imagen> --solver <imagen> --deployer <imagen> --repo <carpeta> --out <carpeta>
+#
+# Formato: docker/deployer/lib/release.sh.
+set -Eeuo pipefail
+
+sha="" app="" solver="" deployer="" repo="." out="."
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --sha) sha=$2; shift 2 ;;
+        --app) app=$2; shift 2 ;;
+        --solver) solver=$2; shift 2 ;;
+        --deployer) deployer=$2; shift 2 ;;
+        --repo) repo=$2; shift 2 ;;
+        --out) out=$2; shift 2 ;;
+        *) echo "opción desconocida: $1" >&2; exit 2 ;;
+    esac
+done
+[ -n "$sha" ] && [ -n "$app" ] && [ -n "$solver" ] && [ -n "$deployer" ] || {
+    echo "uso: nexus-bundle --sha <sha> --app <img> --solver <img> --deployer <img> [--repo <dir>] [--out <dir>]" >&2
+    exit 2
+}
+
+log() { printf 'nexus-bundle: %s\n' "$*" >&2; }
+
+work=$(mktemp -d)
+trap 'rm -rf -- "$work"' EXIT
+mkdir -p "$work/images" "$out"
+
+save() {
+    local ref=$1 file=$2
+    docker image inspect "$ref" >/dev/null 2>&1 || docker pull -q "$ref" >/dev/null
+    case "$file" in
+        *.zst) docker save "$ref" | zstd -q -T0 -6 -o "$work/$file" ;;
+        *) docker save -o "$work/$file" "$ref" ;;
+    esac
+    log "$ref → $file ($(du -h "$work/$file" | cut -f 1))"
+}
+
+save "$app" images/app.tar.zst
+save "$solver" images/solver.tar.zst
+# Sin comprimir: el primer arranque la carga con solo `tar` y `docker` (runbook).
+save "$deployer" images/deployer.tar
+
+# Imágenes de terceros que fijan los compose (tag + digest). Viajan con una etiqueta local derivada del digest,
+# porque `docker load` no conserva el digest del registro en todos los almacenes de imágenes.
+third_party='[]'
+i=0
+while read -r ref; do
+    i=$((i + 1))
+    name=${ref%%[:@]*}
+    name=${name##*/}
+    digest=${ref##*@sha256:}
+    local_ref="nexus-local/$name:${digest:0:12}"
+    docker image inspect "$ref" >/dev/null 2>&1 || docker pull -q "$ref" >/dev/null
+    docker tag "$ref" "$local_ref"
+    save "$local_ref" "images/third-party-$i.tar.zst"
+    third_party=$(jq -c --arg ref "$ref" --arg local "$local_ref" --arg file "images/third-party-$i.tar.zst" \
+        '. + [{ref: $ref, local: $local, file: $file}]' <<<"$third_party")
+done < <(sed -n 's/^[[:space:]]*image:[[:space:]]*\([^[:space:]]*@sha256:[0-9a-f]\{64\}\).*/\1/p' \
+    "$repo/compose.yaml" "$repo/compose.prod.yaml" | sort -u)
+
+tar -cf "$work/infra.tar" -C "$repo" compose.yaml compose.prod.yaml docker .env.production.example
+
+jq -n --arg sha "$sha" --arg created "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+    --arg app "$app" --arg solver "$solver" --arg deployer "$deployer" --argjson third "$third_party" \
+    '{sha: $sha, created_at: $created,
+      images: {app: {ref: $app, file: "images/app.tar.zst"},
+               solver: {ref: $solver, file: "images/solver.tar.zst"},
+               deployer: {ref: $deployer, file: "images/deployer.tar"}},
+      third_party: $third}' >"$work/manifest.json"
+
+# El manifiesto va primero: el agente lo lee sin recorrer todo el paquete.
+name="nexus-$sha.tar"
+tar -cf "$out/$name.part" -C "$work" manifest.json infra.tar images
+mv "$out/$name.part" "$out/$name"
+(cd "$out" && sha256sum "$name" >"$name.sha256")
+log "listo: $out/$name ($(du -h "$out/$name" | cut -f 1))"

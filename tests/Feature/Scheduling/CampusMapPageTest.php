@@ -1,8 +1,11 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Models\Building;
 
 /*
 | El Inicio es el mapa del campus (tarea 1.24.1): `/` con nombre `home`, para todo el que tiene sesión (D6 del usuario,
@@ -66,4 +69,37 @@ it('un usuario con sesión pero sin puesto también ve el mapa (D6: el Inicio es
         ->get('/')
         ->assertOk()
         ->assertSee('data-testid="campus-map"', false);
+});
+
+it('MP-01: un periodo sin clases abre el mapa sin error', function () {
+    config(['nexus.campus_map_3d' => true]);
+    Term::factory()->create(['code' => '20263', 'starts_on' => now()->subMonth()->toDateString(), 'ends_on' => now()->addMonth()->toDateString()]);
+    $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
+
+    actingAsRole($user, Role::Docente)
+        ->get('/')
+        ->assertOk()
+        ->assertSee('id="ubicatec-data"', false);
+});
+
+it('TP-04: el mapa sigue el periodo de consulta de la credencial; sin elegir, el en curso (TP-03)', function () {
+    config(['nexus.campus_map_3d' => true]);
+    $this->travelTo('2026-11-24 10:00:00');
+    Building::factory()->for($this->campus)->create(['code' => 'SC', 'name' => 'Edificio Sistemas', 'map_key' => 'Edificio Sistemas']);
+    $previous = Term::factory()->create(['code' => '20261', 'name' => 'Ene-Jun 2026', 'starts_on' => '2026-01-26', 'ends_on' => '2026-06-12']);
+    Term::factory()->create(['code' => '20263', 'name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
+    Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
+    $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
+
+    actingAsRole($user, Role::Docente)
+        ->get('/')
+        ->assertOk()
+        ->assertSee('sin clases publicadas en Ago-Dic 2026');
+
+    actingAsRole($user, Role::Docente)
+        ->withSession([Actor::VIEW_TERM => $previous->id])
+        ->get('/')
+        ->assertOk()
+        ->assertSee('sin clases publicadas en Ene-Jun 2026')
+        ->assertDontSee('sin clases publicadas en Ago-Dic 2026');
 });

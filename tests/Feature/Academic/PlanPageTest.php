@@ -310,11 +310,11 @@ describe('admin', function () {
         $this->get(route('academic.plans.show', $this->plan))->assertOk();
         $queries = count(DB::getQueryLog());
 
-        // 11 medidas, constantes con el número de materias: el plan (en mount y al pintar) con su carrera,
+        // 12 medidas, constantes con el número de materias: el plan (en mount y al pintar) con su carrera,
         // permisos y alcances, la retícula (3: materias, seriación y especialidades), cuántas materias esperan
-        // semestre («Por validar»), la credencial (su periodo; ya no consulta campus, #415) y el menú, si la carga
+        // semestre («Por validar»), la credencial (sus dos periodos, TP-04; ya no consulta campus, #415) y el menú, si la carga
         // académica está oculta (MN-05).
-        expect($queries)->toBe(12);
+        expect($queries)->toBe(13);
     });
 });
 

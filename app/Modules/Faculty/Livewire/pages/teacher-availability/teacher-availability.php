@@ -49,7 +49,7 @@ new #[Title('Disponibilidad')] class extends Component
         $model = $teachers->findOrFail($teacher);
         $this->authorize('manageAvailability', $model);
         $this->teacherId = $model->id;
-        $this->termId = $context->activeTerm()?->id;
+        $this->termId = $context->loadTerm()?->id;
     }
 
     /**

@@ -10,11 +10,14 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
+use App\Modules\Core\Rules\TermRules;
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Lecturas de periodos para las pantallas.
@@ -38,6 +41,24 @@ final class TermQuery
                 ->orWhere('is_current', true))
             ->orderByDesc('starts_on')
             ->get();
+    }
+
+    /**
+     * El periodo en curso el día `$day` (TP-03, confirmado el 23 de noviembre de 2026): el regular (Ene-Jun o Ago-Dic,
+     * `TermRules::REGULAR_SUFFIXES`) cuyas fechas contienen el día; si hay dos, el de código mayor. Entre semestres y en
+     * verano, el regular que terminó más recientemente antes del día; si tampoco hay, null. Verano nunca es el de
+     * omisión.
+     */
+    public function inProgress(CarbonInterface $day): ?Term
+    {
+        // Entre los regulares que ya empezaron, primero el que todavía no termina; si ninguno, el de código mayor, que es
+        // el que terminó más recientemente (los códigos del SII siguen el orden cronológico). Una sola consulta.
+        return Term::query()
+            ->whereIn(DB::raw('right(code, 1)'), TermRules::REGULAR_SUFFIXES)
+            ->whereDate('starts_on', '<=', $day)
+            ->orderByRaw('ends_on >= ? desc', [$day->toDateString()])
+            ->orderByDesc('code')
+            ->first();
     }
 
     /**

@@ -108,7 +108,7 @@ new #[Title('Horarios')] class extends Component
         abort_unless($context->allowsAny(SchedulingPermission::ScheduleView), 403);
 
         $this->view = in_array($this->view, self::VIEWS, true) ? $this->view : 'semestre';
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
 
         if ($term !== null && $this->groupId !== '') {
             $this->followGroup($editor->groupInTerm($term, $this->groupId));
