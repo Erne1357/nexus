@@ -54,6 +54,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# El deployer solo ve $home (lo monta en la misma ruta): el paquete de entrada se copia ahí.
+mkdir -p "$home/bundles"
+cp "$bundle" "$bundle.sha256" "$home/bundles/"
+bundle="$home/bundles/$(basename "$bundle")"
+
 manifest() { tar --occurrence=1 -xOf "$bundle" manifest.json | jq -r "$1"; }
 sha_a=$(manifest .sha)
 app_a=$(manifest .images.app.ref)
