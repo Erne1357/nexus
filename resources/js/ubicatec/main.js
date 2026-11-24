@@ -29,4 +29,6 @@ function stop() {
 document.addEventListener('DOMContentLoaded', start);
 document.addEventListener('livewire:navigated', start);
 document.addEventListener('livewire:navigating', stop);
+// El selector de salón (scheduling::components.map-picker) monta el mapa dentro de un cajón, después de la carga.
+window.addEventListener('ubicatec:mount', start);
 if (document.readyState !== 'loading') start();
