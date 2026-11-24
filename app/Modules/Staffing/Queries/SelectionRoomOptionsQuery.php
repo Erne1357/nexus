@@ -27,7 +27,9 @@ use Illuminate\Database\Eloquent\Builder;
 final class SelectionRoomOptionsQuery
 {
     /**
-     * @return array{eligible: list<Option>, rejected: list<array{id: string, code: string, reason: string}>}
+     * Los rechazados traen los mismos datos del salón más su motivo (el mapa los pone en gris por su `map_key`).
+     *
+     * @return array{eligible: list<Option>, rejected: list<array{id: string, code: string, building: ?string, type: string, capacity: int, map_key: ?string, reason: string}>}
      */
     public function forGroup(Selection $selection, Group $group): array
     {
@@ -66,16 +68,18 @@ final class SelectionRoomOptionsQuery
         $result = RoomEligibility::evaluate($need, $group->capacity, $rows, $this->saleReserve($selection, $group, $sessions->all(), $rooms->all(), $busy, $blocked));
         $byId = $rooms->keyBy('id');
 
+        $option = fn (string $id): array => [
+            'id' => $id,
+            'code' => $byId[$id]->code,
+            'building' => $byId[$id]->building?->code,
+            'type' => $byId[$id]->type->value,
+            'capacity' => $byId[$id]->capacity,
+            'map_key' => $byId[$id]->map_key,
+        ];
+
         return [
-            'eligible' => array_map(fn (string $id): array => [
-                'id' => $id,
-                'code' => $byId[$id]->code,
-                'building' => $byId[$id]->building?->code,
-                'type' => $byId[$id]->type->value,
-                'capacity' => $byId[$id]->capacity,
-                'map_key' => $byId[$id]->map_key,
-            ], $result['eligible']),
-            'rejected' => array_values(array_map(fn (string $id, string $reason): array => ['id' => $id, 'code' => $byId[$id]->code, 'reason' => $reason], array_keys($result['rejected']), $result['rejected'])),
+            'eligible' => array_map($option, $result['eligible']),
+            'rejected' => array_values(array_map(fn (string $id, string $reason): array => $option($id) + ['reason' => $reason], array_keys($result['rejected']), $result['rejected'])),
         ];
     }
 

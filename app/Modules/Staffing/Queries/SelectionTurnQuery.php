@@ -34,6 +34,17 @@ final class SelectionTurnQuery
     }
 
     /**
+     * Los ids de todos los renglones con turno ahora (los que comparten la media hora, SEL-07), para marcar «En turno»
+     * en el orden.
+     *
+     * @return list<string>
+     */
+    public function entryIdsInTurn(Selection $selection, CarbonImmutable $now): array
+    {
+        return $this->inTurn($selection, $now)?->pluck('id')->all() ?? [];
+    }
+
+    /**
      * @return Builder<SelectionEntry>|null
      */
     private function inTurn(Selection $selection, CarbonImmutable $now): ?Builder
