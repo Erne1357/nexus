@@ -321,6 +321,29 @@ Meta: menos de **10 minutos** en total para `lint` + `tests` + `browser`. Los tr
 
 Con unas 6 300 pruebas (9 de noviembre de 2026), el job `tests` es el más lento y su tiempo depende de la máquina que asigna GitHub: la misma suite con 4 procesos tardó 607 s en #349 y 1 193 s en #350. El 10 de noviembre de 2026 `tests` tardaba unos 11 minutos y `browser` unos 12 (#389), y los dos se partieron en tres shards (ver «Shards»). Para saber qué se lleva el tiempo, el resumen del job `tests` muestra las pruebas y los archivos más lentos de los tres shards. Si un shard pasa de 20 minutos de forma constante, primero se vuelven a medir los tiempos y después se suben los shards (la matriz y el `/3` de cada job). Cada PR ocupa nueve runners (lint, seis shards y los dos que juntan); con varios PR a la vez, GitHub puede poner shards en espera.
 
+### Smoke del stack de producción (`prod-smoke`)
+
+Desde el 23 de noviembre de 2026 (tarea 1.31, [ADR-0033](../decisiones/0033-despliegue-continuo.md)) el job `prod-smoke` prueba el despliegue continuo con las imágenes reales. Corre en los PR hacia `main` y en los que tocan la infraestructura del despliegue (`Dockerfile`, `compose*.yaml`, `docker/`, `services/solver/`, los workflows de CI y de deploy, los scripts del smoke, el `/health`); en los demás PR termina en segundos con «no hace falta». También corre en `deploy.yml`, con los digests publicados, antes de armar el paquete del release.
+
+1. Pasa `shellcheck` (`-S warning`) por el deployer y los scripts, y `actionlint` por los workflows.
+2. Construye las imágenes `prod` de la app, el motor y el deployer (caché de GHA por imagen) y arma el paquete con `docker/deployer/bin/nexus-bundle`.
+3. `.github/scripts/prod-smoke.sh` levanta el stack de producción en un proyecto aparte (`nexus-smoke`, Caddy con `local_certs` en 18080/18443, `.env` desde la plantilla con secretos aleatorios) y recorre los escenarios del runbook con el deployer real:
+
+| # | Escenario | Qué se exige |
+|---|---|---|
+| 1 | Primer arranque desde una base vacía + `db:seed` | `/health` sano con el release del paquete |
+| 2 | Despliegue de otra versión | El color cambia y **ninguna** petición falla |
+| 3 | Una versión que no arranca | Código 6; producción no cambia; ninguna petición falla |
+| 4 | Un release que pide una variable nueva del `.env` | Código 5 con el nombre de la variable; nada cambia |
+| 5 | Un paquete alterado | Código 4 |
+| 6 | Vuelta atrás | El release anterior atiende y ninguna petición falla |
+| 7 | Expansión, luego contracción (`#[Contract]`) | Volver atrás se niega (código 7); con `--restore --yes` restaura el respaldo previo y atiende |
+| 8 | Reinicio del daemon de Docker (solo en el CI) | Vuelve el color activo y el detenido sigue detenido |
+| 9 | El agente con la carpeta de entrada | Despliega lo que llega; con dos paquetes, solo el más nuevo |
+| 10 | El agente con GitHub (API falsa, `smoke/fake-github.php`) | Publica `in_progress` y `success`; con pausa, el Deployment sigue en cola |
+
+Mientras corren los escenarios 2, 3 y 6, un generador pide `/login`, un asset de `/build` y `/health` cada ~100 ms por Caddy. Una sola respuesta 5xx o sin conexión hace fallar el escenario. Las versiones de prueba son variantes de una línea de la imagen de la app (`smoke/*.Dockerfile`: otro `NEXUS_RELEASE`, un `CMD` que sale con error, una migración de prueba), así que no hace falta reconstruirla. Para correrlo en local, ver el runbook, «Probar el stack de producción en una máquina de desarrollo» (`--deployer-src` monta el código local del deployer para iterar sin rearmar el paquete).
+
 ### Cuando falla
 
 - Cada job muestra la salida de Pest en su log; el resumen del job `tests` lleva la cobertura.
