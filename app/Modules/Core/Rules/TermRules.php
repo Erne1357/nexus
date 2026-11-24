@@ -27,6 +27,9 @@ final class TermRules
 {
     private const SUFFIXES = ['1' => 'Ene-Jun', '2' => 'Verano', '3' => 'Ago-Dic'];
 
+    /** Los sufijos de los periodos regulares, Ene-Jun y Ago-Dic; el verano (2) no lo es (TP-03). */
+    public const array REGULAR_SUFFIXES = ['1', '3'];
+
     /**
      * Fechas por sufijo, como `m-d` (TP-01, supuesto por confirmar): 1 del 22 de enero al 5 de junio, 2 del 22 de
      * junio al 7 de agosto, 3 del 17 de agosto al 11 de diciembre.
@@ -49,14 +52,6 @@ final class TermRules
         }
 
         return $code;
-    }
-
-    /**
-     * Si el código es de un periodo regular, Ene-Jun (1) o Ago-Dic (3): el verano (2) no lo es (TP-03).
-     */
-    public function isRegular(string $code): bool
-    {
-        return preg_match('/^[0-9]{4}[13]$/', trim($code)) === 1;
     }
 
     /**

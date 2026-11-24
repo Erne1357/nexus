@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Lecturas de periodos para las pantallas.
@@ -44,25 +45,16 @@ final class TermQuery
 
     /**
      * El periodo en curso el día `$day` (TP-03, confirmado el 23 de noviembre de 2026): el regular (Ene-Jun o Ago-Dic,
-     * `TermRules::isRegular`) cuyas fechas contienen el día; si hay dos, el de código mayor. Entre semestres y en
+     * `TermRules::REGULAR_SUFFIXES`) cuyas fechas contienen el día; si hay dos, el de código mayor. Entre semestres y en
      * verano, el regular que terminó más recientemente antes del día; si tampoco hay, null. Verano nunca es el de
      * omisión.
      */
     public function inProgress(CarbonInterface $day): ?Term
     {
-        $rules = new TermRules;
-        $date = $day->toDateString();
+        $regular = fn (): Builder => Term::query()->whereIn(DB::raw('right(code, 1)'), TermRules::REGULAR_SUFFIXES);
 
-        $regular = Term::query()->get()->filter(fn (Term $term): bool => $rules->isRegular($term->code));
-
-        return $regular
-            ->filter(fn (Term $term): bool => $term->starts_on->toDateString() <= $date && $term->ends_on->toDateString() >= $date)
-            ->sortByDesc('code')
-            ->first()
-            ?? $regular
-                ->filter(fn (Term $term): bool => $term->ends_on->toDateString() < $date)
-                ->sortByDesc('ends_on')
-                ->first();
+        return $regular()->containing($day)->orderByDesc('code')->first()
+            ?? $regular()->whereDate('ends_on', '<', $day)->orderByDesc('ends_on')->first();
     }
 
     /**
