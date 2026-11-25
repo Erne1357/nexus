@@ -1,9 +1,9 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Credentials\CredentialPhotos;
 use App\Modules\Core\Queries\CredentialQuery;
 use App\Modules\Core\Queries\PageTrailQuery;
-use App\Modules\Core\Credentials\CredentialPhotos;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 

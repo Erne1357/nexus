@@ -3,11 +3,11 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Core\Actions\UpdatePermissionSet;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
-use App\Modules\Core\Actions\UpdatePermissionSet;
 use App\Modules\Core\Models\PermissionSet;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\User;
