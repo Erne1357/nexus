@@ -63,10 +63,17 @@ const storage = {
 };
 
 /** La persona que este equipo recuerda (CO-05), o null si no hay o el valor no sirve. */
+/** Solo una miniatura JPEG como data: URL y de tamaño razonable; cualquier otra cosa (un enlace, javascript:) cuenta como sin foto. */
+const safePhoto = (photo) => (typeof photo === 'string' && photo.startsWith('data:image/jpeg;base64,') && photo.length <= 200000 ? photo : null);
+
 const rememberedPerson = () => {
     try {
         const person = JSON.parse(storage.get(PERSON_KEY) ?? 'null');
-        return person && typeof person.username === 'string' && person.username !== '' && typeof person.name === 'string' ? person : null;
+        if (!person || typeof person.username !== 'string' || person.username === '') {
+            return null;
+        }
+        const text = (value) => (typeof value === 'string' ? value : '');
+        return { username: person.username, name: text(person.name), role: text(person.role), initials: text(person.initials), photo: safePhoto(person.photo) };
     } catch {
         return null;
     }
@@ -141,7 +148,7 @@ document.addEventListener('alpine:init', () => {
             if (!person) {
                 return;
             }
-            this.credential = { name: person.name, username: person.username, initials: person.initials ?? '', role: person.role ?? '', term: '', summary: '', photo: person.photo ?? null };
+            this.credential = { name: person.name, username: person.username, initials: person.initials ?? '', role: person.role ?? '', term: '', summary: '', photo: person.photo };
             this.remembered = true;
             this.revealed = true;
             const form = this.$root.querySelector('form');
@@ -425,6 +432,9 @@ document.addEventListener('alpine:init', () => {
             const data = response ? await response.json().catch(() => null) : null;
 
             if (response?.ok && data?.redirect) {
+                if (data.credential) {
+                    data.credential.photo = safePhoto(data.credential.photo);
+                }
                 this.savePerson(data.credential, form.querySelector('[name="remember"]')?.checked ?? false);
                 await this.enter(data);
                 return;

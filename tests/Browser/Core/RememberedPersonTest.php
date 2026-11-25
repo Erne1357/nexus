@@ -68,3 +68,15 @@ it('entrar sin Recordarme borra a la persona recordada', function () {
         ->assertScript("String(localStorage.getItem('nexus.login.persona'))", 'null')
         ->assertNoJavaScriptErrors();
 });
+
+it('una foto recordada que no es una miniatura data: se ignora y quedan las iniciales', function (string $photo) {
+    $page = visit('/login');
+    $page->script('localStorage.setItem("nexus.login.persona", '.json_encode(json_encode(['username' => 'x', 'name' => 'Yara Ficticia', 'role' => 'z', 'initials' => 'YF', 'photo' => $photo])).')');
+
+    $page->navigate('/login')
+        ->assertSee('Yara Ficticia')
+        ->assertScript("document.querySelector('[data-testid=login-photo]').getAttribute('src')", null)
+        ->assertScript("getComputedStyle(document.querySelector('[data-testid=login-photo]')).display", 'none')
+        ->assertSee('YF')
+        ->assertNoJavaScriptErrors();
+})->with(['javascript:alert(1)', 'https://example.com/foto.jpg']);
