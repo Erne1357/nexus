@@ -90,6 +90,8 @@ it('1.43: los tokens de cada estado, y el lila reservado de «Seleccionada solam
         }
     }
     foreach ($tokens as $token) {
-        expect($css)->toContain("--color-standing-{$token}: var(--nexus-standing-{$token});");
+        foreach (['', '-border', '-content'] as $suffix) {
+            expect($css)->toContain("--color-standing-{$token}{$suffix}: var(--nexus-standing-{$token}{$suffix});");
+        }
     }
 });
