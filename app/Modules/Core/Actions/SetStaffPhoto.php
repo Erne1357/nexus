@@ -14,7 +14,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Pone la foto de una persona del personal (CO-03, C11): la normaliza (3:4, 600×800 y miniatura), la guarda sin borrar
  * las anteriores y la deja como la vigente. Nunca a un usuario de alumno (CO-03). Deja bitácora sobre la persona,
- * «Cambió la foto», sin la imagen. Quién puede lo decide UserPolicy::managePhotos.
+ * «Cambió la foto», sin la imagen (`$by` nulo desde el comando core:provision-staff, CO-11). Quién puede lo decide UserPolicy::managePhotos.
  */
 final class SetStaffPhoto
 {
@@ -25,7 +25,7 @@ final class SetStaffPhoto
      *
      * @throws ValidationException si la persona es un alumno o la imagen no sirve
      */
-    public function handle(User $person, UploadedFile|string $file, User $by): void
+    public function handle(User $person, UploadedFile|string $file, ?User $by = null): void
     {
         if ($this->accounts->isStudent($person)) {
             throw ValidationException::withMessages(['photo' => 'Es alumno: sus fotos van en la sección de alumnos, no en las del personal.']);
