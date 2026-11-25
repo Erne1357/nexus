@@ -40,7 +40,19 @@ final class PhotoNormalizer
      */
     public function normalize(string $sourcePath): array
     {
-        $bytes = $this->read($sourcePath);
+        return $this->normalizeBytes($this->read($sourcePath));
+    }
+
+    /**
+     * Lo mismo que normalize() para una foto que ya está en memoria (la miniatura de la credencial del login, CO-05).
+     *
+     * @return array{normal: string, thumb: string} los bytes de cada JPEG
+     *
+     * @throws InvalidPhoto
+     */
+    public function normalizeBytes(string $bytes): array
+    {
+        $this->guard($bytes);
         $size = @getimagesizefromstring($bytes);
 
         if ($size === false) {
@@ -109,14 +121,18 @@ final class PhotoNormalizer
             throw new InvalidPhoto('La foto pesa más de 10 MB.');
         }
 
-        $bytes = (string) file_get_contents($path);
-        $mime = (new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes);
+        return (string) file_get_contents($path);
+    }
 
-        if (! in_array($mime, self::MIMES, true)) {
-            throw new InvalidPhoto('Solo jpg, png o webp.');
+    private function guard(string $bytes): void
+    {
+        if (strlen($bytes) > self::MAX_BYTES) {
+            throw new InvalidPhoto('La foto pesa más de 10 MB.');
         }
 
-        return $bytes;
+        if (! in_array((new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes), self::MIMES, true)) {
+            throw new InvalidPhoto('Solo jpg, png o webp.');
+        }
     }
 
     /**
