@@ -328,7 +328,7 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 - Si no la acreditó, decide la fila más reciente del kardex, por periodo y oportunidad. La oportunidad es la de `kardex_records.attempt`: 1 ordinaria, 2 repetición, 3 curso especial. Una baja no gasta oportunidad.
 - El periodo en curso es el más reciente del kardex de los alumnos de su campus, sin contar verano, que solo cursan algunos. El periodo de captura (`terms.is_current`) no sirve: es el que se planea. Se recalcula con cada importación de kardex (confirmado el 29 de octubre de 2026).
 - Una materia reprobada conserva su estado aunque hoy no pueda cursarla, y la retícula dice qué le falta. Cuenta para «Puede seleccionar» solo si su avance la deja cursar; la del curso especial reprobado ya no cuenta, porque el alumno se da de baja. A veces se cambian de carrera o a EAD antes de que se refleje (confirmado el 29 de octubre de 2026).
-- «Seleccionada solamente», que también muestra el SII, llega con la inscripción (R3).
+- «Seleccionada solamente», que también muestra el SII, llega con la inscripción (R3); su lila queda como token reservado, sin uso, en `resources/css/app.css` (tarea 1.43). Los colores de cada estado de la retícula y su contraste están en DESIGN.md, "Retícula del alumno".
 - Una vez elegida la especialidad, la retícula ya no muestra las materias de las otras.
 - La ficha calcula el avance al leerla, desde el kardex del alumno, para no esperar al siguiente recálculo de `student_progress`.
 
