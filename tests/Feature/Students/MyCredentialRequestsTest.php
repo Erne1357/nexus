@@ -84,7 +84,7 @@ it('CO-S2: cancela mientras está solicitada', function () {
     [$student, $user] = credentialStudent();
     $request = CredentialRequest::factory()->for($student)->create();
 
-    credentialPage($user)->assertSeeHtml('data-testid="cancel-request"')->call('cancelRequest')->assertDontSeeHtml('data-testid="open-request"');
+    credentialPage($user)->assertSeeHtml('data-testid="cancel-request"')->call('cancelRequest', $request->id)->assertDontSeeHtml('data-testid="open-request"');
 
     expect($request->fresh()->status)->toBe(S::Cancelada);
 });
@@ -95,7 +95,8 @@ it('CO-S2: no cancela una citada ni la de otro alumno', function () {
     $citada = CredentialRequest::factory()->for($student)->create(['status' => S::Citada]);
     $theirs = CredentialRequest::factory()->for($otherStudent)->create();
 
-    credentialPage($user)->call('cancelRequest')->assertForbidden();
+    credentialPage($user)->call('cancelRequest', $citada->id)->assertForbidden();
+    credentialPage($user)->call('cancelRequest', $theirs->id)->assertNotFound();
 
     expect($citada->fresh()->status)->toBe(S::Citada)->and($theirs->fresh()->status)->toBe(S::Solicitada);
 });
@@ -112,4 +113,34 @@ it('CO-10: el historial lista las solicitudes del alumno, no las de otros', func
         ->assertSee('Entregada')
         ->assertSee('Foto borrosa')
         ->assertDontSee('Motivo ajeno');
+});
+
+it('CO-07 (C4): con una reposición abierta puede pedir la foto, y la reposición queda deshabilitada con su motivo', function () {
+    [$student, $user] = credentialStudent();
+    CredentialRequest::factory()->for($student)->create(['wants_reposition' => true, 'wants_photo' => false]);
+
+    credentialPage($user)
+        ->assertSeeHtml('data-testid="credential-request-open"')
+        ->assertSee('Ya tienes una abierta.')
+        ->set('wantsPhoto', true)
+        ->call('requestCredential')
+        ->assertHasNoErrors();
+
+    expect(CredentialRequest::query()->where('student_id', $student->id)->where('wants_photo', true)->count())->toBe(1);
+});
+
+it('CO-S2: con dos abiertas cancela la solicitada y no la citada', function () {
+    [$student, $user] = credentialStudent();
+    $citada = CredentialRequest::factory()->for($student)->create(['wants_reposition' => true, 'wants_photo' => false, 'status' => S::Citada]);
+    $solicitada = CredentialRequest::factory()->for($student)->create(['wants_reposition' => false, 'wants_photo' => true]);
+
+    credentialPage($user)->assertSeeHtml('data-testid="cancel-request"')->call('cancelRequest', $solicitada->id);
+
+    expect($solicitada->fresh()->status)->toBe(S::Cancelada)->and($citada->fresh()->status)->toBe(S::Citada);
+});
+
+it('CO-07: enviar el drawer sin marcar nada muestra «Elige qué quieres pedir.»', function () {
+    [, $user] = credentialStudent();
+
+    credentialPage($user)->call('requestCredential')->assertHasErrors(['request'])->assertSee('Elige qué quieres pedir.');
 });

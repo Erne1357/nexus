@@ -49,11 +49,11 @@
 
                 <section class="rounded-box border border-base-300 bg-base-100 p-5" data-testid="credential-request-panel">
                     <h2 class="text-lg font-bold leading-tight">Tu solicitud</h2>
-                    @if ($openRequest === null)
+                    @if ($openRequests->isEmpty())
                         <p class="mt-2 text-neutral">No tienes ninguna solicitud abierta. Puedes pedir la reposición de tu credencial física o tomarte o actualizar la foto.</p>
-                        <x-button label="Solicitar" icon="o-plus" class="btn-primary mt-4" wire:click="$set('showRequest', true)" data-testid="credential-request-open" />
-                    @else
-                        <div class="mt-3 space-y-3" data-testid="open-request">
+                    @endif
+                    @foreach ($openRequests as $openRequest)
+                        <div class="mt-3 space-y-3 border-t border-base-300 pt-3 first:border-t-0 first:pt-0" data-testid="open-request">
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="badge badge-soft font-medium">{{ $openRequest->status->label() }}</span>
                                 <span class="text-neutral">{{ collect([$openRequest->wants_reposition ? 'Reposición de credencial' : null, $openRequest->wants_photo ? 'Foto' : null])->filter()->implode(' y ') }}</span>
@@ -73,9 +73,12 @@
                                 </dl>
                             @endif
                             @if ($openRequest->status === \App\Modules\Students\Enums\CredentialRequestStatus::Solicitada)
-                                <x-button label="Cancelar solicitud" icon="o-x-mark" class="btn-outline" wire:click="cancelRequest" data-testid="cancel-request" />
+                                <x-button label="Cancelar solicitud" icon="o-x-mark" class="btn-outline" wire:click="cancelRequest('{{ $openRequest->getKey() }}')" data-testid="cancel-request" />
                             @endif
                         </div>
+                    @endforeach
+                    @if (in_array(null, $availability, true))
+                        <x-button label="Solicitar" icon="o-plus" class="btn-primary mt-4" wire:click="$set('showRequest', true)" data-testid="credential-request-open" />
                     @endif
                 </section>
             </div>

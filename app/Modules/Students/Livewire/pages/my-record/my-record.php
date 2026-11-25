@@ -65,16 +65,17 @@ new #[Title('Mis datos')] class extends Component
     }
 
     /**
-     * CO-S2: cancela su solicitud abierta mientras está solicitada.
+     * CO-S2: cancela una solicitud suya abierta mientras está solicitada. El id se busca solo entre las abiertas del propio
+     * alumno; otro id o una que no está abierta da 404, y la Policy exige que siga solicitada.
      */
-    public function cancelRequest(Actor $context, CancelCredentialRequest $cancel, MyRecordQuery $records, CredentialRequestQuery $requests): void
+    public function cancelRequest(string $id, Actor $context, CancelCredentialRequest $cancel, MyRecordQuery $records, CredentialRequestQuery $requests): void
     {
         $user = $context->user();
         $student = $user !== null ? $records->for($user) : null;
         abort_if($student === null, 403);
 
-        $open = $requests->history($student)->first(fn (CredentialRequest $request): bool => $request->status->isOpen());
-        abort_if($open === null, 403);
+        $open = $requests->history($student)->first(fn (CredentialRequest $request): bool => $request->status->isOpen() && $request->getKey() === $id);
+        abort_if($open === null, 404);
         Gate::authorize('cancel', $open);
 
         $cancel->handle($open, $user);
@@ -96,7 +97,7 @@ new #[Title('Mis datos')] class extends Component
         return [
             'student' => $student,
             'requests' => $history,
-            'openRequest' => $history?->first(fn (CredentialRequest $request): bool => $request->status->isOpen()),
+            'openRequests' => $history?->filter(fn (CredentialRequest $request): bool => $request->status->isOpen())->values(),
             'availability' => $onCredentialTab ? CredentialRequestRules::availability($student, CarbonImmutable::now()) : null,
             'record' => $student !== null && $this->tab === 'perfil' ? $profiles->forStudent($student) : null,
             'credential' => $student !== null && $this->tab === 'credencial' ? $credentials->of($context, $student) : null,
