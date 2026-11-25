@@ -882,6 +882,7 @@ El Departamento de Comunicación y Difusión tiene su espacio en Nexus: el módu
 | CO-S6 | Supuesto por confirmar: el recorte automático de la foto es 3:4, centrado a lo ancho y pegado arriba, porque las fotos de credencial traen la cara en el tercio superior y 3:4 es la proporción del hueco de la foto en la credencial (23.1 % × 48.3 % de 1017×642). | Core | R1 |
 | CO-S7 | Supuesto por confirmar: la URL firmada de la foto vence a las 2 horas. | Core | R1 |
 | CO-S8 | Supuesto por confirmar: entregar una solicitud con foto exige que se haya subido una foto del alumno mientras la solicitud estaba abierta. | Students | R1 |
+| CO-S9 | Supuesto por confirmar: no se cita en el pasado. Citar o reprogramar con una fecha y hora anteriores a este momento (zona America/Ciudad_Juarez) lanza `ValidationException` («La cita debe ser a partir de hoy.»); lo hace la Action `ScheduleCredentialRequest`, así que vale para cualquier pantalla. | Students | R1 |
 
 ## Parámetros por modalidad (perfil de flujo)
 

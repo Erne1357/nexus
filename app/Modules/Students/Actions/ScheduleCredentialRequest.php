@@ -24,6 +24,10 @@ final class ScheduleCredentialRequest
             throw ValidationException::withMessages(['place' => 'Escribe el lugar de la cita.']);
         }
 
+        if ($at->lt(now())) {
+            throw ValidationException::withMessages(['scheduled_at' => 'La cita debe ser a partir de hoy.']);
+        }
+
         $reschedule = DB::transaction(function () use ($request, $at, $place, $by): bool {
             $locked = CredentialRequest::query()->whereKey($request->getKey())->lockForUpdate()->firstOrFail();
             CredentialRequestRules::assertStatus($locked, [Status::Solicitada, Status::Citada], 'citar');
