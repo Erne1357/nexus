@@ -35,6 +35,12 @@ final class OrgTree
      */
     public const string SCHOOL_SERVICES = 'SERVICIOS-ESCOLARES';
 
+    /**
+     * El Departamento de Comunicación y Difusión (CO-01): su jefa y su personal manejan los avisos y los atajos de la
+     * pantalla de acceso y las fotos; los permisos de esas pantallas aplican a esta clave.
+     */
+    public const string COMMUNICATION = 'COMUNICACION';
+
     /** @var array{descendants: array<string, list<string>>, units: array<string, array{kind: string, code: string}>}|null */
     private ?array $map = null;
 

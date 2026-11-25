@@ -80,6 +80,12 @@
             "catalog_validation.review.resolve_flag",
             "catalog_validation.review.validate",
             "catalog_validation.review.view",
+            "core.login_notice.manage",
+            "core.login_notice.view",
+            "core.login_shortcut.manage",
+            "core.login_shortcut.view",
+            "core.staff_photo.manage",
+            "core.unit_staff.appoint",
             "faculty.teacher.create",
             "faculty.teacher.manage_availability",
             "faculty.teacher.manage_external_loads",
@@ -130,6 +136,13 @@
             "staffing.selection.view",
             "staffing.teacher.assign",
             "staffing.teacher_load.view"
+        ],
+        "personal": [
+            "core.login_notice.manage",
+            "core.login_notice.view",
+            "core.login_shortcut.manage",
+            "core.login_shortcut.view",
+            "core.staff_photo.manage"
         ],
         "subdireccion": [
             "academic_load.agreement.view",
@@ -201,6 +214,14 @@
         "students.my_record.view"
     ],
     "applies_to": {
+        "codes=COMUNICACION": [
+            "core.login_notice.manage",
+            "core.login_notice.view",
+            "core.login_shortcut.manage",
+            "core.login_shortcut.view",
+            "core.staff_photo.manage",
+            "core.unit_staff.appoint"
+        ],
         "codes=SERVICIOS-ESCOLARES": [
             "academic.placement.validate"
         ],

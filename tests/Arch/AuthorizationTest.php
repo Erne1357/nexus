@@ -50,6 +50,8 @@ it('RecipientsQuery no conserva for()', function () {
 const ROLE_NAMING_EXCEPTIONS = [
     'app/Modules/Academic/Database/Seeders/DemoStaffSeeder.php',
     'app/Modules/CatalogValidation/Database/Seeders/CatalogValidationDemoSeeder.php',
+    // «Personal» de Comunicación y Difusión nombra y termina el puesto de personal de área (CO-02).
+    'app/Modules/Communication/Queries/UnitStaffQuery.php',
     'app/Modules/Core/Actions/AppointCareerCoordinator.php',
     'app/Modules/Core/Actions/EndRoleAssignment.php',
     'app/Modules/Core/Database/Factories/RoleAssignmentFactory.php',
@@ -201,6 +203,8 @@ const GRANT_TABLES_READERS = [
     'app/Modules/Core/Database/Migrations/2026_11_15_0001',
     // El rol de fábrica del directivo (AZ-03).
     'app/Modules/Core/Database/Migrations/2026_11_19_000001_add_directivo_role.php',
+    // El rol de fábrica del personal de área (CO-01).
+    'app/Modules/Core/Database/Migrations/2026_11_24_000001_add_personal_role.php',
     'app/Modules/Core/Models/PermissionSet.php',
     'app/Modules/Core/Database/Factories/PermissionSetFactory.php',
     'app/Modules/Core/Rules/PermissionSetRules.php',

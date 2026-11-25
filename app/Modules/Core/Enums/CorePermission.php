@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
@@ -14,6 +15,11 @@ use App\Modules\Core\Authorization\UnitApplicability;
  * del interruptor de la carga académica (MN-05) y de qué perfiles inician sesión (AC-21), son candados (CF-03): solo los tiene el admin y no se dan a otro puesto,
  * salvo ver personas y puestos, el organigrama y la bitácora, que el directivo tiene de fábrica (AZ-03). Los de avisos,
  * atajos y parámetros sí se pueden dar.
+ *
+ * CO-01 (C10 a C12, confirmados el 24 de noviembre de 2026): los avisos y los atajos del login, las fotos del personal
+ * (`core.staff_photo.manage`) y nombrar al personal de área de la unidad propia (`core.unit_staff.appoint`, con la
+ * unidad como dimensión) aplican al Departamento de Comunicación y Difusión (OrgTree::COMMUNICATION); el jefe y el
+ * personal de área de esa unidad los tienen de fábrica, menos nombrar, que es solo del jefe (CO-02).
  */
 enum CorePermission: string implements Permission
 {
@@ -55,6 +61,8 @@ enum CorePermission: string implements Permission
     case LoginNoticeManage = 'core.login_notice.manage';
     case LoginShortcutView = 'core.login_shortcut.view';
     case LoginShortcutManage = 'core.login_shortcut.manage';
+    case StaffPhotoManage = 'core.staff_photo.manage';
+    case UnitStaffAppoint = 'core.unit_staff.appoint';
     case SettingView = 'core.setting.view';
     case SettingUpdate = 'core.setting.update';
     case MailView = 'core.mail.view';
@@ -105,6 +113,8 @@ enum CorePermission: string implements Permission
             self::LoginNoticeManage => 'Manejar los avisos de la pantalla de acceso',
             self::LoginShortcutView => 'Ver los atajos de la pantalla de acceso',
             self::LoginShortcutManage => 'Manejar los atajos de la pantalla de acceso',
+            self::StaffPhotoManage => 'Subir y quitar las fotos del personal',
+            self::UnitStaffAppoint => 'Nombrar y terminar al personal de área de su unidad',
             self::SettingView => 'Ver los parámetros',
             self::SettingUpdate => 'Cambiar los parámetros',
             self::MailView => 'Ver el registro de correos y las invitaciones pendientes',
@@ -124,6 +134,7 @@ enum CorePermission: string implements Permission
             self::CampusView => [Dimension::Campus],
             self::ModalityView, self::ModalityUpdateProfile => [Dimension::Modality],
             self::TermOpen => [Dimension::Modality],
+            self::UnitStaffAppoint => [Dimension::Unit],
             default => [],
         };
     }
@@ -134,10 +145,15 @@ enum CorePermission: string implements Permission
     }
 
     /**
-     * A cualquier unidad: ningún permiso del módulo depende de la unidad del puesto (AZ-S16).
+     * CO-01: los avisos y los atajos del login, las fotos del personal y nombrar al personal de área, a Comunicación y
+     * Difusión (AZ-02, AZ-S16); los demás, a cualquier unidad. El admin no lleva unidad, así que los conserva todos.
      */
     public function appliesTo(): ?UnitApplicability
     {
-        return null;
+        return match ($this) {
+            self::LoginNoticeView, self::LoginNoticeManage, self::LoginShortcutView, self::LoginShortcutManage,
+            self::StaffPhotoManage, self::UnitStaffAppoint => UnitApplicability::of(codes: [OrgTree::COMMUNICATION]),
+            default => null,
+        };
     }
 }
