@@ -38,7 +38,7 @@ final class SelectionMonitorQuery
     ) {}
 
     /**
-     * @return array{current: ?SelectionEntry, current_name: ?string, rows: list<Row>, done: int, total: int, groups_taken: int, groups_total: int, hours_taken: int, hours_total: int, waiting: int, extra: list<Row>, unresolved: list<Row>, access: Access}
+     * @return array{current: ?SelectionEntry, current_name: ?string, rows: list<Row>, prior: list<Row>, done: int, total: int, groups_taken: int, groups_total: int, hours_taken: int, hours_total: int, waiting: int, extra: list<Row>, unresolved: list<Row>, access: Access}
      */
     public function for(Selection $selection, CarbonImmutable $now): array
     {
@@ -79,9 +79,11 @@ final class SelectionMonitorQuery
         return [
             'current' => $current,
             'current_name' => $rows->firstWhere('current', true)['name'] ?? null,
-            'rows' => $rows->all(),
+            'rows' => $rows->reject(fn (array $row): bool => $row['entry']->status === SelectionEntryStatus::PriorChoice)->values()->all(),
+            // SEL-16: quien ya trae sus grupos no tiene turno; sale aparte y no cuenta en el avance de los turnos.
+            'prior' => $rows->filter(fn (array $row): bool => $row['entry']->status === SelectionEntryStatus::PriorChoice)->values()->all(),
             'done' => $entries->where('status', SelectionEntryStatus::Done)->count(),
-            'total' => $entries->count(),
+            'total' => $entries->where('status', '!=', SelectionEntryStatus::PriorChoice)->count(),
             'groups_taken' => $taken->count(),
             'groups_total' => $groups->count(),
             'hours_taken' => (int) $taken->sum('hours'),

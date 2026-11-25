@@ -6,13 +6,21 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Transitions\OpenLoadForSelection;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Actions\GrantHourAllowance;
+use App\Modules\Faculty\Queries\TeacherBaseHoursQuery;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
+use App\Modules\Staffing\Enums\SelectionEntrySource;
+use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Jobs\InviteSelectionTeachersJob;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Notifications\SelectionTurnPublished;
+use App\Modules\Staffing\Queries\SelectionGroupsQuery;
+use App\Modules\Staffing\Rules\LoadBand;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -28,12 +36,21 @@ use Throwable;
  * los turnos de los docentes y el reloj, antes de cualquier bloqueo de fila. Ya con el candado recalcula la cola
  * (RecomputeSelectionOrder): así entra al final quien se adscribió al departamento después del último CSV (SEL-10).
  * Ya confirmada, encola las invitaciones de acceso de la cola (InviteSelectionTeachersJob, SEL-13).
+ *
+ * SEL-16: los renglones de elección previa (`prior_choice`) quedan cerrados al publicar, con `closed_at` y las horas de
+ * sus grupos en las cargas incluidas (`closed_hours`); si esas horas quedan fuera de la banda de su base (LoadBand), se
+ * autoriza el total de HC-08 en el periodo con la justificación «Elección previa», igual que SEL-12. No reciben aviso de
+ * turno (no tienen) pero sí la invitación de acceso.
  */
 final class PublishSelection
 {
     public function __construct(
         private readonly OpenLoadForSelection $openLoad,
         private readonly RecomputeSelectionOrder $recompute,
+        private readonly SelectionGroupsQuery $groups,
+        private readonly TeacherBaseHoursQuery $baseHours,
+        private readonly GrantHourAllowance $grantHours,
+        private readonly ScheduleValidator $validator,
     ) {}
 
     /**
@@ -61,6 +78,8 @@ final class PublishSelection
             foreach ($loads as $load) {
                 $this->openLoad->handle($load, $actor);
             }
+
+            $this->closePriorChoices($selection, $actor);
 
             $selection->update(['status' => SelectionStatus::Published, 'published_at' => now()]);
 
@@ -92,6 +111,49 @@ final class PublishSelection
         }
 
         return $published;
+    }
+
+    /**
+     * SEL-16: cierra los renglones de elección previa con las horas de sus grupos y justifica en HC-08 las que queden
+     * fuera de la banda (SEL-12).
+     */
+    private function closePriorChoices(Selection $selection, User $actor): void
+    {
+        $entries = $selection->entries()->with('teacher')->where('status', SelectionEntryStatus::PriorChoice->value)->get();
+
+        if ($entries->isEmpty()) {
+            return;
+        }
+
+        $term = Term::query()->findOrFail($selection->term_id);
+        $hours = $this->groups->of($selection)
+            ->whereIn('groups.teacher_id', $entries->pluck('teacher_id')->all())
+            ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
+            ->groupBy('groups.teacher_id')
+            ->selectRaw('groups.teacher_id, sum(subjects.theory_hours + subjects.practice_hours) as hours')
+            ->toBase()
+            ->pluck('hours', 'teacher_id');
+        $appended = $entries->where('source', SelectionEntrySource::Appended)->pluck('teacher_id')->all();
+        $nexusBase = $appended === [] ? [] : $this->baseHours->forTerm($term, $appended);
+
+        foreach ($entries as $entry) {
+            $taken = (int) ($hours[$entry->teacher_id] ?? 0);
+            $base = $entry->source === SelectionEntrySource::Appended ? ($nexusBase[$entry->teacher_id] ?? 0) : $entry->base_hours;
+            $band = LoadBand::classify($taken, $base);
+
+            $entry->update(['closed_at' => now(), 'closed_hours' => $taken]);
+
+            if ($band !== 'within') {
+                $this->validator->forget();
+                $count = $this->validator->teacherTermHours($entry->teacher, $term);
+                $total = $count === null ? 0 : $count['assigned_hours'] + $count['external_hours'];
+
+                if ($total > 0) {
+                    $this->grantHours->handle($entry->teacher, $term, $total, "Elección previa: {$total} h de HC-08 (asignadas y externas) con base de {$base} h (SEL-16).", $actor);
+                    $this->validator->forget();
+                }
+            }
+        }
     }
 
     /**

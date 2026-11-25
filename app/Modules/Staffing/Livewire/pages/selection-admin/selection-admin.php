@@ -24,6 +24,7 @@ use App\Modules\Staffing\Actions\Selection\ResolveSelectionEntry;
 use App\Modules\Staffing\Actions\Selection\ScheduleSelection;
 use App\Modules\Staffing\Actions\Selection\SetSelectionLoads;
 use App\Modules\Staffing\Enums\SelectionEntrySource;
+use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Models\Selection;
@@ -532,8 +533,29 @@ new #[Title('Orden de selección')] class extends Component
             'ownRooms' => $this->rooms($selection)->where('department_id', $selection->department_id)->get(),
             'freeRooms' => $this->rooms($selection)->whereNull('department_id')->get(),
             'entries' => $entries,
+            'priorHours' => $this->priorHours($selection, $entries),
             'slots' => $this->slotPreview($entries, $selection),
         ];
+    }
+
+    /**
+     * SEL-16: las horas de los grupos de cada docente con elección previa (para la vista previa del orden, sin consultas
+     * en Blade).
+     *
+     * @param  Collection<int, SelectionEntry>  $entries
+     * @return Collection<string, int|string>
+     */
+    private function priorHours(Selection $selection, $entries)
+    {
+        $ids = $entries->where('status', SelectionEntryStatus::PriorChoice)->pluck('teacher_id')->filter()->all();
+
+        return $ids === [] ? collect() : app(SelectionGroupsQuery::class)->of($selection)
+            ->whereIn('groups.teacher_id', $ids)
+            ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
+            ->groupBy('groups.teacher_id')
+            ->selectRaw('groups.teacher_id, sum(subjects.theory_hours + subjects.practice_hours) as hours')
+            ->toBase()
+            ->pluck('hours', 'teacher_id');
     }
 
     /**

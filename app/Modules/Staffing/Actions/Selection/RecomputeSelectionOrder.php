@@ -5,6 +5,7 @@ namespace App\Modules\Staffing\Actions\Selection;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
+use App\Modules\Staffing\Models\PriorChoice;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Rules\SelectionOrder;
 use App\Modules\Staffing\Rules\SelectionSlots;
@@ -14,7 +15,9 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Recalcula `position` y `slot_index` de la cola de una selección (SEL-07, SEL-10) y, si ya tiene fecha de inicio, la
- * hora de cada turno (SEL-08) y el fin de la primera ronda. Lo llaman las Actions que cambian la cola o la ventana,
+ * hora de cada turno (SEL-08) y el fin de la primera ronda. SEL-16: quien tiene elección previa en el periodo y la
+ * modalidad de la selección queda con estado `prior_choice`, sin lugar ni turno, y no entra al orden ni a los turnos
+ * (conserva su renglón del CSV, con sus criterios, si lo trae). Lo llaman las Actions que cambian la cola o la ventana,
  * dentro de su transacción; no deja bitácora propia.
  */
 final class RecomputeSelectionOrder
@@ -59,7 +62,23 @@ final class RecomputeSelectionOrder
     {
         $this->appendMissing($selection);
 
-        $entries = $selection->entries()->with('teacher:id,name,hired_on')->get();
+        $prior = PriorChoice::query()
+            ->where('term_id', $selection->term_id)
+            ->where('modality_id', $selection->modality_id)
+            ->pluck('teacher_id')
+            ->all();
+
+        $selection->entries()->whereIn('teacher_id', $prior)->update([
+            'status' => SelectionEntryStatus::PriorChoice,
+            'position' => 0,
+            'slot_index' => 0,
+            'slot_starts_at' => null,
+            'slot_ends_at' => null,
+        ]);
+
+        $entries = $selection->entries()->with('teacher:id,name,hired_on')
+            ->where('status', '!=', SelectionEntryStatus::PriorChoice->value)
+            ->get();
 
         $ranked = collect(SelectionOrder::rank($entries->map(fn ($entry): array => [
             'key' => (string) $entry->getKey(),

@@ -381,7 +381,7 @@ new #[Title('Oferta del departamento')] class extends Component
             $selection->status === SelectionStatus::Finished => 'finished',
             ! $inQueue => 'manager',
             $turn['is_mine'] => 'mine',
-            $turn['entry_status'] === SelectionEntryStatus::Done->value || $turn['entry_status'] === SelectionEntryStatus::Unresolved->value => 'done',
+            in_array($turn['entry_status'], [SelectionEntryStatus::Done->value, SelectionEntryStatus::Unresolved->value, SelectionEntryStatus::PriorChoice->value], true) => 'done',
             $turn['entry_status'] === SelectionEntryStatus::PendingExtra->value && ! $extra => 'extra',
             $selection->status === SelectionStatus::Published => 'published',
             $turn['current'] !== null => 'other',
