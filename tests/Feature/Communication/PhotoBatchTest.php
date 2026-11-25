@@ -138,3 +138,29 @@ it('un archivo que no es ZIP se rechaza antes de guardarlo', function () {
         ->toThrow(ValidationException::class);
     expect(PhotoBatch::query()->count())->toBe(0);
 });
+
+it('un archivo que no pasa el formato no ocupa la clave: ana.txt y luego ana.jpg aplica el jpg', function () {
+    $ana = User::factory()->create(['username' => 'ANAA800101AAA']);
+
+    $batch = app(StorePhotoBatch::class)->handle(PhotoBatchKind::Personal, zipOf([
+        'ANAA800101AAA.txt' => 'notas',
+        'ANAA800101AAA.jpg' => batchImage(),
+    ]), $this->head);
+
+    $outcomes = collect($batch->fresh()->report)->pluck('outcome', 'file');
+
+    expect($outcomes['ANAA800101AAA.txt'])->toBe('formato_invalido')
+        ->and($outcomes['ANAA800101AAA.jpg'])->toBe('aplicada');
+    expect($ana->fresh()->photo_path)->not->toBeNull();
+});
+
+it('un ZIP con más de 2000 archivos se rechaza', function () {
+    $files = [];
+    for ($i = 0; $i <= 2000; $i++) {
+        $files["f{$i}.jpg"] = '';
+    }
+
+    expect(fn () => app(StorePhotoBatch::class)->handle(PhotoBatchKind::Personal, zipOf($files), $this->head))
+        ->toThrow(ValidationException::class, 'El ZIP trae más de 2000 archivos; divídelo en lotes más chicos.');
+    expect(PhotoBatch::query()->count())->toBe(0);
+});

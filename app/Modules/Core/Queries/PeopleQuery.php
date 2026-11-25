@@ -55,13 +55,28 @@ final class PeopleQuery
                 'roleAssignments',
                 fn (Builder $assignments) => $assignments->current()->where('role', $role),
             ))
-            ->when($role === null && trim($search) === '', fn (Builder $query) => $query->where(fn (Builder $staff) => $staff
-                ->whereDoesntHave('roleAssignments', fn (Builder $assignments) => $assignments->current()->where('role', Role::Alumno))
-                ->orWhereHas('roleAssignments', fn (Builder $assignments) => $assignments->current()->where('role', '<>', Role::Alumno))))
+            ->when($role === null && trim($search) === '', fn (Builder $query) => self::staffOnly($query))
             ->with(['roleAssignments' => fn ($assignments) => $assignments->current()->orderBy('valid_from')])
             ->orderBy('name')
             ->orderBy('id')
             ->paginate($perPage);
+    }
+
+    /**
+     * Deja solo las cuentas del personal (AC-15, supuesto por confirmar): sin un nombramiento vigente de alumno, o con
+     * otro puesto vigente además. Quien es solo alumno queda fuera. Lo usan la lista de «Personas y puestos» sin búsqueda
+     * y la búsqueda de «Personal» de Comunicación y Difusión (CO-02), que además pide la cuenta activa.
+     *
+     * @template TQuery of Builder<User>
+     *
+     * @param  TQuery  $query
+     * @return TQuery
+     */
+    public static function staffOnly(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $staff) => $staff
+            ->whereDoesntHave('roleAssignments', fn (Builder $assignments) => $assignments->current()->where('role', Role::Alumno))
+            ->orWhereHas('roleAssignments', fn (Builder $assignments) => $assignments->current()->where('role', '<>', Role::Alumno)));
     }
 
     /**
