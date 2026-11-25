@@ -20,7 +20,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | staffing:import-prior-choices (tarea 1.41, SEL-16): lee la «Relación de materias» de 1.40, asigna a cada maestro con grupos
-| escritos sus grupos y deja su elección previa; llena el tipo de espacio vacío desde la columna del archivo (S2).
+| escritos sus grupos y deja su elección previa; llena el tipo de espacio vacío desde la columna del archivo (decisión del 25 de noviembre de 2026).
 | Idempotente y con --dry-run. Nombres y claves ficticios.
 */
 
@@ -72,7 +72,7 @@ it('SEL-16: asigna sus grupos al maestro, deja su elección previa y llena el ti
         ->and($group->teacher_id)->toBe($this->luna->id)
         ->and(PriorChoice::query()->sole()->teacher_id)->toBe($this->luna->id)
         ->and($this->prog->fresh()->required_space)->toBe(RequiredSpace::SalaComputo)
-        // S2: la materia que ya tenía tipo de espacio no se pisa.
+        // Decisión del 25 de noviembre de 2026: la materia que ya tenía tipo de espacio no se pisa.
         ->and($this->redes->fresh()->required_space)->toBe(RequiredSpace::Laboratorio);
 });
 
@@ -150,7 +150,7 @@ it('D3: el grupo sin horario fijo (GL) se asigna al maestro del renglón', funct
         ->and($group->teacher_id)->toBe($this->luna->id);
 });
 
-it('S2: si dos renglones de la misma materia piden tipos distintos gana el primero y se avisa', function () {
+it('Decisión del 25 de noviembre de 2026: si dos renglones de la misma materia piden tipos distintos gana el primero y se avisa', function () {
     $report = ($this->run)([
         priorLine('', 'AID-2501', 'C', '9 - 10', 'SALON'),
         priorLine('', 'AID-2501', 'D', '10 - 11', 'LABORATORIO'),
@@ -171,4 +171,22 @@ it('el comando reporta y falla si hay renglones con error', function () {
         ->assertFailed();
 
     $this->artisan('staffing:import-prior-choices', ['file' => '/no/existe.csv'])->assertFailed();
+});
+
+it('decisión del 25 de noviembre de 2026: SALA DE COMPUTO y AULA y LABORATORIO DE REDES se mapean a su tipo de espacio', function () {
+    $aula = Subject::factory()->create(['code' => 'CBD-2415', 'department_id' => $this->department->id, 'credits' => 5, 'required_space' => null]);
+    $redes = Subject::factory()->create(['code' => 'CBD-2416', 'department_id' => $this->department->id, 'credits' => 5, 'required_space' => null]);
+    $this->redes->update(['required_space' => null]);
+
+    ($this->run)([
+        priorLine('', 'AID-2501', 'C', '9 - 10', 'SALA DE COMPUTO'),
+        priorLine('', 'CBD-2415', 'D', '10 - 11', 'AULA'),
+        priorLine('', 'CBD-2416', 'E', '11 - 12', 'LABORATORIO DE REDES'),
+        priorLine('', 'XYZ-9999', 'F', '12 - 13', 'LABORATORIO', 4),
+    ]);
+
+    expect($this->prog->fresh()->required_space)->toBe(RequiredSpace::SalaComputo)
+        ->and($aula->fresh()->required_space)->toBe(RequiredSpace::Aula)
+        ->and($redes->fresh()->required_space)->toBe(RequiredSpace::Laboratorio)
+        ->and($this->redes->fresh()->required_space)->toBe(RequiredSpace::SalaComputo);
 });

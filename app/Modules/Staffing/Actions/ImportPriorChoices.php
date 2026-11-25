@@ -33,9 +33,10 @@ use RuntimeException;
  * - **Todo o nada por docente:** si algún renglón de un docente es un error, no se registra su elección previa (quedaría a
  *   medias y el docente saldría de la orden sin tener todos sus grupos); los demás docentes siguen. Un docente cuyo registro
  *   rechaza RecordPriorChoice (HC-01, grupo de otro) se reporta en cada uno de sus renglones.
- * - **Tipo de espacio (supuesto S2, por confirmar):** de cada renglón, con o sin maestro, si la materia tiene `required_space`
- *   vacío se llena con SetSubjectRequiredSpace desde la columna LABORATORIO / SALÓN (LABORATORIO = `sala_computo`, SALON =
- *   `aula`); si dos renglones de la materia difieren, gana el primero y se avisa. Nunca pisa un valor ya revisado.
+ * - **Tipo de espacio (decisión del usuario del 25 de noviembre de 2026):** de cada renglón, con o sin maestro, si la materia
+ *   tiene `required_space` vacío se llena con SetSubjectRequiredSpace desde la columna LABORATORIO / SALÓN (LABORATORIO y
+ *   SALA DE COMPUTO = `sala_computo`, porque en las relaciones de Sistemas «laboratorio» es sala de cómputo; SALON y AULA =
+ *   `aula`; LABORATORIO DE REDES = `laboratorio`); si dos renglones de la materia difieren, gana el primero y se avisa. Nunca pisa un valor ya revisado.
  *
  * Idempotente. Con `$dryRun` corre el mismo registro dentro de una transacción que se deshace (así también reporta HC-01) y
  * no llena tipos de espacio.
@@ -199,8 +200,9 @@ final class ImportPriorChoices
     private function collectSpace(array &$report, LoadRelationRow $row, string $subjectId, array &$spaces): void
     {
         $space = match ($row->space) {
-            'LABORATORIO' => RequiredSpace::SalaComputo,
-            'SALON' => RequiredSpace::Aula,
+            'LABORATORIO', 'SALA DE COMPUTO' => RequiredSpace::SalaComputo,
+            'SALON', 'AULA' => RequiredSpace::Aula,
+            'LABORATORIO DE REDES' => RequiredSpace::Laboratorio,
             default => null,
         };
 

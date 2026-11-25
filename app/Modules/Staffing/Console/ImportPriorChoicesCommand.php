@@ -64,7 +64,7 @@ final class ImportPriorChoicesCommand extends Command
             $this->warn($warning);
         }
 
-        $this->line('Supuesto por confirmar (S2): LABORATORIO = sala de cómputo y SALÓN = aula; solo llena la materia que no tiene tipo de espacio.');
+        $this->line('Tipo de espacio (decisión del 25 de noviembre de 2026): LABORATORIO y SALA DE COMPUTO = sala de cómputo, SALON y AULA = aula, LABORATORIO DE REDES = laboratorio; solo llena la materia que no tiene tipo de espacio.');
 
         return $report['errors'] === [] ? self::SUCCESS : self::FAILURE;
     }
