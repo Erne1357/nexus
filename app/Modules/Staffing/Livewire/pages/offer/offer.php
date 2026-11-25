@@ -214,16 +214,16 @@ new #[Title('Oferta del departamento')] class extends Component
      * SEL-16 ampliada (1.45): el docente con elección previa arriba de la banda de su base confirma con la casilla; no
      * toma ni suelta nada.
      */
-    public function confirmPrior(Actor $context, SelectionTimetableQuery $timetable, ConfirmPriorChoiceHours $action): void
+    public function confirmPrior(int $seenHours, Actor $context, SelectionTimetableQuery $timetable, ConfirmPriorChoiceHours $action): void
     {
         $user = $context->user() ?? abort(403);
-        $selection = $this->selection($context, $timetable) ?? abort(404);
+        $selection = $this->selection($context, $timetable) ?? abort(403);
         $this->authorize('pickOwn', $selection);
         $teacher = $this->teacherMemo ?? abort(403);
         $this->resetValidation();
 
         try {
-            $entry = $action->handle($selection, $teacher, $this->priorAcknowledged, $user);
+            $entry = $action->handle($selection, $teacher, $this->priorAcknowledged, $user, $seenHours);
         } catch (ValidationException $e) {
             foreach ($e->errors() as $key => $messages) {
                 $this->addError($key, $messages[0]);

@@ -152,16 +152,18 @@ final class PublishSelection
         }
 
         $term = Term::query()->findOrFail($selection->term_id);
-        $measured = $this->priorHours->forSelection($selection, $entries);
+        $measured = $this->priorHours->forSelection($selection, $entries, $term);
         $pending = collect();
 
         foreach ($entries as $entry) {
             $taken = $measured[$entry->getKey()]['hours'] ?? 0;
             $base = $measured[$entry->getKey()]['base'] ?? $entry->base_hours;
 
-            $entry->update(['closed_at' => now(), 'closed_hours' => $taken]);
+            $over = ($measured[$entry->getKey()]['band'] ?? null) === 'over';
+            // La foto al publicar: quien queda arriba de la banda debe confirmar, pase lo que pase después con sus grupos.
+            $entry->update(['closed_at' => now(), 'closed_hours' => $taken, 'prior_choice_confirm_required_at' => $over ? now() : null]);
 
-            if ($measured[$entry->getKey()]['needs_confirmation'] ?? false) {
+            if ($over) {
                 $pending->push(['entry' => $entry, 'hours' => $taken, 'base' => $base]);
 
                 continue;

@@ -2,7 +2,9 @@
 
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\TeacherHourAllowance;
+use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\RecordPriorChoice;
 use App\Modules\Staffing\Actions\Selection\ConfirmPriorChoiceHours;
 use App\Modules\Staffing\Actions\Selection\PublishSelection;
@@ -66,7 +68,7 @@ it('SEL-16: al publicar, el previo arriba de su banda queda cerrado pero sin HC-
         ->and($order[$dentro->id]['confirmation'])->toBeNull();
 });
 
-it('SEL-16: el aviso de confirmar sale una sola vez y solo a quien debe confirmar', function () {
+it('SEL-16: el aviso de confirmar llega al publicar, una vez, solo a quien debe confirmar', function () {
     [, $arriba, $dentro, $espera] = confirmWorld();
 
     Notification::assertSentToTimes($arriba->user, PriorChoiceHoursPending::class, 1);
@@ -105,7 +107,7 @@ it('SEL-16: solo confirma el propio docente; otro docente o usuario recibe 403',
         ->toThrow(AuthorizationException::class);
     expect($world->entryOf($arriba)->out_of_band_acknowledged_at)->toBeNull();
 
-    Livewire::actingAs($world->admin)->test('staffing::pages.offer')->set('priorAcknowledged', true)->call('confirmPrior')->assertForbidden();
+    Livewire::actingAs($world->admin)->test('staffing::pages.offer')->set('priorAcknowledged', true)->call('confirmPrior', 5)->assertForbidden();
 });
 
 it('SEL-16: otra selección donde no está en la cola no deja confirmar', function () {
@@ -127,7 +129,7 @@ it('SEL-16: quien está dentro de su banda no tiene nada que confirmar', functio
     [$world, , $dentro] = confirmWorld();
 
     expect(fn () => app(ConfirmPriorChoiceHours::class)->handle($world->selection->fresh(), $dentro, true, $dentro->user))
-        ->toThrow(ValidationException::class, 'no pasan de tu banda');
+        ->toThrow(ValidationException::class, 'quedaron dentro de tu banda');
 });
 
 it('SEL-16: confirmar dos veces es idempotente: una sola autorización y una sola bitácora', function () {
@@ -149,10 +151,10 @@ it('SEL-16: la pantalla del docente muestra el aviso con la casilla, confirma y 
         ->assertSeeHtml('data-testid="prior-confirm"')
         ->assertSeeHtml('data-testid="prior-acknowledge"')
         ->assertSee('pasas tu margen por')
-        ->call('confirmPrior')
+        ->call('confirmPrior', 5)
         ->assertHasErrors('acknowledged');
 
-    $page->set('priorAcknowledged', true)->call('confirmPrior')
+    $page->set('priorAcknowledged', true)->call('confirmPrior', 5)
         ->assertHasNoErrors()
         ->assertDontSeeHtml('data-testid="prior-confirm"')
         ->assertSeeHtml('data-testid="prior-confirmed"')
@@ -180,4 +182,85 @@ it('SEL-16: el monitor del admin y la lista de la orden marcan «falta confirmar
 
     $order = collect(app(SelectionOrderQuery::class)->forSelection($world->selection->fresh()))->keyBy('teacher_id');
     expect($order[$arriba->id]['confirmation'])->toBe('confirmed');
+});
+
+it('SEL-16: confirma con las horas que vio: si cambiaron, se rechaza y no se autoriza nada', function () {
+    [$world, $arriba] = confirmWorld();
+    $extra = $world->group('X', [[3, '09:00', '10:00']]);
+    $extra->update(['teacher_id' => $arriba->id]);
+
+    expect(fn () => app(ConfirmPriorChoiceHours::class)->handle($world->selection->fresh(), $arriba, true, $arriba->user, 5))
+        ->toThrow(ValidationException::class, 'Tus horas cambiaron; revisa y vuelve a confirmar');
+    expect(TeacherHourAllowance::query()->where('teacher_id', $arriba->id)->exists())->toBeFalse();
+
+    $entry = app(ConfirmPriorChoiceHours::class)->handle($world->selection->fresh(), $arriba, true, $arriba->user, 10);
+    expect($entry->out_of_band_acknowledged_at)->not->toBeNull()
+        ->and(TeacherHourAllowance::query()->where('teacher_id', $arriba->id)->sole()->hours)->toBe(10);
+});
+
+it('SEL-16: la foto al publicar manda: el pendiente confirma aunque el jefe le quite sus grupos, sin callejón sin salida', function () {
+    [$world, $arriba] = confirmWorld();
+    $world->entryOf($arriba)->prior_choice_confirm_required_at ?? throw new RuntimeException('sin foto');
+    Group::query()->where('teacher_id', $arriba->id)->update(['teacher_id' => null]);
+
+    app(ConfirmPriorChoiceHours::class)->handle($world->selection->fresh(), $arriba, true, $arriba->user);
+
+    expect($world->entryOf($arriba)->out_of_band_acknowledged_at)->not->toBeNull()
+        ->and(TeacherHourAllowance::query()->where('teacher_id', $arriba->id)->exists())->toBeFalse();
+});
+
+it('SEL-16: quien quedó dentro de la banda al publicar no confirma aunque el jefe le agregue grupos después (SEL-12)', function () {
+    [$world, , $dentro] = confirmWorld();
+    $world->group('X', [[3, '09:00', '10:00']])->update(['teacher_id' => $dentro->id]);
+    $world->group('Y', [[4, '09:00', '10:00']])->update(['teacher_id' => $dentro->id]);
+
+    expect($world->entryOf($dentro)->prior_choice_confirm_required_at)->toBeNull()
+        ->and(fn () => app(ConfirmPriorChoiceHours::class)->handle($world->selection->fresh(), $dentro, true, $dentro->user))
+        ->toThrow(ValidationException::class, 'quedaron dentro de tu banda');
+    $order = collect(app(SelectionOrderQuery::class)->forSelection($world->selection->fresh()))->keyBy('teacher_id');
+    expect($order[$dentro->id]['confirmation'])->toBeNull()
+        ->and(TeacherHourAllowance::query()->where('teacher_id', $dentro->id)->count())->toBe(1);
+});
+
+it('SEL-16: debajo de la banda al publicar no se pide nada (supuesto por confirmar) y se autoriza como siempre', function () {
+    Notification::fake();
+    Bus::fake([InviteSelectionTeachersJob::class]);
+    $world = SelectionWorld::create(SelectionStatus::Draft);
+    $world->selection->update(['starts_at' => CarbonImmutable::now()->addDays(3)->setTime(9, 0), 'window_starts' => '09:00', 'window_ends' => '15:00', 'weekdays' => [1, 2, 3, 4, 5], 'slot_minutes' => 30]);
+    $abajo = $world->teacher(base: 20, name: 'Docente Abajo');
+    $world->teacher(base: 5, name: 'Docente Espera', position: 2);
+    app(RecordPriorChoice::class)->handle($world->term, $world->selection->modality, $abajo, [['group' => $world->group('A', [[1, '09:00', '10:00']])]], $world->admin);
+    app(PublishSelection::class)->handle($world->selection->fresh(), $world->admin);
+
+    expect($world->entryOf($abajo)->prior_choice_confirm_required_at)->toBeNull()
+        ->and(TeacherHourAllowance::query()->where('teacher_id', $abajo->id)->sole()->hours)->toBe(5);
+    Notification::assertNotSentTo($abajo->user, PriorChoiceHoursPending::class);
+});
+
+it('SEL-16: un renglón sin elección previa no confirma (NOT_PRIOR)', function () {
+    [$world, , , $espera] = confirmWorld();
+
+    expect(fn () => app(ConfirmPriorChoiceHours::class)->handle($world->selection->fresh(), $espera, true, $espera->user))
+        ->toThrow(ValidationException::class, 'elección previa');
+});
+
+it('SEL-16: con la selección cancelada no hay nada que confirmar (NOT_OPEN)', function () {
+    [$world, $arriba] = confirmWorld();
+    $world->selection->update(['status' => SelectionStatus::Cancelled]);
+
+    expect(fn () => app(ConfirmPriorChoiceHours::class)->handle($world->selection->fresh(), $arriba, true, $arriba->user))
+        ->toThrow(ValidationException::class, 'no está publicada');
+});
+
+it('SEL-16: un docente de otra selección o de otro departamento no confirma por otro desde la pantalla', function () {
+    [$world, $arriba] = confirmWorld();
+    $otherWorld = SelectionWorld::create(SelectionStatus::Published);
+    $ajeno = $otherWorld->teacher(name: 'Docente Ajeno');
+    RoleAssignment::factory()->for($ajeno->user)->create(['role' => Role::Docente]);
+    $sinSeleccion = User::factory()->create();
+    RoleAssignment::factory()->for($sinSeleccion)->create(['role' => Role::Docente]);
+
+    Livewire::actingAs($ajeno->user)->test('staffing::pages.offer')->set('priorAcknowledged', true)->call('confirmPrior', 5)->assertHasErrors('group');
+    Livewire::actingAs($sinSeleccion)->test('staffing::pages.offer')->set('priorAcknowledged', true)->call('confirmPrior', 5)->assertForbidden();
+    expect($world->entryOf($arriba)->out_of_band_acknowledged_at)->toBeNull();
 });

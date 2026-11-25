@@ -25,7 +25,10 @@ use Illuminate\Validation\ValidationException;
  *
  * Solo lo confirma el propio docente (AuthorizationException si no), con la selección publicada, en curso, en ronda extra
  * o terminada, y el mismo candado consultivo de las demás Actions de la selección. Idempotente: si ya confirmó no escribe
- * nada. Si sus horas no pasan de la banda no hay nada que confirmar.
+ * nada. Debe confirmar quien quedó pendiente al publicar (`prior_choice_confirm_required_at`, la foto de PublishSelection):
+ * puede hacerlo aunque el jefe le quite grupos después (autoriza lo que HC-08 le cuente entonces, sin callejón sin salida),
+ * y quien quedó dentro de la banda no confirma nada. `$seenHours` son las horas que mostraba la pantalla: si cambiaron, se
+ * rechaza para que confirme lo que vio.
  */
 final class ConfirmPriorChoiceHours
 {
@@ -33,7 +36,9 @@ final class ConfirmPriorChoiceHours
 
     public const string NOT_PRIOR = 'Solo confirma sus horas quien trae elección previa.';
 
-    public const string NOT_OVER = 'Tus horas no pasan de tu banda: no hay nada que confirmar.';
+    public const string NOT_REQUIRED = 'No tienes horas por confirmar: al publicar la selección tus horas quedaron dentro de tu banda.';
+
+    public const string CHANGED = 'Tus horas cambiaron; revisa y vuelve a confirmar.';
 
     public const string ACKNOWLEDGE = 'Marca la casilla de que estás de acuerdo con tener más horas que tu base para continuar.';
 
@@ -49,9 +54,9 @@ final class ConfirmPriorChoiceHours
      * @throws AuthorizationException si el docente no es el del usuario
      * @throws ValidationException
      */
-    public function handle(Selection $selection, Teacher $teacher, bool $acknowledged, User $actor): SelectionEntry
+    public function handle(Selection $selection, Teacher $teacher, bool $acknowledged, User $actor, ?int $seenHours = null): SelectionEntry
     {
-        return DB::transaction(function () use ($selection, $teacher, $acknowledged, $actor): SelectionEntry {
+        return DB::transaction(function () use ($selection, $teacher, $acknowledged, $actor, $seenHours): SelectionEntry {
             $selection = $this->lockSelection($selection);
             $entry = $this->ownEntry($selection, $teacher, $actor);
 
@@ -67,10 +72,16 @@ final class ConfirmPriorChoiceHours
                 return $entry;
             }
 
-            $measured = $this->priorHours->forSelection($selection, collect([$entry]))[$entry->getKey()];
+            // La foto al publicar decide si debe confirmar (PublishSelection); lo que cambie después no lo crea ni lo quita.
+            if ($entry->prior_choice_confirm_required_at === null) {
+                throw ValidationException::withMessages(['group' => self::NOT_REQUIRED]);
+            }
 
-            if ($measured['band'] !== 'over') {
-                throw ValidationException::withMessages(['group' => self::NOT_OVER]);
+            $term = Term::query()->whereKey($selection->term_id)->firstOrFail();
+            $measured = $this->priorHours->forSelection($selection, collect([$entry]), $term)[$entry->getKey()];
+
+            if ($seenHours !== null && $seenHours !== $measured['hours']) {
+                throw ValidationException::withMessages(['hours' => self::CHANGED]);
             }
 
             if (! $acknowledged) {
@@ -78,7 +89,7 @@ final class ConfirmPriorChoiceHours
             }
 
             $entry->update(['out_of_band_acknowledged_at' => now(), 'closed_hours' => $measured['hours']]);
-            $total = $this->grant($teacher, Term::query()->findOrFail($selection->term_id), $measured['base'], $actor);
+            $total = $this->grant($teacher, $term, $measured['base'], $actor);
 
             activity()
                 ->performedOn($entry)

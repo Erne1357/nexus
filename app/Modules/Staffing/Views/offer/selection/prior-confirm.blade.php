@@ -19,13 +19,14 @@
             <div class="min-w-0 flex-1 space-y-3">
                 <div>
                     <p class="font-semibold">Confirma tus horas de la elección previa</p>
-                    <p>Tus grupos suman <b class="font-mono">{{ $prior['hours'] }}</b> h y tu base es de <b class="font-mono">{{ $prior['base'] }}</b> h (de {{ $prior['base'] - LoadBand::MARGIN }} a {{ $prior['base'] + LoadBand::MARGIN }}): pasas tu margen por <b class="font-mono">{{ $prior['over_by'] }}</b> h.</p>
+                    <p>Tus grupos suman <b class="font-mono">{{ $prior['hours'] }}</b> h y tu base es de <b class="font-mono">{{ $prior['base'] }}</b> h (de {{ $prior['base'] - LoadBand::MARGIN }} a {{ $prior['base'] + LoadBand::MARGIN }}): @if ($prior['over_by'] > 0)pasas tu margen por <b class="font-mono">{{ $prior['over_by'] }}</b> h.@else ya quedas dentro de tu margen; confirma para cerrar este pendiente.@endif</p>
                 </div>
-                <x-checkbox wire:model.live="priorAcknowledged" label="Entiendo que es mi responsabilidad cubrir mis horas de acuerdo con mi base." class="checkbox-primary" data-testid="prior-acknowledge" />
+                <x-checkbox wire:model="priorAcknowledged" label="Entiendo que es mi responsabilidad cubrir mis horas de acuerdo con mi base." class="checkbox-primary" aria-describedby="prior-hint prior-error" data-testid="prior-acknowledge" />
+                <p id="prior-hint" class="text-[12.5px] text-neutral">Marca la casilla para confirmar.</p>
                 @error('acknowledged')
-                    <p class="text-sm font-semibold text-error" role="alert">{{ $message }}</p>
+                    <p id="prior-error" class="text-sm font-semibold text-error" role="alert">{{ $message }}</p>
                 @enderror
-                <x-button label="Confirmar" icon="o-check" class="btn-primary" wire:click="confirmPrior" spinner="confirmPrior" :disabled="! $priorAcknowledged" data-testid="prior-confirm-submit" />
+                <x-button label="Confirmar" icon="o-check" class="btn-primary" wire:click="confirmPrior({{ $prior['hours'] }})" spinner="confirmPrior" data-testid="prior-confirm-submit" />
             </div>
         </div>
     @endif
