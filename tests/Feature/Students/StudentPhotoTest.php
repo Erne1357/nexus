@@ -168,3 +168,56 @@ it('CO-06: un ZIP de alumnos con más de 2000 archivos se rechaza', function () 
         ->toThrow(ValidationException::class);
     unlink($path);
 });
+
+it('una URL firmada de la foto del alumno alterada da 403', function () {
+    app(SetStudentPhoto::class)->handle($this->student, studentImage(), $this->by);
+    $url = StudentPhotoUrl::for($this->student->fresh());
+
+    $this->actingAs($this->by)->get($url.'x')->assertForbidden();
+    $this->actingAs($this->by)->get(preg_replace('/version\/?/', '', $url).'&extra=1')->assertForbidden();
+});
+
+it('CO-06: la foto del alumno sale con caché privada de 2 horas y nosniff', function () {
+    app(SetStudentPhoto::class)->handle($this->student, studentImage(), $this->by);
+
+    $response = $this->actingAs($this->by)->get(StudentPhotoUrl::for($this->student->fresh()))->assertOk();
+
+    expect($response->headers->get('Cache-Control'))->toContain('private')->toContain('max-age=7200')
+        ->and($response->headers->get('X-Content-Type-Options'))->toBe('nosniff');
+});
+
+function studentZipBatch(array $files, string $name): PhotoBatch
+{
+    $path = tempnam(sys_get_temp_dir(), 'nxz');
+    $zip = new ZipArchive;
+    $zip->open($path, ZipArchive::OVERWRITE);
+    foreach ($files as $file => $bytes) {
+        $zip->addFromString($file, $bytes);
+    }
+    $zip->close();
+    Storage::disk('imports')->put("photo-batches/{$name}.zip", file_get_contents($path));
+    unlink($path);
+
+    return PhotoBatch::query()->create([
+        'kind' => PhotoBatchKind::Alumnos, 'status' => PhotoBatchStatus::EnCola, 'file_path' => "photo-batches/{$name}.zip",
+        'original_name' => "{$name}.zip", 'uploaded_by' => test()->by->id,
+    ]);
+}
+
+it('CO-06: un .jpg que no es imagen en el lote de alumnos es formato inválido', function () {
+    $batch = studentZipBatch(['21111182.jpg' => '%PDF-1.4 no soy imagen'], 'malo');
+
+    app()->call([new ProcessPhotoBatch($batch->id), 'handle']);
+
+    expect(collect($batch->fresh()->report)->pluck('outcome', 'file')->all())->toBe(['21111182.jpg' => PhotoOutcome::FormatoInvalido->value]);
+});
+
+it('CO-06: un número de control sin año legible, aunque exista, queda sin persona', function () {
+    Student::factory()->create(['control_number' => 'XYZ']);
+    $fake = studentImage();
+    $batch = studentZipBatch(['XYZ.jpg' => file_get_contents($fake->getRealPath())], 'sinanio');
+
+    app()->call([new ProcessPhotoBatch($batch->id), 'handle']);
+
+    expect(collect($batch->fresh()->report)->pluck('outcome', 'file')->all())->toBe(['XYZ.jpg' => PhotoOutcome::SinPersona->value]);
+});
