@@ -3,21 +3,29 @@
 namespace App\Modules\Scheduling\Actions;
 
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Models\Room;
+use App\Modules\Scheduling\Actions\Sessions\AssignSessionRoom;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
+use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Rules\CreditDays;
 use App\Modules\Scheduling\Rules\GroupCode;
 use App\Modules\Scheduling\Rules\LoadEditability;
+use App\Modules\Scheduling\Support\LoadRelationRow;
+use App\Modules\Scheduling\Support\LoadRelationSheet;
 use App\Modules\Scheduling\Support\ProjectionSheet;
 use App\Modules\Scheduling\Support\SubjectResolver;
 use App\Modules\Scheduling\Validation\Minutes;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 /**
@@ -39,6 +47,13 @@ use RuntimeException;
  *   Dos grupos en paralelo a la misma hora comparten llave: los que ya existen cubren las primeras filas y solo se crean las
  *   que sobran (las demás se omiten con aviso).
  *
+ * **«Relación de materias» (`.csv`, LoadRelationSheet, 1.40):** misma Action con otro lector. El plan sale de la clave al inicio de
+ * CLAVE CARRERA; el semestre vacío toma el de la materia en el plan (`study_plan_subjects`); la hora es el rango de la fila. Con
+ * letra «GL» o rango vacío o `#N/D` el grupo se crea **sin sesiones** (D3, confirmado el 25 de noviembre de 2026) y su llave de
+ * idempotencia usa hora nula. La columna SALÓN se busca por código en el campus y se pone con AssignSessionRoom en todas las
+ * sesiones del grupo (nuevo o existente) solo si el grupo no tiene salón y el salón está libre; si no, aviso. No toca maestros
+ * ni `subjects.required_space` (Staffing, 1.41) ni el estado de la carga.
+ *
  * Una sola transacción, bitácora con el resumen y, al final, el recálculo de choques. Con `$dryRun` calcula el mismo
  * reporte sin escribir nada.
  */
@@ -52,14 +67,14 @@ final class ImportLoadProjection
     ) {}
 
     /**
-     * @return array{dry_run: bool, rows: int, created: int, sessions: int, per_department: array<string, int>, resolved_via: array<string, int>, skipped: list<array{row: int, kind: string, message: string}>, skipped_by_kind: array<string, int>, unresolved_subjects: array<string, int>, warnings: list<string>, conflicts: ?array{opened: int, kept: int, resolved: int}}
+     * @return array{dry_run: bool, rows: int, created: int, existing: int, no_schedule: int, rooms_set: int, rooms_requested: int, sessions: int, per_department: array<string, int>, resolved_via: array<string, int>, skipped: list<array{row: int, kind: string, message: string}>, skipped_by_kind: array<string, int>, unresolved_subjects: array<string, int>, warnings: list<string>, conflicts: ?array{opened: int, kept: int, resolved: int}}
      *
      * @throws RuntimeException
      */
-    public function handle(string $path, Term $term, Campus $campus, Modality $modality, bool $dryRun = false): array
+    public function handle(string $path, Term $term, Campus $campus, Modality $modality, bool $dryRun = false, ?User $actor = null): array
     {
-        $rows = $this->sheet->rows($path);
-        $report = ['dry_run' => $dryRun, 'rows' => count($rows), 'created' => 0, 'sessions' => 0, 'per_department' => [], 'resolved_via' => [], 'skipped' => [], 'skipped_by_kind' => [], 'unresolved_subjects' => [], 'warnings' => [], 'conflicts' => null];
+        $rows = LoadRelationSheet::isRelation($path) ? $this->relationRows($path) : $this->sheet->rows($path);
+        $report = ['dry_run' => $dryRun, 'rows' => count($rows), 'created' => 0, 'existing' => 0, 'no_schedule' => 0, 'rooms_set' => 0, 'rooms_requested' => 0, 'sessions' => 0, 'per_department' => [], 'resolved_via' => [], 'skipped' => [], 'skipped_by_kind' => [], 'unresolved_subjects' => [], 'warnings' => [], 'conflicts' => null];
 
         $plans = StudyPlan::query()->get(['id', 'code', 'career_id'])->keyBy(fn (StudyPlan $plan): string => mb_strtoupper($plan->code));
         $resolver = new SubjectResolver;
@@ -69,17 +84,20 @@ final class ImportLoadProjection
         $codes = [];
         $loadOk = [];
         $plan = [];
+        $existingRooms = [];
 
         foreach ($rows as $row) {
+            $relation = $row['relation'];
             $semester = $this->integer($row['semester']);
             $students = $this->integer($row['students']);
             $credits = $this->integer($row['credits']);
+            $fixed = $row['fixed'];
 
             $missing = array_keys(array_filter([
                 'clave de materia' => $row['code'] === '',
-                'grupo' => $row['group'] === '',
+                'grupo' => ! $relation && $row['group'] === '',
                 'alumnos' => $students === null || $students < 1,
-                'semestre' => $semester === null || $semester < 1,
+                'semestre' => ! $relation && ($semester === null || $semester < 1),
             ]));
 
             if ($missing !== []) {
@@ -88,24 +106,28 @@ final class ImportLoadProjection
                 continue;
             }
 
-            if ($row['hourIsError'] || $row['hour'] === '') {
-                $this->skip($report, $row['row'], 'omitted', "El grupo {$row['group']} de {$row['code']} no tiene hora (#N/A o vacía).");
+            $startMinutes = $endMinutes = null;
 
-                continue;
+            if ($fixed) {
+                if ($row['hourIsError'] || $row['hour'] === '') {
+                    $this->skip($report, $row['row'], 'omitted', "El grupo {$row['group']} de {$row['code']} no tiene hora (#N/A o vacía).");
+
+                    continue;
+                }
+
+                $start = $this->startMinutes($row['hour'], $row['group']);
+
+                if ($start === null) {
+                    $this->skip($report, $row['row'], 'omitted', "El grupo {$row['group']} de {$row['code']} no tiene una hora legible ({$row['hour']}).");
+
+                    continue;
+                }
+
+                [$startMinutes, $endMinutes] = $start;
             }
-
-            $start = $this->startMinutes($row['hour'], $row['group']);
-
-            if ($start === null) {
-                $this->skip($report, $row['row'], 'omitted', "El grupo {$row['group']} de {$row['code']} no tiene una hora legible ({$row['hour']}).");
-
-                continue;
-            }
-
-            [$startMinutes, $endMinutes] = $start;
 
             if (! preg_match('/^([A-Z]{2,6}-\d{4}-\d{2,4})/u', mb_strtoupper(trim($row['plan'])), $match)) {
-                $this->skip($report, $row['row'], 'no_plan', "El bloque «{$row['plan']}» no trae la clave del plan.");
+                $this->skip($report, $row['row'], 'no_plan', $relation ? 'El renglón no trae la clave del plan.' : "El bloque «{$row['plan']}» no trae la clave del plan.");
 
                 continue;
             }
@@ -127,25 +149,39 @@ final class ImportLoadProjection
                 continue;
             }
 
-            if ($credits !== null && CreditDays::for($credits) !== null && CreditDays::isAssumed($credits)) {
+            if ($semester === null) {
+                $semester = StudyPlanSubject::query()->where('study_plan_id', $studyPlan->id)->where('subject_id', $subject['id'])->value('semester');
+
+                if ($semester === null) {
+                    $this->skip($report, $row['row'], 'no_semester', "El renglón no trae semestre y {$row['code']} no está en la retícula del plan {$match[1]}.");
+
+                    continue;
+                }
+            }
+
+            if ($fixed && $credits !== null && CreditDays::for($credits) !== null && CreditDays::isAssumed($credits)) {
                 $report['warnings'][] = "Fila {$row['row']}: {$credits} créditos usan la regla de días que es supuesto por confirmar (R-PRY-1).";
             }
 
-            if ($credits !== null && CreditDays::unplacedHours($credits) > 0) {
+            if ($fixed && $credits !== null && CreditDays::unplacedHours($credits) > 0) {
                 $report['warnings'][] = "Fila {$row['row']}: {$credits} créditos: se acomodan de lunes a viernes a la hora del archivo y falta acomodar a mano ".CreditDays::unplacedHours($credits).' hora (sin ella, el sábado o una segunda el viernes, según la materia; R-PRY-1).';
             }
 
             $report['resolved_via'][$subject['via']] = ($report['resolved_via'][$subject['via']] ?? 0) + 1;
-            $days = $credits === null ? null : CreditDays::for($credits);
+            $days = [];
 
-            if ($days !== null && $startMinutes + ($endMinutes - $startMinutes) * max($days) > 24 * 60) {
-                $days = null;
-            }
+            if ($fixed) {
+                $days = $credits === null ? null : CreditDays::for($credits);
 
-            if ($days === null) {
-                $this->skip($report, $row['row'], 'bad_credits', "La materia {$row['code']} trae créditos sin regla de días ({$row['credits']}).");
+                if ($days !== null && $startMinutes + ($endMinutes - $startMinutes) * max($days) > 24 * 60) {
+                    $days = null;
+                }
 
-                continue;
+                if ($days === null) {
+                    $this->skip($report, $row['row'], 'bad_credits', "La materia {$row['code']} trae créditos sin regla de días ({$row['credits']}).");
+
+                    continue;
+                }
             }
 
             $departmentId = $subject['department_id'];
@@ -157,53 +193,101 @@ final class ImportLoadProjection
                 continue;
             }
 
-            $key = implode('|', [$subject['id'], $studyPlan->career_id, $studyPlan->id, $campus->id, $semester, $startMinutes]);
+            $key = implode('|', [$subject['id'], $studyPlan->career_id, $studyPlan->id, $campus->id, $semester, $startMinutes ?? 'none']);
             $seen[$key] = ($seen[$key] ?? 0) + 1;
 
             // Dos grupos de la misma materia a la misma hora (A y B en paralelo) son dos filas con la misma llave: los que ya
             // existen cubren las primeras filas y solo las que sobran se crean.
-            if ($seen[$key] <= ($existing[$key] ?? 0)) {
-                $this->skip($report, $row['row'], 'duplicate', "El grupo {$row['group']} de {$row['code']} (semestre {$semester}, ".Minutes::format($startMinutes).') ya existe.');
+            if ($seen[$key] <= count($existing[$key] ?? [])) {
+                $report['existing']++;
+
+                if (! $relation) {
+                    $this->skip($report, $row['row'], 'duplicate', "El grupo {$row['group']} de {$row['code']} (semestre {$semester}, ".Minutes::format($startMinutes).') ya existe.');
+                }
+
+                if ($row['room'] !== null) {
+                    $existingRooms[] = ['line' => $row['row'], 'group_id' => $existing[$key][$seen[$key] - 1], 'room' => $row['room']];
+                }
 
                 continue;
             }
 
-            $plan[] = compact('row', 'subject', 'studyPlan', 'semester', 'students', 'days', 'startMinutes', 'endMinutes', 'departmentId');
+            $room = $row['room'];
+            $plan[] = compact('row', 'subject', 'studyPlan', 'semester', 'students', 'days', 'startMinutes', 'endMinutes', 'departmentId', 'room');
         }
 
         // La clave que tendrá cada grupo, en el orden del archivo, para avisar si la letra del archivo no coincide.
         foreach ($plan as $item) {
+            $report['created']++;
+            $dept = $departments[$item['departmentId']];
+            $report['per_department'][$dept] = ($report['per_department'][$dept] ?? 0) + 1;
+
+            if ($item['startMinutes'] === null) {
+                $report['no_schedule']++;
+
+                if ($item['room'] !== null) {
+                    $report['warnings'][] = "Fila {$item['row']['row']}: el grupo {$item['row']['code']} no tiene horario fijo y no recibe salón.";
+                }
+
+                continue;
+            }
+
             $taken = $codes[$item['subject']['id']] ??= Group::query()->active()->where('term_id', $term->id)->where('subject_id', $item['subject']['id'])->pluck('code')->all();
             $code = GroupCode::forStart($item['startMinutes'], $taken);
             $codes[$item['subject']['id']][] = $code;
 
-            if ($code !== $item['row']['group']) {
+            if ($item['row']['group'] !== '' && $code !== $item['row']['group']) {
                 $report['warnings'][] = "Fila {$item['row']['row']}: el grupo {$item['row']['group']} de {$item['row']['code']} queda con la clave {$code} (la letra sale de la hora de inicio).";
             }
 
-            $report['created']++;
             $report['sessions'] += count($item['days']);
-            $dept = $departments[$item['departmentId']];
-            $report['per_department'][$dept] = ($report['per_department'][$dept] ?? 0) + 1;
         }
 
         arsort($report['unresolved_subjects']);
         ksort($report['per_department']);
 
-        if ($dryRun || $plan === []) {
+        $roomsAsked = array_merge(
+            array_map(fn (array $item): array => ['line' => $item['row']['row'], 'room' => $item['room']], array_filter($plan, fn (array $item): bool => $item['room'] !== null && $item['startMinutes'] !== null)),
+            $existingRooms,
+        );
+
+        if ($dryRun) {
+            foreach ($roomsAsked as $asked) {
+                $report['rooms_requested']++;
+
+                if ($this->findRoom($campus, $asked['room']) === null) {
+                    $report['warnings'][] = "Fila {$asked['line']}: el salón {$asked['room']} no existe en {$campus->code}; el grupo queda sin salón.";
+                }
+            }
+
             return $report;
         }
 
-        DB::transaction(function () use ($plan, $term, $campus, $modality, $report): void {
+        if ($plan === [] && $existingRooms === []) {
+            return $report;
+        }
+
+        $actor ??= $roomsAsked === [] ? null : User::query()->where('is_active', true)->oldest()->first();
+
+        DB::transaction(function () use ($plan, $existingRooms, $term, $campus, $modality, $actor, &$report): void {
             foreach ($plan as $item) {
-                $this->createGroup($item, $term, $campus, $modality);
+                $group = $this->createGroup($item, $term, $campus, $modality);
+
+                if ($item['room'] !== null && $item['startMinutes'] !== null) {
+                    $this->placeRoom($report, $group, $item['room'], $item['row']['row'], $campus, $actor);
+                }
+            }
+
+            foreach ($existingRooms as $asked) {
+                $this->placeRoom($report, Group::query()->findOrFail($asked['group_id']), $asked['room'], $asked['line'], $campus, $actor);
             }
 
             activity()
                 ->event('load_projection_imported')
                 ->withProperties([
                     'term' => $term->code, 'campus' => $campus->code, 'modality' => $modality->code,
-                    'rows' => $report['rows'], 'created' => $report['created'], 'sessions' => $report['sessions'],
+                    'rows' => $report['rows'], 'created' => $report['created'], 'existing' => $report['existing'],
+                    'no_schedule' => $report['no_schedule'], 'rooms_set' => $report['rooms_set'], 'sessions' => $report['sessions'],
                     'per_department' => $report['per_department'], 'skipped' => $report['skipped_by_kind'],
                     'unresolved_subjects' => array_keys($report['unresolved_subjects']),
                 ])
@@ -216,9 +300,75 @@ final class ImportLoadProjection
     }
 
     /**
-     * @param  array{row: array<string, mixed>, subject: array{id: string, department_id: string, via: string}, studyPlan: StudyPlan, semester: int, students: int, days: array<int, int>, startMinutes: int, endMinutes: int, departmentId: string}  $item
+     * Los renglones de la relación con la forma que usa el ciclo de handle(): sin horario fijo (`fixed` falso) si la letra es
+     * GL o el rango falta o es `#N/D` (D3).
+     *
+     * @return list<array<string, mixed>>
      */
-    private function createGroup(array $item, Term $term, Campus $campus, Modality $modality): void
+    private function relationRows(string $path): array
+    {
+        return array_map(fn (LoadRelationRow $row): array => [
+            'row' => $row->line,
+            'relation' => true,
+            'plan' => $row->planCode ?? '',
+            'semester' => $row->semester,
+            'subject' => $row->subjectName,
+            'code' => $row->subjectKey,
+            'credits' => $row->credits,
+            'group' => $row->letter ?? '',
+            'students' => $row->students,
+            'hour' => $row->hourRange,
+            'hourIsError' => false,
+            'fixed' => $row->hasFixedSchedule(),
+            'room' => $row->roomCode,
+        ], LoadRelationSheet::read($path));
+    }
+
+    private function findRoom(Campus $campus, string $code): ?Room
+    {
+        return Room::query()->where('campus_id', $campus->id)->whereRaw('upper(code) = ?', [mb_strtoupper($code)])->first();
+    }
+
+    /**
+     * Pone el salón del archivo en todas las sesiones del grupo con AssignSessionRoom, solo si ninguna tiene salón; si el
+     * salón no existe, choca o la carga no se edita, deja el aviso y el grupo sin salón.
+     *
+     * @param  array<string, mixed>  $report
+     */
+    private function placeRoom(array &$report, Group $group, string $roomCode, int $line, Campus $campus, ?User $actor): void
+    {
+        $room = $this->findRoom($campus, $roomCode);
+
+        if ($room === null) {
+            $report['warnings'][] = "Fila {$line}: el salón {$roomCode} no existe en {$campus->code}; el grupo queda sin salón.";
+
+            return;
+        }
+
+        $sessions = GroupSession::query()->where('group_id', $group->id)->get(['id', 'room_id']);
+
+        if ($sessions->isEmpty() || $sessions->contains(fn (GroupSession $session): bool => $session->room_id !== null)) {
+            return;
+        }
+
+        if ($actor === null) {
+            $report['warnings'][] = "Fila {$line}: no hay un usuario activo para registrar el salón {$roomCode}; el grupo queda sin salón.";
+
+            return;
+        }
+
+        try {
+            app(AssignSessionRoom::class)->handleMany($group, $sessions->mapWithKeys(fn (GroupSession $session): array => [$session->id => $room])->all(), $actor);
+            $report['rooms_set']++;
+        } catch (ValidationException $exception) {
+            $report['warnings'][] = "Fila {$line}: el salón {$roomCode} no se puso en el grupo {$group->code}: ".collect($exception->errors())->flatten()->first();
+        }
+    }
+
+    /**
+     * @param  array{row: array<string, mixed>, subject: array{id: string, department_id: string, via: string}, studyPlan: StudyPlan, semester: int, students: int, days: array<int, int>, startMinutes: ?int, endMinutes: ?int, departmentId: string, room: ?string}  $item
+     */
+    private function createGroup(array $item, Term $term, Campus $campus, Modality $modality): Group
     {
         DB::select('select pg_advisory_xact_lock(hashtext(?))', ["groups:{$term->id}:{$item['subject']['id']}"]);
 
@@ -262,34 +412,38 @@ final class ImportLoadProjection
             ];
         }
 
-        DB::table('group_sessions')->insert($sessions);
+        if ($sessions !== []) {
+            DB::table('group_sessions')->insert($sessions);
+        }
 
-        app(AssignGroupCode::class)->handle($group);
+        return app(AssignGroupCode::class)->handle($group);
     }
 
     /**
-     * Los grupos no cancelados que ya hay, por materia, carrera dueña, plan, campus, semestre y hora de inicio.
+     * Los grupos no cancelados que ya hay, por materia, carrera dueña, plan, campus, semestre y hora de inicio (`none` si no
+     * tienen sesiones), con sus ids en orden de alta.
      *
-     * @return array<string, int> cuántos grupos hay por llave
+     * @return array<string, list<string>> los ids de grupo por llave
      */
     private function existingGroups(Term $term, Modality $modality, Campus $campus): array
     {
-        $counts = [];
+        $ids = [];
 
         $rows = DB::table('groups')
-            ->join('group_sessions', 'group_sessions.group_id', '=', 'groups.id')
+            ->leftJoin('group_sessions', 'group_sessions.group_id', '=', 'groups.id')
             ->where('groups.term_id', $term->id)->where('groups.modality_id', $modality->id)->where('groups.campus_id', $campus->id)
             ->where('groups.status', '<>', GroupStatus::Cancelled->value)
-            ->groupBy('groups.id', 'groups.subject_id', 'groups.owner_career_id', 'groups.study_plan_id', 'groups.semester')
-            ->selectRaw('groups.subject_id, groups.owner_career_id, groups.study_plan_id, groups.semester, min(group_sessions.starts_at) as start')
+            ->groupBy('groups.id', 'groups.subject_id', 'groups.owner_career_id', 'groups.study_plan_id', 'groups.semester', 'groups.created_at')
+            ->orderBy('groups.created_at')->orderBy('groups.id')
+            ->selectRaw('groups.id, groups.subject_id, groups.owner_career_id, groups.study_plan_id, groups.semester, min(group_sessions.starts_at) as start')
             ->get();
 
         foreach ($rows as $row) {
-            $key = implode('|', [$row->subject_id, $row->owner_career_id, $row->study_plan_id, $campus->id, $row->semester, Minutes::of((string) $row->start)]);
-            $counts[$key] = ($counts[$key] ?? 0) + 1;
+            $key = implode('|', [$row->subject_id, $row->owner_career_id, $row->study_plan_id, $campus->id, $row->semester, $row->start === null ? 'none' : Minutes::of((string) $row->start)]);
+            $ids[$key][] = $row->id;
         }
 
-        return $counts;
+        return $ids;
     }
 
     /**
