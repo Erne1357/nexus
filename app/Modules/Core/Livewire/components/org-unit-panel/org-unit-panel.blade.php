@@ -44,7 +44,11 @@
 
                 @if ($detail->titular !== null)
                     <div class="flex items-center gap-3">
-                        <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-base-300 font-semibold" aria-hidden="true">{{ $initials }}</span>
+                        @if ($detail->titular['photo'] !== null)
+                            <img src="{{ $detail->titular['photo'] }}" alt="" data-testid="unit-titular-photo" class="h-11 w-11 shrink-0 rounded-full bg-base-300 object-cover object-top" />
+                        @else
+                            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-base-300 font-semibold" aria-hidden="true">{{ $initials }}</span>
+                        @endif
                         <div class="min-w-0">
                             <p class="font-semibold">{{ $detail->titular['name'] }}</p>
                             <p class="text-sm text-neutral">{{ $detail->titular['summary'] }} · desde <span class="font-mono tabular-nums">{{ $detail->titular['from']->format('d/m/Y') }}</span></p>

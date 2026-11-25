@@ -76,7 +76,11 @@
                 x-on:click="toggleCard()"
                 class="flex h-[46px] max-w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-full border border-band-content/20 ps-1.5 pe-3 text-start hover:bg-band-content/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-band-content aria-expanded:bg-band-content/10 max-md:h-11 max-md:px-[5px]"
             >
-                <span aria-hidden="true" class="grid size-[34px] flex-none place-items-center rounded-full bg-secondary text-[13px] font-bold text-secondary-content">{{ $initials }}</span>
+                @if ($photo !== null)
+                    <img src="{{ $photo }}" alt="" data-testid="credential-photo" class="size-[34px] flex-none rounded-full bg-secondary object-cover object-top" />
+                @else
+                    <span aria-hidden="true" class="grid size-[34px] flex-none place-items-center rounded-full bg-secondary text-[13px] font-bold text-secondary-content">{{ $initials }}</span>
+                @endif
 
                 <span class="flex min-w-0 flex-col leading-tight max-md:sr-only">
                     <span class="truncate font-bold">{{ $name }}</span>
@@ -98,7 +102,11 @@
                 class="pointer-events-none invisible fixed end-5 outline-none top-[74px] z-[8] w-[340px] origin-top-right -translate-y-1.5 scale-[.94] overflow-hidden rounded-[10px] bg-base-100 text-base-content opacity-0 shadow-float transition-[opacity,scale,translate,visibility] duration-300 ease-settle motion-reduce:transition-none data-[open=true]:pointer-events-auto data-[open=true]:visible data-[open=true]:translate-y-0 data-[open=true]:scale-100 data-[open=true]:opacity-100 data-[open=true]:transition-[opacity,scale,translate] data-[open=true]:duration-[400ms] data-[open=true]:ease-open max-md:inset-x-2 max-md:top-[66px] max-md:w-auto"
             >
                 <div data-testid="credential-header" class="flex items-center gap-3 bg-band p-4 text-band-content">
-                    <span aria-hidden="true" class="grid size-[46px] flex-none place-items-center rounded-full bg-secondary text-base font-bold text-secondary-content">{{ $initials }}</span>
+                    @if ($photo !== null)
+                        <img src="{{ $photo }}" alt="" class="size-[46px] flex-none rounded-full bg-secondary object-cover object-top" />
+                    @else
+                        <span aria-hidden="true" class="grid size-[46px] flex-none place-items-center rounded-full bg-secondary text-base font-bold text-secondary-content">{{ $initials }}</span>
+                    @endif
 
                     <div class="min-w-0">
                         <span class="block truncate font-bold">{{ $name }}</span>

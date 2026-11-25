@@ -23,6 +23,8 @@ final class CommunicationServiceProvider extends ModuleServiceProvider
         return [
             new NavigationItem('Personal', 'communication.staff', 'o-user-plus', NavigationArea::Comunicacion,
                 visible: static fn (Actor $context): bool => $context->allowsAny(CorePermission::UnitStaffAppoint)),
+            new NavigationItem('Fotos del personal', 'communication.staff-photos', 'o-camera', NavigationArea::Comunicacion,
+                visible: static fn (Actor $context): bool => $context->allowsAny(CorePermission::StaffPhotoManage)),
             // La misma pantalla que «Avisos y atajos» de Configuración, que ve quien administra los puestos y permisos (el
             // admin): aquí, para los demás que la manejan, la jefa y el personal de Comunicación y Difusión.
             new NavigationItem('Avisos y atajos', 'core.login-content', 'o-megaphone', NavigationArea::Comunicacion,

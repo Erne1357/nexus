@@ -61,6 +61,17 @@ return [
             'report' => false,
         ],
 
+        // Fotos del personal (Core, tarea 1.35, CO-03): una carpeta por usuario con la foto normal, su miniatura y el
+        // original; las anteriores se conservan. Datos personales: fuera de git (storage/app/.gitignore), de public/ y de
+        // la raíz del disco `local`; se sirven solo por la ruta firmada `core.staff-photo`. En el servidor,
+        // STAFF_PHOTOS_PATH apunta al directorio montado con escritura (compose.prod.yaml).
+        'staff_photos' => [
+            'driver' => 'local',
+            'root' => env('STAFF_PHOTOS_PATH', storage_path('app/fotos-personal')),
+            'throw' => false,
+            'report' => false,
+        ],
+
         // Exportes de lo publicado (AcademicLoad, tareas 4.5 y 4.6): PDF, Excel y archivos para el SII que arma la
         // cola. Fuera de git y sin URL pública: se descargan por una ruta que revisa el permiso de cada exporte.
         'exports' => [

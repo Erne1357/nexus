@@ -32,6 +32,8 @@ ARG GID=1000
 
 RUN install-php-extensions \
         bcmath \
+        exif \
+        gd \
         intl \
         opcache \
         pcntl \

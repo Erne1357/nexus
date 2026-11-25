@@ -70,7 +70,10 @@ Carpetas del servidor (`NEXUS_HOME=/opt/nexus`):
    sudo install -d -o "$USER" -g "$USER" /opt/nexus /opt/nexus/inbox
    sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 /var/backups/nexus
    sudo install -d -m 755 /srv/nexus/fotos
+   sudo install -d -o 1000 -g 1000 -m 750 /srv/nexus/fotos-personal
    ```
+
+   `fotos-personal` (`NEXUS_STAFF_PHOTOS_DIR`) guarda las fotos del personal que sube Comunicación (CO-03): Nexus las escribe, así que el contenedor (usuario `app`, uid 1000) debe poder escribir ahí. Son datos personales: inclúyela en el respaldo del servidor junto con `/srv/nexus/fotos`; nunca va al repositorio.
 
 3. **El `.env`**, desde la plantilla que trae el paquete:
 

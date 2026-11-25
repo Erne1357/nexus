@@ -17,7 +17,7 @@ final readonly class OrgUnitDetail
 {
     /**
      * @param  list<string>  $path  los nombres de la raíz a la madre
-     * @param  array{name: string, userId: string, summary: string, from: CarbonImmutable}|null  $titular
+     * @param  array{name: string, userId: string, photo: ?string, summary: string, from: CarbonImmutable}|null  $titular
      * @param  string|null  $titularNote  por qué no hay titular; nulo si lo hay
      * @param  list<array{id: string, name: string, userId: string, summary: string, status: AssignmentStatus, from: CarbonImmutable, to: ?CarbonImmutable, endBlocker: ?string, earliestLastDay: ?CarbonImmutable}>  $assignments
      * @param  list<OrgUnit>  $children  sin borrar, activas o no

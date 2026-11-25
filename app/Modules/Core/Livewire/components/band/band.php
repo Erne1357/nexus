@@ -3,6 +3,7 @@
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Queries\CredentialQuery;
 use App\Modules\Core\Queries\PageTrailQuery;
+use App\Modules\Core\Support\StaffPhotoUrl;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -40,7 +41,7 @@ new class extends Component
     }
 
     /**
-     * @return array{areaLabel: ?string, pageTitle: ?string, name: string, username: string, initials: string, roleLabel: ?string, summary: string}
+     * @return array{areaLabel: ?string, pageTitle: ?string, name: string, username: string, initials: string, photo: ?string, roleLabel: ?string, summary: string}
      */
     public function with(Actor $context, PageTrailQuery $trails, CredentialQuery $credentials): array
     {
@@ -53,6 +54,8 @@ new class extends Component
             'name' => $credential['name'],
             'username' => $credential['username'],
             'initials' => $credential['initials'],
+            // CO-04: la foto propia (URL firmada de 2 horas); sin foto, las iniciales.
+            'photo' => ($user = $context->user()) === null ? null : StaffPhotoUrl::for($user),
             'roleLabel' => $credential['role'],
             'summary' => $credential['summary'],
         ];

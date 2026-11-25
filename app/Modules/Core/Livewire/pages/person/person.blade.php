@@ -19,7 +19,11 @@
 <div class="space-y-5">
     <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div class="flex min-w-0 items-center gap-4">
-            <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-base-300 text-lg font-semibold" aria-hidden="true">{{ $record->initials() }}</span>
+            @if (($photo = \App\Modules\Core\Support\StaffPhotoUrl::for($record->person)) !== null)
+                <img src="{{ $photo }}" alt="" data-testid="person-photo" class="h-14 w-14 shrink-0 rounded-full bg-base-300 object-cover object-top" />
+            @else
+                <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-base-300 text-lg font-semibold" aria-hidden="true">{{ $record->initials() }}</span>
+            @endif
 
             <div class="min-w-0">
                 <a href="{{ route('core.people') }}" wire:navigate data-testid="back-to-people" class="inline-flex items-center gap-1.5 text-sm font-medium text-primary max-md:min-h-11">
