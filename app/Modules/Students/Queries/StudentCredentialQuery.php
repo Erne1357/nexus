@@ -8,6 +8,7 @@ use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Support\CredentialToken;
 use App\Modules\Students\Support\StudentPhotos;
+use App\Modules\Students\Support\StudentPhotoUrl;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
@@ -49,6 +50,19 @@ final class StudentCredentialQuery
             // `v` cambia por alumno y por foto: la URL de la foto propia es la misma para todos (MyCredentialPhoto).
             'photo_url' => $version === null ? null : route('students.my-record.photo', ['v' => substr(hash('sha256', $student->getKey().'|'.$version), 0, 16)]),
         ];
+    }
+
+    /**
+     * La credencial de un alumno para quien consulta su ficha (CO-10): la misma de `of()`, pero con la foto firmada de
+     * StudentPhotoUrl (la ruta de la foto propia solo le responde al alumno).
+     *
+     * @return array{id: string, name: string, control_number: string, career: string, campus: string, term: ?string, initials: string, status: ?string, current: bool, has_photo: bool, photo_url: ?string}
+     */
+    public function forStaff(Actor $context, Student $student): array
+    {
+        $url = StudentPhotoUrl::for($student);
+
+        return [...$this->of($context, $student), 'has_photo' => $url !== null, 'photo_url' => $url];
     }
 
     /**

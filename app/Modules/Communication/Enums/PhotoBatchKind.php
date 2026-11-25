@@ -4,7 +4,7 @@ namespace App\Modules\Communication\Enums;
 
 /**
  * A quién son las fotos de un lote en ZIP (CO-S5): al personal, que se busca por `users.username`, o a los alumnos, que
- * se buscan por número de control (los lotes de alumnos llegan en la tarea 1.37).
+ * se buscan por número de control.
  */
 enum PhotoBatchKind: string
 {

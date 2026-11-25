@@ -19,21 +19,17 @@ use ZipArchive;
 /**
  * Recibe un lote de fotos en ZIP (CO-S5): lo guarda en el disco `imports` (con datos personales: fuera de git y de
  * public), crea el lote «en cola» y manda ProcessPhotoBatch a la cola después del commit. Un ZIP pesa hasta 19 MB. Los
- * lotes de alumnos todavía no se aceptan (tarea 1.37).
+ * hay del personal y de alumnos (CO-06).
  */
 final class StorePhotoBatch
 {
     public const int MAX_BYTES = 19 * 1024 * 1024;
 
     /**
-     * @throws ValidationException si el tipo todavía no se acepta, o el archivo no es un ZIP legible o pesa de más
+     * @throws ValidationException si el archivo no es un ZIP legible o pesa de más
      */
     public function handle(PhotoBatchKind $kind, UploadedFile $zip, User $by): PhotoBatch
     {
-        if ($kind === PhotoBatchKind::Alumnos) {
-            throw ValidationException::withMessages(['zip' => 'Los lotes de alumnos llegan en la tarea 1.37.']);
-        }
-
         $this->assertZip($zip);
 
         $path = $zip->storeAs('photo-batches', Str::uuid()->toString().'.zip', 'imports');
@@ -48,7 +44,7 @@ final class StorePhotoBatch
                     'uploaded_by' => $by->getKey(),
                 ]);
 
-                activity()->performedOn($batch)->causedBy($by)->event(ActivityEvent::Created)->log('Subió un lote de fotos del personal');
+                activity()->performedOn($batch)->causedBy($by)->event(ActivityEvent::Created)->log($kind === PhotoBatchKind::Alumnos ? 'Subió un lote de fotos de alumnos' : 'Subió un lote de fotos del personal');
 
                 ProcessPhotoBatch::dispatch($batch->id)->afterCommit();
 

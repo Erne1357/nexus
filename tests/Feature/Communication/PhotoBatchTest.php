@@ -8,6 +8,7 @@ use App\Modules\Communication\Models\PhotoBatch;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
@@ -128,9 +129,13 @@ it('un lote que falla queda fallido', function () {
         ->and($batch->error)->not->toBeNull();
 });
 
-it('un lote de alumnos todavía no se acepta', function () {
-    expect(fn () => app(StorePhotoBatch::class)->handle(PhotoBatchKind::Alumnos, zipOf(['a.jpg' => batchImage()]), $this->head))
-        ->toThrow(ValidationException::class);
+it('CO-06: un lote de alumnos se acepta y queda en cola como los del personal', function () {
+    Queue::fake();
+
+    $batch = app(StorePhotoBatch::class)->handle(PhotoBatchKind::Alumnos, zipOf(['21111182.jpg' => batchImage()]), $this->head);
+
+    expect($batch->kind)->toBe(PhotoBatchKind::Alumnos)->and($batch->status)->toBe(PhotoBatchStatus::EnCola);
+    Queue::assertPushed(ProcessPhotoBatch::class);
 });
 
 it('un archivo que no es ZIP se rechaza antes de guardarlo', function () {
