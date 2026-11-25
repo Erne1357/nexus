@@ -17,7 +17,7 @@ use Tests\Support\Staffing\SelectionWorld;
 beforeEach(function () {
     $this->freezeTime();
     $this->world = SelectionWorld::create(SelectionStatus::Published);
-    $this->previo = $this->world->teacher(name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::PriorChoice, 'position' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
+    $this->previo = $this->world->teacher(name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::Done, 'prior_choice_at' => now(), 'position' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
     $this->espera = $this->world->teacher(name: 'Docente Espera', position: 1, slotStartsAt: CarbonImmutable::now()->addDay());
     RoleAssignment::factory()->for($this->espera->user)->create(['role' => Role::Docente]);
     app(RecordPriorChoice::class)->handle($this->world->term, $this->world->selection->modality, $this->previo, [['group' => $this->world->group('A', [[1, '09:00', '10:00']])]], $this->world->admin);

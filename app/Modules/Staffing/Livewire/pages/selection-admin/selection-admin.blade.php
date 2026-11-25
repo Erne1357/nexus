@@ -266,7 +266,7 @@
                     <h2 class="text-xl font-bold"><span class="font-mono text-neutral">6.</span> Vista previa del orden</h2>
                     <p class="mb-4 text-sm text-neutral">Así queda el orden con el CSV y la antigüedad. Revísalo antes de publicar.</p>
                     @php
-                        $priorEntries = $entries->where('status', \App\Modules\Staffing\Enums\SelectionEntryStatus::PriorChoice);
+                        $priorEntries = $entries->whereNotNull('prior_choice_at');
                     @endphp
                     @if ($priorEntries->isNotEmpty())
                         <h3 class="mt-4 text-xs font-semibold uppercase text-neutral">Elección previa · {{ $priorEntries->count() }}</h3>
@@ -285,7 +285,7 @@
                             </table>
                         </div>
                     @endif
-                    @foreach ($entries->where('status', '!=', \App\Modules\Staffing\Enums\SelectionEntryStatus::PriorChoice)->groupBy('tier') as $tier => $group)
+                    @foreach ($entries->whereNull('prior_choice_at')->groupBy('tier') as $tier => $group)
                         <h3 class="mt-4 text-xs font-semibold uppercase text-neutral">Escalón {{ $tier + 1 }} · {{ $group->count() }}</h3>
                         <div class="mt-1 overflow-x-auto rounded-box border border-base-300">
                             <table class="table table-sm">

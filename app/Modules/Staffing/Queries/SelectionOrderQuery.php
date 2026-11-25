@@ -3,7 +3,6 @@
 namespace App\Modules\Staffing\Queries;
 
 use App\Modules\Staffing\Enums\SelectionEntrySource;
-use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
 use Carbon\CarbonImmutable;
@@ -37,8 +36,8 @@ final class SelectionOrderQuery
             ->orderBy('id')
             ->get();
         $inTurn = $this->turns->entriesInTurn($selection, $now ?? CarbonImmutable::now())->keyBy('id')->all();
-        $perSlot = $entries->reject(fn (SelectionEntry $entry): bool => $entry->status === SelectionEntryStatus::PriorChoice)->countBy('slot_index');
-        $priorIds = $entries->where('status', SelectionEntryStatus::PriorChoice)->pluck('teacher_id')->filter()->all();
+        $perSlot = $entries->reject(fn (SelectionEntry $entry): bool => $entry->isPriorChoice())->countBy('slot_index');
+        $priorIds = $entries->filter(fn (SelectionEntry $entry): bool => $entry->isPriorChoice())->pluck('teacher_id')->filter()->all();
         $hours = $priorIds === [] ? collect() : $this->groups->of($selection)
             ->whereIn('groups.teacher_id', $priorIds)
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
@@ -48,7 +47,7 @@ final class SelectionOrderQuery
             ->pluck('hours', 'teacher_id');
 
         return $entries->map(function (SelectionEntry $entry) use ($inTurn, $perSlot, $hours): array {
-            $prior = $entry->status === SelectionEntryStatus::PriorChoice;
+            $prior = $entry->isPriorChoice();
             $fromCsv = $entry->source === SelectionEntrySource::Csv;
 
             return [
@@ -66,7 +65,7 @@ final class SelectionOrderQuery
                     'partials_2' => $entry->partials_2,
                 ] : null,
                 'seniority' => $fromCsv && $entry->seniority_years !== null ? self::years($entry->seniority_years) : null,
-                'status' => $entry->status->value,
+                'status' => $prior ? 'prior_choice' : $entry->status->value,
                 'source' => $entry->source->value,
                 'teacher_id' => $entry->teacher_id,
                 'base_hours' => $entry->base_hours,

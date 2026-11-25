@@ -47,7 +47,8 @@ it('SEL-16: la marca saca al docente de la fila: sin lugar, sin turno y con el e
     app(RecomputeSelectionOrder::class)->handle($world->selection->fresh());
 
     expect($world->entryOf($previo))
-        ->status->toBe(SelectionEntryStatus::PriorChoice)
+        ->status->toBe(SelectionEntryStatus::Done)
+        ->prior_choice_at->not->toBeNull()
         ->position->toBe(0)
         ->slot_index->toBe(0)
         ->slot_starts_at->toBeNull()
@@ -66,7 +67,7 @@ it('SEL-16: con renglón del CSV conserva sus criterios pero el estado es elecci
     app(RecomputeSelectionOrder::class)->handle($world->selection->fresh());
 
     expect($world->entryOf($previo))
-        ->status->toBe(SelectionEntryStatus::PriorChoice)
+        ->status->toBe(SelectionEntryStatus::Done)
         ->source->toBe(SelectionEntrySource::Csv)
         ->auto_eval->toBeFalse()
         ->failed_criteria->toBe(1)
@@ -82,7 +83,7 @@ it('SEL-16: si la marca se crea después de armar la selección, el siguiente re
     markPrior($world, $docente, [$world->group('A')]);
     app(RecomputeSelectionOrder::class)->handle($world->selection->fresh());
 
-    expect($world->entryOf($docente)->status)->toBe(SelectionEntryStatus::PriorChoice);
+    expect($world->entryOf($docente))->status->toBe(SelectionEntryStatus::Done)->prior_choice_at->not->toBeNull();
 });
 
 it('SEL-16: la marca de otra modalidad no saca al docente de esta selección', function () {
@@ -93,12 +94,12 @@ it('SEL-16: la marca de otra modalidad no saca al docente de esta selección', f
 
     app(RecomputeSelectionOrder::class)->handle($world->selection->fresh());
 
-    expect($world->entryOf($docente)->status)->toBe(SelectionEntryStatus::Waiting);
+    expect($world->entryOf($docente))->status->toBe(SelectionEntryStatus::Waiting)->prior_choice_at->toBeNull();
 });
 
 it('SEL-16: nunca está en turno y no toma, suelta ni termina su carga', function () {
     $world = priorWorld(SelectionStatus::Running);
-    $previo = $world->teacher(base: 5, name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::PriorChoice, 'position' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
+    $previo = $world->teacher(base: 5, name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::Done, 'prior_choice_at' => now(), 'position' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
     $propio = $world->group('A', [[1, '09:00', '10:00']]);
     $libre = $world->group('B', [[2, '09:00', '10:00']]);
     markPrior($world, $previo, [$propio]);
@@ -119,13 +120,13 @@ it('SEL-16: nunca está en turno y no toma, suelta ni termina su carga', functio
 
 it('SEL-16: el reloj no lo mueve a pendiente de ronda extra ni a sin resolver', function () {
     $world = priorWorld(SelectionStatus::Running);
-    $previo = $world->teacher(name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::PriorChoice, 'position' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
+    $previo = $world->teacher(name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::Done, 'prior_choice_at' => now(), 'position' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
     $espera = $world->teacher(name: 'Docente Espera', position: 1, slotStartsAt: CarbonImmutable::now()->subHour());
     $world->selection->update(['first_round_ends_at' => CarbonImmutable::now()->subMinutes(30)]);
 
     app(AdvanceSelections::class)->handle(CarbonImmutable::now());
 
-    expect($world->entryOf($previo)->status)->toBe(SelectionEntryStatus::PriorChoice)
+    expect($world->entryOf($previo)->status)->toBe(SelectionEntryStatus::Done)
         ->and($world->entryOf($espera)->status)->toBe(SelectionEntryStatus::PendingExtra);
 
     // Terminada la ronda extra tampoco lo toca.
@@ -133,11 +134,11 @@ it('SEL-16: el reloj no lo mueve a pendiente de ronda extra ni a sin resolver', 
     $this->travel(2)->days();
     app(AdvanceSelections::class)->handle(CarbonImmutable::now());
 
-    expect($world->entryOf($previo)->status)->toBe(SelectionEntryStatus::PriorChoice)
+    expect($world->entryOf($previo)->status)->toBe(SelectionEntryStatus::Done)
         ->and($world->selection->fresh()->status)->toBe(SelectionStatus::Finished);
 });
 
-it('SEL-16: al publicar su renglón queda cerrado con las horas de sus grupos y su HC-08 justificado si queda fuera de la banda', function () {
+it('SEL-16: al publicar su renglón queda cerrado con las horas de sus grupos y su HC-08 justificado como en SEL-12', function () {
     Notification::fake();
     $world = priorWorld();
     $world->selection->update(['starts_at' => CarbonImmutable::now()->addDays(3)->setTime(9, 0), 'window_starts' => '09:00', 'window_ends' => '15:00', 'weekdays' => [1, 2, 3, 4, 5], 'slot_minutes' => 30]);
@@ -149,19 +150,19 @@ it('SEL-16: al publicar su renglón queda cerrado con las horas de sus grupos y 
     app(PublishSelection::class)->handle($world->selection->fresh(), $world->admin);
 
     expect($world->entryOf($fuera))
-        ->status->toBe(SelectionEntryStatus::PriorChoice)
+        ->status->toBe(SelectionEntryStatus::Done)
         ->closed_at->not->toBeNull()
         ->closed_hours->toBe(5)
         ->and($world->entryOf($dentro)->closed_hours)->toBe(5)
         ->and(TeacherHourAllowance::query()->where('teacher_id', $fuera->id)->sole())
         ->hours->toBe(5)
         ->reason->toContain('Elección previa')
-        ->and(TeacherHourAllowance::query()->where('teacher_id', $dentro->id)->exists())->toBeFalse();
+        ->and(TeacherHourAllowance::query()->where('teacher_id', $dentro->id)->sole()->hours)->toBe(5);
 });
 
 it('SEL-16: durante la selección viva el jefe le asigna otro grupo con «Asignación docente»', function () {
     $world = priorWorld(SelectionStatus::Running);
-    $previo = $world->teacher(name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::PriorChoice, 'position' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
+    $previo = $world->teacher(name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::Done, 'prior_choice_at' => now(), 'position' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
     markPrior($world, $previo, [$world->group('A', [[1, '09:00', '10:00']])]);
     $mas = $world->group('B', [[2, '09:00', '10:00']]);
 
@@ -169,12 +170,12 @@ it('SEL-16: durante la selección viva el jefe le asigna otro grupo con «Asigna
 
     expect($mas->fresh()->teacher_id)->toBe($previo->id)
         ->and($assignment->reason)->toBe(AssignTeacher::SELECTION_REASON)
-        ->and($world->entryOf($previo)->status)->toBe(SelectionEntryStatus::PriorChoice);
+        ->and($world->entryOf($previo)->status)->toBe(SelectionEntryStatus::Done);
 });
 
 it('SEL-16: la lista de la orden los marca aparte, sin turno ni empate, con las horas de sus grupos', function () {
     $world = priorWorld(SelectionStatus::Published);
-    $previo = $world->teacher(name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::PriorChoice, 'position' => 0, 'slot_index' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
+    $previo = $world->teacher(name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::Done, 'prior_choice_at' => now(), 'position' => 0, 'slot_index' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
     $espera = $world->teacher(name: 'Docente Espera', position: 1, slotStartsAt: CarbonImmutable::now()->addDay());
     markPrior($world, $previo, [$world->group('A', [[1, '09:00', '10:00']])]);
 

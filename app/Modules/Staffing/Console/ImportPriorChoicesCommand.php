@@ -19,7 +19,7 @@ use RuntimeException;
  */
 final class ImportPriorChoicesCommand extends Command
 {
-    protected $signature = 'staffing:import-prior-choices {file : Ruta del csv de la «Relación de materias»} {--term=20271 : Clave del periodo} {--campus=C1 : Clave del campus} {--modality=PRES : Clave de la modalidad} {--user= : Username a nombre de quien se asignan los grupos (por omisión, el usuario activo más antiguo)} {--dry-run : Calcula y reporta sin escribir}';
+    protected $signature = 'staffing:import-prior-choices {file : Ruta del csv de la «Relación de materias»} {--term=20271 : Clave del periodo} {--campus=C1 : Clave del campus} {--modality=PRES : Clave de la modalidad} {--user= : Username (obligatorio) a nombre de quien se asignan los grupos} {--dry-run : Calcula y reporta sin escribir}';
 
     protected $description = 'Marca la elección previa de los maestros que ya traen grupos en la relación de materias y les asigna esos grupos';
 
@@ -38,10 +38,10 @@ final class ImportPriorChoicesCommand extends Command
         }
 
         $username = (string) $this->option('user');
-        $actor = $username !== '' ? User::query()->where('username', $username)->first() : User::query()->where('is_active', true)->oldest()->first();
+        $actor = $username === '' ? null : User::query()->where('username', $username)->first();
 
         if ($actor === null) {
-            $this->error($username !== '' ? "No existe el usuario {$username}." : 'No hay un usuario activo a cuyo nombre asignar.');
+            $this->error('Indica con --user el username de un usuario que exista.');
 
             return self::FAILURE;
         }

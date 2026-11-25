@@ -24,7 +24,6 @@ use App\Modules\Staffing\Actions\Selection\ResolveSelectionEntry;
 use App\Modules\Staffing\Actions\Selection\ScheduleSelection;
 use App\Modules\Staffing\Actions\Selection\SetSelectionLoads;
 use App\Modules\Staffing\Enums\SelectionEntrySource;
-use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Models\Selection;
@@ -547,7 +546,7 @@ new #[Title('Orden de selección')] class extends Component
      */
     private function priorHours(Selection $selection, $entries)
     {
-        $ids = $entries->where('status', SelectionEntryStatus::PriorChoice)->pluck('teacher_id')->filter()->all();
+        $ids = $entries->whereNotNull('prior_choice_at')->pluck('teacher_id')->filter()->all();
 
         return $ids === [] ? collect() : app(SelectionGroupsQuery::class)->of($selection)
             ->whereIn('groups.teacher_id', $ids)

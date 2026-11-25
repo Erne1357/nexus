@@ -47,7 +47,7 @@ trait GuardsSelectionTurn
     {
         $entry = $this->ownEntry($selection, $teacher, $actor);
 
-        if ($entry->status === SelectionEntryStatus::PriorChoice) {
+        if ($entry->isPriorChoice()) {
             throw ValidationException::withMessages(['group' => 'Tus grupos ya vienen de la elección previa: no tienes turno. Solo tu jefe de departamento o el JPD cambian tu carga (SEL-16).']);
         }
 

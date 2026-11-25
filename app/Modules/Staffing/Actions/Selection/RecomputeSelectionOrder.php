@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Builder;
 /**
  * Recalcula `position` y `slot_index` de la cola de una selección (SEL-07, SEL-10) y, si ya tiene fecha de inicio, la
  * hora de cada turno (SEL-08) y el fin de la primera ronda. SEL-16: quien tiene elección previa en el periodo y la
- * modalidad de la selección queda con estado `prior_choice`, sin lugar ni turno, y no entra al orden ni a los turnos
+ * modalidad de la selección queda `done` con `prior_choice_at`, sin lugar ni turno, y no entra al orden ni a los turnos
  * (conserva su renglón del CSV, con sus criterios, si lo trae). Lo llaman las Actions que cambian la cola o la ventana,
  * dentro de su transacción; no deja bitácora propia.
  */
@@ -68,8 +68,9 @@ final class RecomputeSelectionOrder
             ->pluck('teacher_id')
             ->all();
 
+        $selection->entries()->whereIn('teacher_id', $prior)->whereNull('prior_choice_at')->update(['prior_choice_at' => now()]);
         $selection->entries()->whereIn('teacher_id', $prior)->update([
-            'status' => SelectionEntryStatus::PriorChoice,
+            'status' => SelectionEntryStatus::Done,
             'position' => 0,
             'slot_index' => 0,
             'slot_starts_at' => null,
@@ -77,7 +78,7 @@ final class RecomputeSelectionOrder
         ]);
 
         $entries = $selection->entries()->with('teacher:id,name,hired_on')
-            ->where('status', '!=', SelectionEntryStatus::PriorChoice->value)
+            ->whereNull('prior_choice_at')
             ->get();
 
         $ranked = collect(SelectionOrder::rank($entries->map(fn ($entry): array => [

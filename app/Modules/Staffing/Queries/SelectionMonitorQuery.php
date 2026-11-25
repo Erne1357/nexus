@@ -79,11 +79,11 @@ final class SelectionMonitorQuery
         return [
             'current' => $current,
             'current_name' => $rows->firstWhere('current', true)['name'] ?? null,
-            'rows' => $rows->reject(fn (array $row): bool => $row['entry']->status === SelectionEntryStatus::PriorChoice)->values()->all(),
+            'rows' => $rows->reject(fn (array $row): bool => $row['entry']->isPriorChoice())->values()->all(),
             // SEL-16: quien ya trae sus grupos no tiene turno; sale aparte y no cuenta en el avance de los turnos.
-            'prior' => $rows->filter(fn (array $row): bool => $row['entry']->status === SelectionEntryStatus::PriorChoice)->values()->all(),
-            'done' => $entries->where('status', SelectionEntryStatus::Done)->count(),
-            'total' => $entries->where('status', '!=', SelectionEntryStatus::PriorChoice)->count(),
+            'prior' => $rows->filter(fn (array $row): bool => $row['entry']->isPriorChoice())->values()->all(),
+            'done' => $entries->where('status', SelectionEntryStatus::Done)->whereNull('prior_choice_at')->count(),
+            'total' => $entries->whereNull('prior_choice_at')->count(),
             'groups_taken' => $taken->count(),
             'groups_total' => $groups->count(),
             'hours_taken' => (int) $taken->sum('hours'),

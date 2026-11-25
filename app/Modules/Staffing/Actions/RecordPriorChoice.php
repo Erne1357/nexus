@@ -5,7 +5,6 @@ namespace App\Modules\Staffing\Actions;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
@@ -27,7 +26,7 @@ use Illuminate\Validation\ValidationException;
  * Es carga de datos, no la pantalla de asignación: por eso no usa AssignTeacher, que exige que la carga esté en
  * asignación o ajustes y el motivo de HC-16. Aquí la carga puede seguir en borrador (D4: los maestros la ven cuando el
  * admin publique la orden). HC-08 y HC-09 no vetan: las horas quedan justificadas al publicar la orden (SEL-16).
- * No toca salones: eso es del importador de Scheduling.
+ * No toca salones: los pone el importador de Scheduling (1.40).
  */
 final class RecordPriorChoice
 {
@@ -39,7 +38,7 @@ final class RecordPriorChoice
     ) {}
 
     /**
-     * @param  list<array{group: Group, room?: ?Room}>  $groups  el salón se ignora: lo pone el importador de Scheduling
+     * @param  list<array{group: Group}>  $groups
      *
      * @throws ValidationException
      */

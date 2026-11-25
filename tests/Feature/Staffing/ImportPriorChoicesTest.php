@@ -165,12 +165,15 @@ it('el comando reporta y falla si hay renglones con error', function () {
     $path = priorRelation([priorLine('NADIE AQUI', 'AID-2501', 'C', '9 - 10')]);
     app(ImportLoadProjection::class)->handle($path, $this->term, $this->campus, $this->pres, false, $this->actor);
 
-    $this->artisan('staffing:import-prior-choices', ['file' => $path, '--dry-run' => true])
+    $this->artisan('staffing:import-prior-choices', ['file' => $path, '--dry-run' => true, '--user' => $this->actor->username])
         ->expectsOutputToContain('Simulacro')
         ->expectsOutputToContain('NADIE AQUI')
         ->assertFailed();
 
-    $this->artisan('staffing:import-prior-choices', ['file' => '/no/existe.csv'])->assertFailed();
+    $this->artisan('staffing:import-prior-choices', ['file' => '/no/existe.csv', '--user' => $this->actor->username])->assertFailed();
+
+    // --user es obligatorio, también en --dry-run.
+    $this->artisan('staffing:import-prior-choices', ['file' => $path, '--dry-run' => true])->expectsOutputToContain('--user')->assertFailed();
 });
 
 it('decisión del 25 de noviembre de 2026: SALA DE COMPUTO y AULA y LABORATORIO DE REDES se mapean a su tipo de espacio', function () {
