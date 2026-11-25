@@ -2,6 +2,7 @@
 
 namespace App\Modules\Students\Queries;
 
+use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Students\Enums\CredentialRequestStatus;
 use App\Modules\Students\Models\CredentialRequest;
 use App\Modules\Students\Models\Student;
@@ -32,6 +33,14 @@ final class CredentialRequestQuery
             ->orderBy('requested_at')
             ->orderBy('id')
             ->paginate($perPage);
+    }
+
+    /**
+     * Una solicitud con su alumno y carrera, por llave: un id que no es uuid es un 404, no un error de la base (ADR-0014).
+     */
+    public function findOrFail(string $id): CredentialRequest
+    {
+        return KeyLookup::findOrFail(CredentialRequest::query()->with('student.career'), $id);
     }
 
     /**

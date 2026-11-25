@@ -3,6 +3,7 @@
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Students\Actions\SetStudentPhoto;
 use App\Modules\Students\Models\Student;
+use App\Modules\Students\Queries\CredentialRequestQuery;
 use App\Modules\Students\Queries\StudentCredentialQuery;
 use App\Modules\Students\Queries\StudentQuery;
 use App\Modules\Students\Queries\StudentRecordQuery;
@@ -93,7 +94,7 @@ new #[Title('Ficha del alumno')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(Actor $context, StudentQuery $students, StudentRecordQuery $records, StudentCredentialQuery $credentials): array
+    public function with(Actor $context, StudentQuery $students, StudentRecordQuery $records, StudentCredentialQuery $credentials, CredentialRequestQuery $requests): array
     {
         $student = $students->findOrFail($this->studentId);
         $this->authorize('view', $student);
@@ -102,6 +103,7 @@ new #[Title('Ficha del alumno')] class extends Component
         return [
             'record' => $records->forStudent($student),
             'credential' => $credential,
+            'requests' => $credential === null ? null : $requests->history($student),
             'photoUrl' => $credential['photo_url'] ?? StudentPhotoUrl::for($student),
             'canManagePhoto' => auth()->user()?->can('managePhotos', Student::class) ?? false,
             'preview' => $this->showPhoto && $this->photo !== null && $this->photo->isPreviewable() ? $this->photo->temporaryUrl() : null,

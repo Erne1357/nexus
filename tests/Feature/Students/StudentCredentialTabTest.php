@@ -7,7 +7,9 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Students\Actions\SetStudentPhoto;
+use App\Modules\Students\Enums\CredentialRequestStatus;
 use App\Modules\Students\Enums\StudentStatus;
+use App\Modules\Students\Models\CredentialRequest;
 use App\Modules\Students\Models\Student;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -65,4 +67,12 @@ it('CO-10: quien no tiene students.photo.manage no cambia la foto aunque llame e
     Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'credencial'])->test('students::pages.student', ['student' => $this->student->id])
         ->call('openPhoto')
         ->assertForbidden();
+});
+
+it('CO-10: la pestaña Credencial de la ficha muestra el historial de solicitudes del alumno', function () {
+    CredentialRequest::factory()->create(['student_id' => $this->student->id, 'status' => CredentialRequestStatus::Rechazada, 'rejection_reason' => 'Falta comprobante']);
+
+    Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'credencial'])->test('students::pages.student', ['student' => $this->student->id])
+        ->assertSeeHtml('data-testid="credential-requests-history"')
+        ->assertSee('Falta comprobante');
 });

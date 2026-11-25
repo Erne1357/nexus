@@ -15,6 +15,9 @@ use App\Modules\Core\Authorization\OrgTree;
  */
 enum Role: string
 {
+    /** Los atajos de Inicio a las pantallas de Comunicación y Difusión; Inicio solo muestra los que el menú deja ver (CO-07). */
+    private const COMMUNICATION_SHORTCUTS = ['communication.credential-requests', 'communication.student-photos', 'communication.staff-photos'];
+
     case Admin = 'admin';
     case Subdireccion = 'subdireccion';
     case Directivo = 'directivo';
@@ -235,7 +238,8 @@ enum Role: string
     public function homeShortcuts(): array
     {
         return match ($this) {
-            self::JefeDepartamento => ['academic.placements'],
+            self::JefeDepartamento => ['academic.placements', ...self::COMMUNICATION_SHORTCUTS],
+            self::Personal => self::COMMUNICATION_SHORTCUTS,
             default => [],
         };
     }
