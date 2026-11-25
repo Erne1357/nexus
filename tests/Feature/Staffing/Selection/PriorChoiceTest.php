@@ -279,3 +279,16 @@ it('SEL-16: una selección en borrador sin CSV con elección previa sigue bloque
         ->and($world->selection->entries()->exists())->toBeTrue()
         ->and(fn () => app(PublishSelection::class)->handle($world->selection->fresh(), $world->admin))->toThrow(ValidationException::class, 'CSV');
 });
+
+it('SEL-16: la orden mide la base de Nexus de quien tiene elección previa sin venir en el CSV aunque el periodo venga cargado sin sus fechas', function () {
+    $world = priorWorld(SelectionStatus::Published);
+    $previo = $world->teacher(name: 'Docente Previo Fuera', entry: ['source' => SelectionEntrySource::Appended, 'status' => SelectionEntryStatus::Done, 'prior_choice_at' => now(), 'position' => 0, 'slot_index' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
+    markPrior($world, $previo, [$world->group('A', [[1, '09:00', '10:00']])]);
+
+    // Así la carga SelectionTimetableQuery para la pantalla «Oferta»: el periodo sin `starts_on`.
+    $selection = Selection::query()->with('term:id,code,name')->findOrFail($world->selection->getKey());
+
+    $rows = collect(app(SelectionOrderQuery::class)->forSelection($selection))->keyBy('name');
+
+    expect($rows['Docente Previo Fuera'])->prior->toBeTrue()->hours->toBe(5);
+});
