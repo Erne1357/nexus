@@ -77,7 +77,8 @@
                             @endif
                         </div>
                     @endforeach
-                    @if (in_array(null, $availability, true))
+                    {{-- CO-S4: solo pide quien tiene credencial vigente (activo o egresado). --}}
+                    @if ($credential['current'] && in_array(null, $availability, true))
                         <x-button label="Solicitar" icon="o-plus" class="btn-primary mt-4" wire:click="$set('showRequest', true)" data-testid="credential-request-open" />
                     @endif
                 </section>
