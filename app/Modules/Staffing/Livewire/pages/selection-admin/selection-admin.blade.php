@@ -231,23 +231,23 @@
                                     @endforeach
                                 </div>
                             </div>
-                            @if ($slots)
+                            @if ($slotPreview)
                                 <x-alert icon="o-calendar-days" class="alert-info" data-testid="slot-summary">
-                                    <span><b>{{ $slots['turns'] }} turnos para {{ $slots['people'] }} docentes</b> ({{ $slots['ties'] }} {{ $slots['ties'] === 1 ? 'empate' : 'empates' }}). El último es el {{ $slots['last'] }}@if ($slots['extra']); la ronda extra empieza el {{ $slots['extra'] }}@endif.</span>
+                                    <span><b>{{ $slotPreview['turns'] }} turnos para {{ $slotPreview['people'] }} docentes</b> ({{ $slotPreview['ties'] }} {{ $slotPreview['ties'] === 1 ? 'empate' : 'empates' }}). El último es el {{ $slotPreview['last'] }}@if ($slotPreview['extra']); la ronda extra empieza el {{ $slotPreview['extra'] }}@endif.</span>
                                 </x-alert>
                             @endif
                         </div>
-                        @if ($slots)
+                        @if ($slotPreview)
                             <div class="overflow-x-auto rounded-box border border-base-300">
                                 <table class="table table-sm text-center">
-                                    <thead><tr><th></th>@foreach ($slots['days'] as $day)<th>{{ $day['label'] }}</th>@endforeach</tr></thead>
+                                    <thead><tr><th></th>@foreach ($slotPreview['days'] as $day)<th>{{ $day['label'] }}</th>@endforeach</tr></thead>
                                     <tbody>
-                                        @foreach ($slots['times'] as $time)
+                                        @foreach ($slotPreview['times'] as $time)
                                             <tr>
                                                 <th class="font-mono">{{ $time }}</th>
-                                                @foreach ($slots['days'] as $day)
+                                                @foreach ($slotPreview['days'] as $day)
                                                     @php
-                                                        $positions = $slots['cells'][$day['key'].' '.$time] ?? [];
+                                                        $positions = $slotPreview['cells'][$day['key'].' '.$time] ?? [];
                                                     @endphp
                                                     <td class="font-mono {{ $positions ? 'bg-info/10 font-semibold' : '' }}">{{ implode(' · ', $positions) }}@if (count($positions) > 1) <span class="font-sans text-xs text-info">empate</span>@endif</td>
                                                 @endforeach
@@ -265,7 +265,27 @@
                 @if ($step === 6)
                     <h2 class="text-xl font-bold"><span class="font-mono text-neutral">6.</span> Vista previa del orden</h2>
                     <p class="mb-4 text-sm text-neutral">Así queda el orden con el CSV y la antigüedad. Revísalo antes de publicar.</p>
-                    @foreach ($entries->groupBy('tier') as $tier => $group)
+                    @php
+                        $priorEntries = $entries->whereNotNull('prior_choice_at');
+                    @endphp
+                    @if ($priorEntries->isNotEmpty())
+                        <h3 class="mt-4 text-xs font-semibold uppercase text-neutral">Elección previa · {{ $priorEntries->count() }}</h3>
+                        <div class="mt-1 overflow-x-auto rounded-box border border-base-300" data-testid="preview-prior">
+                            <table class="table table-sm">
+                                <tbody>
+                                    @foreach ($priorEntries as $entry)
+                                        <tr wire:key="prior-{{ $entry->id }}">
+                                            <td class="w-10 font-mono">—</td>
+                                            <td class="font-semibold">{{ $entry->teacher?->name ?? $entry->csv_name }}</td>
+                                            <td class="text-xs text-neutral">Ya trae sus grupos escritos en la relación de materias</td>
+                                            <td class="text-right font-mono text-xs">{{ ($priorHours[$entry->teacher_id] ?? 0) }} h · sin turno</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                    @foreach ($entries->whereNull('prior_choice_at')->groupBy('tier') as $tier => $group)
                         <h3 class="mt-4 text-xs font-semibold uppercase text-neutral">Escalón {{ $tier + 1 }} · {{ $group->count() }}</h3>
                         <div class="mt-1 overflow-x-auto rounded-box border border-base-300">
                             <table class="table table-sm">
@@ -400,6 +420,20 @@
                         </ul>
                     @endif
                 </x-card>
+
+                @if ($monitor['prior'] !== [])
+                    <x-card title="Elección previa" shadow class="mt-4" data-testid="monitor-prior">
+                        <p class="text-sm text-neutral">Ya traen sus grupos escritos en la relación de materias: no tienen turno y su carga quedó cerrada al publicar. Si necesitan más grupos, los asigna el jefe o el JPD.</p>
+                        <ul class="mt-3 divide-y divide-base-300 rounded-box border border-base-300">
+                            @foreach ($monitor['prior'] as $row)
+                                <li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2" wire:key="prior-{{ $row['entry']->id }}">
+                                    <b>{{ $row['name'] }}</b>
+                                    <span class="text-sm text-neutral"><span class="font-mono">{{ $row['hours'] }}</span> h · <span class="font-mono text-xs">{{ $row['groups'] === [] ? '—' : implode(', ', $row['groups']) }}</span></span>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </x-card>
+                @endif
 
                 <x-card title="Avance por docente" shadow class="mt-4">
                     <div class="overflow-x-auto">

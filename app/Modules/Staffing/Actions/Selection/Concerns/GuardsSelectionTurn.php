@@ -19,8 +19,9 @@ use Illuminate\Validation\ValidationException;
  * selección y exige que sea su turno. Se llama al empezar la transacción de la Action.
  *
  * Orden de candados: primero el candado consultivo de la selección (`pg_advisory_xact_lock`), luego el renglón del
- * docente y después, como AssignTeacher, la carga en compartido (LoadEditability::lockLoad) y el grupo. Nadie más toma
- * ese candado consultivo, así que no cierra un ciclo con las Actions del jefe.
+ * docente y después, como AssignTeacher, la carga en compartido (LoadEditability::lockLoad) y el grupo. Lo toman también
+ * PublishSelection, el reloj y las Actions de la elección previa (RecordPriorChoice, RemovePriorChoice; en orden de id, antes
+ * de cualquier fila), que lo piden antes que la carga y el grupo, así que no cierran un ciclo con las Actions del jefe.
  */
 trait GuardsSelectionTurn
 {
@@ -46,6 +47,10 @@ trait GuardsSelectionTurn
     private function entryInTurn(Selection $selection, Teacher $teacher, User $actor): SelectionEntry
     {
         $entry = $this->ownEntry($selection, $teacher, $actor);
+
+        if ($entry->isPriorChoice()) {
+            throw ValidationException::withMessages(['group' => 'Tus grupos ya vienen de la elección previa: no tienes turno. Solo tu jefe de departamento o el JPD cambian tu carga (SEL-16).']);
+        }
 
         if ($entry->status === SelectionEntryStatus::Done) {
             throw ValidationException::withMessages(['group' => 'Ya terminaste tu carga: solo tu jefe de departamento o el JPD la cambian.']);

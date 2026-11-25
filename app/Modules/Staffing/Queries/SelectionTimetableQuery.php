@@ -487,7 +487,7 @@ final class SelectionTimetableQuery
         $current = $inTurn->first();
         $isMine = $entry !== null && $inTurn->contains('id', $entry->getKey());
         $counts = SelectionEntry::query()->where('selection_id', $selection->getKey())
-            ->selectRaw('count(*) as total, count(*) filter (where status = ?) as done, count(*) filter (where status = ?) as unresolved', [SelectionEntryStatus::Done->value, SelectionEntryStatus::Unresolved->value])
+            ->selectRaw('count(*) filter (where prior_choice_at is null) as total, count(*) filter (where status = ? and prior_choice_at is null) as done, count(*) filter (where status = ?) as unresolved', [SelectionEntryStatus::Done->value, SelectionEntryStatus::Unresolved->value])
             ->toBase()->first();
         $unresolved = $selection->status !== SelectionStatus::Finished || (int) ($counts->unresolved ?? 0) === 0 ? [] : SelectionEntry::query()
             ->where('selection_id', $selection->getKey())

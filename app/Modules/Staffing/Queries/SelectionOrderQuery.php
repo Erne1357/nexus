@@ -12,16 +12,17 @@ use Carbon\CarbonImmutable;
  * criterios de sus compañeros (decisión 16). Por lugar: el turno (y el de la ronda extra), el escalón de la plaza y el
  * escalón final (SEL-06: «TC → ¾» con un criterio fallido), los cuatro criterios del CSV, la antigüedad, el estado del
  * renglón, si comparte la media hora con otro (SEL-07) y si está en turno ahora. Quien no viene en el CSV (SEL-10) va
- * sin escalón ni criterios y con su fecha de ingreso. Dos consultas.
+ * sin escalón ni criterios y con su fecha de ingreso. Quien tiene elección previa (SEL-16) va aparte, primero, sin lugar ni turno y con sus horas (`prior`, `hours`); no
+ * comparte turno con nadie. Tres consultas.
  *
- * @phpstan-type OrderRow array{position: int, slot_index: int, name: string, slot: ?string, extra_slot: ?string, plaza_tier_label: ?string, tier_label: ?string, criteria: ?array{auto_eval: ?bool, prior_compliance: ?bool, partials_1: ?bool, partials_2: ?bool}, seniority: ?string, status: string, source: string, teacher_id: ?string, base_hours: int, failed_criteria: int, tier: ?int, hired_on: ?string, tie: bool, in_turn: bool}
+ * @phpstan-type OrderRow array{position: int, slot_index: int, name: string, slot: ?string, extra_slot: ?string, plaza_tier_label: ?string, tier_label: ?string, criteria: ?array{auto_eval: ?bool, prior_compliance: ?bool, partials_1: ?bool, partials_2: ?bool}, seniority: ?string, status: string, source: string, teacher_id: ?string, base_hours: int, failed_criteria: int, tier: ?int, hired_on: ?string, tie: bool, in_turn: bool, prior: bool, hours: ?int}
  */
 final class SelectionOrderQuery
 {
     /** El nombre de cada escalón de plaza (SEL-06). */
     private const array PLAZAS = [0 => 'TC', 1 => '¾', 2 => '½', 3 => 'Asignatura'];
 
-    public function __construct(private readonly SelectionTurnQuery $turns) {}
+    public function __construct(private readonly SelectionTurnQuery $turns, private readonly SelectionGroupsQuery $groups) {}
 
     /**
      * @return list<OrderRow>
@@ -35,9 +36,12 @@ final class SelectionOrderQuery
             ->orderBy('id')
             ->get();
         $inTurn = $this->turns->entriesInTurn($selection, $now ?? CarbonImmutable::now())->keyBy('id')->all();
-        $perSlot = $entries->countBy('slot_index');
+        $perSlot = $entries->reject(fn (SelectionEntry $entry): bool => $entry->isPriorChoice())->countBy('slot_index');
+        $priorIds = $entries->filter(fn (SelectionEntry $entry): bool => $entry->isPriorChoice())->pluck('teacher_id')->filter()->all();
+        $hours = $this->groups->hoursByTeacher($selection, $priorIds);
 
-        return $entries->map(function (SelectionEntry $entry) use ($inTurn, $perSlot): array {
+        return $entries->map(function (SelectionEntry $entry) use ($inTurn, $perSlot, $hours): array {
+            $prior = $entry->isPriorChoice();
             $fromCsv = $entry->source === SelectionEntrySource::Csv;
 
             return [
@@ -55,15 +59,17 @@ final class SelectionOrderQuery
                     'partials_2' => $entry->partials_2,
                 ] : null,
                 'seniority' => $fromCsv && $entry->seniority_years !== null ? self::years($entry->seniority_years) : null,
-                'status' => $entry->status->value,
+                'status' => $prior ? 'prior_choice' : $entry->status->value,
                 'source' => $entry->source->value,
                 'teacher_id' => $entry->teacher_id,
                 'base_hours' => $entry->base_hours,
                 'failed_criteria' => $fromCsv ? $entry->failed_criteria : 0,
                 'tier' => $fromCsv ? $entry->tier : null,
                 'hired_on' => $fromCsv ? null : $entry->hired_on?->toDateString(),
-                'tie' => ($perSlot[$entry->slot_index] ?? 0) > 1,
+                'tie' => ! $prior && ($perSlot[$entry->slot_index] ?? 0) > 1,
                 'in_turn' => isset($inTurn[$entry->getKey()]),
+                'prior' => $prior,
+                'hours' => $prior ? (int) ($hours[$entry->teacher_id] ?? 0) : null,
             ];
         })->values()->all();
     }
