@@ -181,3 +181,46 @@ it('deja la bitácora con los conteos y no cambia el estado de la carga', functi
     expect($log->properties['created'])->toBe(2)->and($log->properties['no_schedule'])->toBe(1)->and($log->properties['rooms_set'])->toBe(1)
         ->and($this->load->fresh()->status)->toBe(LoadStatus::Proposed);
 });
+
+it('R-PRY-1: con la carga en borrador la importación también pone el salón (supuesto por confirmar S6)', function () {
+    $this->load->update(['status' => LoadStatus::Draft]);
+
+    $report = ($this->import)([relationLine('AID-2501', 'C', '9 - 10', 1, 5, '703', 30)]);
+
+    expect($report['created'])->toBe(1)->and($report['rooms_set'])->toBe(1)
+        ->and(GroupSession::query()->where('room_id', $this->room->id)->count())->toBe(5);
+});
+
+it('R-PRY-1: con la carga en borrador un salón ocupado sigue sin ponerse y se avisa', function () {
+    $this->load->update(['status' => LoadStatus::Draft]);
+
+    $report = ($this->import)([
+        relationLine('AID-2501', 'C', '9 - 10', 1, 5, '703', 30),
+        relationLine('XYZ-9999', 'C', '9 - 10', 5, 4, '703', 25),
+    ]);
+
+    expect($report['rooms_set'])->toBe(1)
+        ->and(collect($report['warnings'])->contains(fn (string $w): bool => str_contains($w, 'el salón 703 no se puso')))->toBeTrue();
+});
+
+it('con la carga publicada el renglón se reporta y el grupo existente no recibe salón', function () {
+    ($this->import)([relationLine('AID-2501', 'C', '9 - 10', 1, 5, '', 30)]);
+    $this->load->update(['status' => LoadStatus::Published]);
+
+    $report = ($this->import)([relationLine('AID-2501', 'C', '9 - 10', 1, 5, '703', 30)]);
+
+    expect($report['rooms_set'])->toBe(0)
+        ->and($report['skipped_by_kind'])->toBe(['load_not_editable' => 1])
+        ->and(GroupSession::query()->whereNotNull('room_id')->count())->toBe(0);
+});
+
+it('el comando exige --user, también en --dry-run, y no escribe nada sin él', function () {
+    $path = relationFile([relationLine('AID-2501', 'C', '9 - 10', 1, 5, '703', 30)]);
+
+    $this->artisan('academic-load:import-projection', ['file' => $path, '--dry-run' => true])->assertFailed();
+    $this->artisan('academic-load:import-projection', ['file' => $path, '--user' => 'no-existe'])->assertFailed();
+    expect(Group::query()->count())->toBe(0);
+
+    $this->artisan('academic-load:import-projection', ['file' => $path, '--user' => $this->actor->username])->assertSuccessful();
+    expect(Group::query()->count())->toBe(1);
+});

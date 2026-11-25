@@ -267,8 +267,6 @@ final class ImportLoadProjection
             return $report;
         }
 
-        $actor ??= $roomsAsked === [] ? null : User::query()->where('is_active', true)->oldest()->first();
-
         DB::transaction(function () use ($plan, $existingRooms, $term, $campus, $modality, $actor, &$report): void {
             foreach ($plan as $item) {
                 $group = $this->createGroup($item, $term, $campus, $modality);
@@ -358,7 +356,7 @@ final class ImportLoadProjection
         }
 
         try {
-            app(AssignSessionRoom::class)->handleMany($group, $sessions->mapWithKeys(fn (GroupSession $session): array => [$session->id => $room])->all(), $actor);
+            app(AssignSessionRoom::class)->handleMany($group, $sessions->mapWithKeys(fn (GroupSession $session): array => [$session->id => $room])->all(), $actor, importing: true);
             $report['rooms_set']++;
         } catch (ValidationException $exception) {
             $report['warnings'][] = "Fila {$line}: el salón {$roomCode} no se puso en el grupo {$group->code}: ".collect($exception->errors())->flatten()->first();
