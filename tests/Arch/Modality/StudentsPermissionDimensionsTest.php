@@ -5,15 +5,15 @@ use App\Modules\Students\Enums\StudentsPermission;
 
 /*
 | AZ-S17 (MS7, supuesto por confirmar): los datos de un alumno son de su campus y de su modalidad; todo permiso de
-| Students que no es personal declara ambas. La excepción es atender las solicitudes de credencial (CO-01): es de una
-| unidad, Comunicación y Difusión, y sirve a los alumnos de todo el Tec.
+| Students que no es personal declara ambas. Las excepciones son `students.credential_request.manage` (CO-01) y `students.photo.manage` (CO-06): son de
+| Comunicación y Difusión, valen en todo el Tec sobre cualquier alumno y su dimensión es la unidad, no el campus ni la modalidad.
 */
 
 it('AZ-S17: todo permiso de Students que no es personal declara Dimension::Modality y Dimension::Campus', function () {
     $without = [];
 
     foreach (StudentsPermission::cases() as $permission) {
-        if ($permission->isPersonal() || $permission === StudentsPermission::CredentialRequestManage) {
+        if ($permission->isPersonal() || in_array($permission, [StudentsPermission::CredentialRequestManage, StudentsPermission::PhotoManage], true)) {
             continue;
         }
 

@@ -9,6 +9,7 @@ use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Rules\OrgUnitRules;
 use App\Modules\Core\Rules\RoleAssignmentRules;
+use App\Modules\Core\Support\StaffPhotoUrl;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -386,7 +387,7 @@ final class OrgChartQuery
             return [null, 'Esta unidad todavía no tiene un puesto de titular en Nexus.'];
         }
 
-        $assignment = RoleAssignment::query()->current()->where('role', $role)->where('org_unit_id', $unit->id)->with('user:id,name')->orderBy('valid_from')->first();
+        $assignment = RoleAssignment::query()->current()->where('role', $role)->where('org_unit_id', $unit->id)->with('user:id,name,photo_path,photo_updated_at')->orderBy('valid_from')->first();
 
         if ($assignment === null) {
             return [null, match (true) {
@@ -399,6 +400,7 @@ final class OrgChartQuery
         return [[
             'name' => $assignment->user->name,
             'userId' => $assignment->user_id,
+            'photo' => StaffPhotoUrl::for($assignment->user),
             'summary' => $this->labels->one($assignment)->summary,
             'from' => $assignment->valid_from,
         ], null];

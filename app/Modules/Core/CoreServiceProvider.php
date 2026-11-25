@@ -13,6 +13,7 @@ use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\RoleAccess;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Console\MigrationPlanCommand;
+use App\Modules\Core\Console\ProvisionStaffCommand;
 use App\Modules\Core\Console\SeedDemo;
 use App\Modules\Core\Console\SyncTermsFromData;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
@@ -196,7 +197,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Blade::component(config('mary.prefix').'drawer', Drawer::class);
 
         if ($this->app->runningInConsole()) {
-            $this->commands([SeedDemo::class, SyncTermsFromData::class, MigrationPlanCommand::class]);
+            $this->commands([SeedDemo::class, SyncTermsFromData::class, MigrationPlanCommand::class, ProvisionStaffCommand::class]);
         }
 
         // `/health` (tarea 1.31) fuera del grupo `web`: sin sesión, cookies ni throttle, para que un Valkey caído dé 503 y no 500.

@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Actions\DeactivateUser;
+use App\Modules\Core\Actions\SetStaffPhoto;
 use App\Modules\Core\Enums\DeactivationReason;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -21,8 +22,10 @@ use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -61,6 +64,16 @@ function teacherRecord(User $user, Teacher $teacher): Testable
 }
 
 describe('ficha', function () {
+    it('CO-04: muestra la foto del docente si su usuario la tiene, y sus iniciales si no', function () {
+        Storage::fake('staff_photos');
+
+        teacherRecord($this->admin, $this->ana)->assertDontSeeHtml('data-testid="teacher-photo"');
+
+        app(SetStaffPhoto::class)->handle($this->docente, UploadedFile::fake()->image('ana.jpg', 700, 900), $this->admin);
+
+        teacherRecord($this->admin, $this->ana)->assertSeeHtml('data-testid="teacher-photo"');
+    });
+
     it('muestra encabezado, horas base del periodo y las cinco pestañas', function () {
         $this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))
             ->assertOk()

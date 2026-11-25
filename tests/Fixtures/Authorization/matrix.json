@@ -115,6 +115,7 @@
             "staffing.teacher.assign",
             "staffing.teacher_load.view",
             "students.credential_request.manage",
+            "students.photo.manage",
             "students.student.view"
         ],
         "jefe_proyecto_docente": [
@@ -145,7 +146,8 @@
             "core.login_shortcut.manage",
             "core.login_shortcut.view",
             "core.staff_photo.manage",
-            "students.credential_request.manage"
+            "students.credential_request.manage",
+            "students.photo.manage"
         ],
         "subdireccion": [
             "academic_load.agreement.view",
@@ -225,7 +227,8 @@
             "core.login_shortcut.view",
             "core.staff_photo.manage",
             "core.unit_staff.appoint",
-            "students.credential_request.manage"
+            "students.credential_request.manage",
+            "students.photo.manage"
         ],
         "codes=SERVICIOS-ESCOLARES": [
             "academic.placement.validate"

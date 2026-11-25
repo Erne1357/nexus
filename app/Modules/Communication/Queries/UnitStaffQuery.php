@@ -107,6 +107,17 @@ final class UnitStaffQuery
     }
 
     /**
+     * Las cuentas del personal (activas y que no son solo de alumno), para que otras pantallas de Communication las
+     * busquen con la misma regla.
+     *
+     * @return Builder<User>
+     */
+    public function staffAccounts(): Builder
+    {
+        return $this->staff();
+    }
+
+    /**
      * @return Builder<RoleAssignment>
      */
     private function ofUnit(OrgUnit $unit): Builder

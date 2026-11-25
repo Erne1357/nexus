@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Students\Http\Controllers\MyCredentialPhoto;
+use App\Modules\Students\Http\Controllers\StudentPhoto;
 use App\Modules\Students\Http\Controllers\VerifyCredential;
 use Illuminate\Support\Facades\Route;
 
@@ -26,5 +27,7 @@ Route::middleware('throttle:credential-verify')
 
 Route::middleware('auth')->prefix('students')->name('students.')->group(function () {
     Route::livewire('/', 'students::pages.students')->name('index');
+    // La foto del alumno para quien lo consulta (CO-06): firmada, vence a las 2 horas.
+    Route::get('/{student}/foto/{version}', StudentPhoto::class)->middleware('signed')->name('photo');
     Route::livewire('/{student}', 'students::pages.student')->name('show');
 });

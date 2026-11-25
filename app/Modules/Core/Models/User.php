@@ -27,7 +27,8 @@ use Illuminate\Notifications\Notification;
  * trigger en cada cambio de sus nombramientos; `last_role` es el último perfil que usó (AZ-S4). `deactivated_at` y
  * `deactivated_by` dicen cuándo y quién dio de baja la cuenta en el panel (DeactivateUser, CF-05): mientras estén, solo
  * el admin la reactiva (CF-09).
- * Su correo de avisos es `email`, salvo que la notificación elija otro (RoutesMailAddress, CV11).
+ * `photo_path` es la foto vigente del personal en el disco `staff_photos` y `photo_updated_at` cuándo se puso (CO-03; solo
+ * SetStaffPhoto y RemoveStaffPhoto las escriben). Su correo de avisos es `email`, salvo que la notificación elija otro (RoutesMailAddress, CV11).
  */
 #[Fillable(['username', 'name', 'email', 'password', 'password_origin', 'is_active', 'must_change_password', 'last_login_at'])]
 #[Hidden(['password', 'remember_token'])]
@@ -51,6 +52,7 @@ class User extends Authenticatable
             'last_login_at' => 'immutable_datetime',
             'access_invited_at' => 'immutable_datetime',
             'deactivated_at' => 'immutable_datetime',
+            'photo_updated_at' => 'immutable_datetime',
             'last_role' => Role::class,
             'staff_type' => StaffType::class,
             'authz_version' => 'integer',
