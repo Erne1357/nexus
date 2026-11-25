@@ -79,7 +79,7 @@ it('CO-02: la jefa de Comunicación nombra a una persona del personal como Perso
 
     expect(RoleAssignment::query()->whereKey($assignment->id)->exists())->toBeFalse()
         ->and(lastToastOf($page)['title'])->toBe('Nombramiento quitado')
-        ->and(communicationMenuOf($this->head))->toBe(['Personal', 'Fotos del personal', 'Avisos y atajos']);
+        ->and(communicationMenuOf($this->head))->toBe(['Personal', 'Fotos del personal', 'Fotos de alumnos', 'Avisos y atajos']);
 });
 
 it('CO-02: no puede nombrar otro puesto ni sobre otra unidad', function () {
@@ -129,7 +129,7 @@ it('CO-02: el personal de área no ve la pantalla', function () {
 
     expect(RoleAssignment::query()->where('user_id', $this->pablo->id)->exists())->toBeFalse()
         ->and($older->fresh()->valid_to)->toBeNull()
-        ->and(communicationMenuOf($staff))->toBe(['Fotos del personal', 'Avisos y atajos'])
+        ->and(communicationMenuOf($staff))->toBe(['Fotos del personal', 'Fotos de alumnos', 'Avisos y atajos'])
         ->and(communicationMenuOf($hrHead))->toBe([]);
 });
 
@@ -175,5 +175,5 @@ it('el admin también nombra al personal de área desde la pantalla, y la ve en 
         ->assertHasNoErrors();
 
     expect(RoleAssignment::query()->where('user_id', $this->pablo->id)->sole())->role->toBe(Role::Personal)->org_unit_id->toBe($this->unit->id)
-        ->and(communicationMenuOf($admin))->toBe(['Personal', 'Fotos del personal']);
+        ->and(communicationMenuOf($admin))->toBe(['Personal', 'Fotos del personal', 'Fotos de alumnos']);
 });

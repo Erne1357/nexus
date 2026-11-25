@@ -89,6 +89,9 @@ function dimensionTables(): array
         'faculty.teacher_user' => 'users',
         'imports.batch' => 'import_batches',
         'students.student' => 'students',
+        // Las fotos de los alumnos (CO-06) son de Comunicación y Difusión y valen en todo el Tec sobre cualquier alumno: no se
+        // acotan por su campus ni su modalidad, como las del personal; la dimensión es la unidad.
+        'students.photo' => 'users',
         'catalog_validation.review' => 'catalog_reviews',
         'catalog_validation.progress' => 'catalog_reviews',
         'academic_load.load' => 'academic_loads',

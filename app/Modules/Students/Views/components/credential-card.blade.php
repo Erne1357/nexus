@@ -5,13 +5,21 @@
     sobre el mismo fondo, lleva el QR que cambia cada 30 s (students::components.credential-qr). El botón la voltea; sin
     movimiento si el sistema lo pide. Las medidas van en `cqw` para que escale con el ancho.
 
-    $credential: StudentCredentialQuery::of().
+    $credential: StudentCredentialQuery::of() (o forStaff()). $mode: `own` (la del alumno en «Mis datos», con el QR vivo y el
+    botón que la voltea) o `staff` (la de la ficha, para quien consulta al alumno, CO-10): el reverso sin el QR vivo, con la
+    leyenda «El código QR solo lo genera el alumno desde su cuenta.», y un interruptor Frente/Reverso en lugar del botón.
 --}}
-@props(['credential'])
+@props(['credential', 'mode' => 'own'])
 
 @php($front = Vite::asset('resources/images/credencial/frente.webp'))
 
 <div x-data="{ back: false }" class="mx-auto w-full max-w-[640px]" data-testid="my-credential">
+    @if ($mode === 'staff')
+        <div class="join mb-4" role="group" aria-label="Cara de la credencial">
+            <button type="button" class="btn btn-sm join-item" x-bind:class="back ? '' : 'btn-primary'" x-bind:aria-pressed="back ? 'false' : 'true'" x-on:click="back = false" data-testid="credential-show-front">Frente</button>
+            <button type="button" class="btn btn-sm join-item" x-bind:class="back ? 'btn-primary' : ''" x-bind:aria-pressed="back ? 'true' : 'false'" x-on:click="back = true" data-testid="credential-show-back">Reverso</button>
+        </div>
+    @endif
     <div class="@container [perspective:1800px]">
         <div
             class="relative aspect-[1017/642] transition-transform duration-700 ease-[cubic-bezier(.2,.7,.2,1)] [transform-style:preserve-3d] motion-reduce:transition-none"
@@ -77,7 +85,9 @@
                 </div>
 
                 <div class="absolute inset-y-0 right-0 flex w-[41%] flex-col items-center justify-center gap-[1.4cqw] rounded-l-[3cqw] bg-white px-[2cqw] text-center shadow-[-8px_0_30px_rgb(9_45_72/0.22)]">
-                    @if ($credential['current'])
+                    @if ($mode === 'staff')
+                        <p class="font-credential text-[2.2cqw] leading-tight font-semibold text-primary" data-testid="credential-staff-note">El código QR solo lo genera el alumno desde su cuenta.</p>
+                    @elseif ($credential['current'])
                         <livewire:students::components.credential-qr :student-id="$credential['id']" :key="'credential-qr-'.$credential['id']" />
                         <p class="font-credential text-[1.9cqw] leading-tight font-semibold text-primary">Escanea para verificar</p>
                         <p class="font-credential text-[1.5cqw] leading-tight text-primary/70">{{ parse_url((string) config('app.url'), PHP_URL_HOST) }}</p>
@@ -90,7 +100,7 @@
         </div>
     </div>
 
-    <div class="mt-5 flex justify-center">
+    <div @class(['mt-5 flex justify-center', 'hidden' => $mode === 'staff'])>
         <x-button class="btn-primary btn-sm" icon="o-arrow-path" x-on:click="back = ! back" data-testid="credential-flip">
             <span x-text="back ? 'Ver frente' : 'Ver reverso con el código QR'">Ver reverso con el código QR</span>
         </x-button>

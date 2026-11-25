@@ -69,11 +69,13 @@ Carpetas del servidor (`NEXUS_HOME=/opt/nexus`):
    ```bash
    sudo install -d -o "$USER" -g "$USER" /opt/nexus /opt/nexus/inbox
    sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 /var/backups/nexus
-   sudo install -d -m 755 /srv/nexus/fotos
+   sudo install -d -o 1000 -g 1000 -m 750 /srv/nexus/fotos
    sudo install -d -o 1000 -g 1000 -m 750 /srv/nexus/fotos-personal
    ```
 
    `fotos-personal` (`NEXUS_STAFF_PHOTOS_DIR`) guarda las fotos del personal que sube Comunicación (CO-03): Nexus las escribe, así que el contenedor (usuario `app`, uid 1000) debe poder escribir ahí. Son datos personales: inclúyela en el respaldo del servidor junto con `/srv/nexus/fotos`; nunca va al repositorio.
+
+   `fotos` (`NEXUS_STUDENT_PHOTOS_DIR`) guarda las fotos de la credencial de los alumnos. Desde la tarea 1.37 (CO-06) Comunicación también las sube, así que el montaje ya no es de solo lectura y el contenedor (uid 1000) debe poder escribir ahí; una foto reemplazada pasa a `_anteriores/<AAAA>/` y no se borra. Si el directorio ya existía con otro dueño: `sudo chown -R 1000:1000 /srv/nexus/fotos`.
 
 3. **El `.env`**, desde la plantilla que trae el paquete:
 
@@ -165,7 +167,7 @@ Las contraseñas nuevas se entregan aparte, en un archivo privado; no viajan en 
    nexus resume
    ```
 
-4. **Fotos de las credenciales.** No viven en la base. Copia la carpeta de fotos de la demo (`storage/app/fotos`, con la forma `<AAAA>/<número de control>.jpg`) a `/srv/nexus/fotos` (o a `NEXUS_STUDENT_PHOTOS_DIR`), sin los archivos `Zone.Identifier` que deja Windows. `compose.prod.yaml` la monta de solo lectura:
+4. **Fotos de las credenciales.** No viven en la base. Copia la carpeta de fotos de la demo (`storage/app/fotos`, con la forma `<AAAA>/<número de control>.jpg`) a `/srv/nexus/fotos` (o a `NEXUS_STUDENT_PHOTOS_DIR`), sin los archivos `Zone.Identifier` que deja Windows. `compose.prod.yaml` la monta con escritura (CO-06; el contenedor debe poder escribir, ver la preparación de directorios):
 
    ```bash
    sudo install -d -m 755 /srv/nexus/fotos

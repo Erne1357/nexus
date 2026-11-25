@@ -39,4 +39,13 @@ final class StudentPolicy
 
         return $this->actor($user)->allows(StudentsPermission::StudentView, Target::of(modality: $student->modality_id, campus: $student->campus_id, unit: $department, career: $student->career_id));
     }
+
+    /**
+     * CO-06: subir y cambiar las fotos de los alumnos (`students.photo.manage`): la jefa y el personal de Comunicación y
+     * Difusión y el admin, sobre cualquier alumno de cualquier campus.
+     */
+    public function managePhotos(User $user): bool
+    {
+        return $this->actor($user)->allows(StudentsPermission::PhotoManage);
+    }
 }

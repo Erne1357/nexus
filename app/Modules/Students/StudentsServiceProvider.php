@@ -70,7 +70,8 @@ final class StudentsServiceProvider extends ModuleServiceProvider
 
     /**
      * Consultan alumnos la Subdirección, el directivo (AZ-03), los jefes y los coordinadores; el alumno, solo sus datos
-     * (AC-15).
+     * (AC-15). Las fotos de los alumnos (CO-06) son de la jefa y el personal de Comunicación y Difusión; solo les valen sobre
+     * esa unidad (StudentsPermission::appliesTo()).
      */
     public function grants(): array
     {
@@ -78,7 +79,8 @@ final class StudentsServiceProvider extends ModuleServiceProvider
             Role::Alumno->value => [StudentsPermission::MyRecordView],
             Role::Directivo->value => [StudentsPermission::StudentView],
             Role::Subdireccion->value => [StudentsPermission::StudentView],
-            Role::JefeDepartamento->value => [StudentsPermission::StudentView],
+            Role::JefeDepartamento->value => [StudentsPermission::StudentView, StudentsPermission::PhotoManage],
+            Role::Personal->value => [StudentsPermission::PhotoManage],
             Role::Coordinador->value => [StudentsPermission::StudentView],
         ];
     }

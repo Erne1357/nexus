@@ -49,8 +49,9 @@ x-app-color: &app-color
     OCTANE_WORKERS: ${OCTANE_WORKERS:-auto}
   volumes:
     - app-storage:/app/storage/app
-    # Fotos de los alumnos para la credencial (AC-20): <AAAA>/<número de control>.jpg, solo lectura.
-    - ${NEXUS_STUDENT_PHOTOS_DIR:-/srv/nexus/fotos}:/app/storage/app/fotos:ro
+    # Fotos de los alumnos para la credencial (AC-20): <AAAA>/<número de control>.jpg. Desde la tarea 1.37 Nexus también las
+    # escribe (CO-06: Comunicación las sube y la anterior pasa a _anteriores/), así que el montaje lleva escritura.
+    - ${NEXUS_STUDENT_PHOTOS_DIR:-/srv/nexus/fotos}:/app/storage/app/fotos
     # Fotos del personal (CO-03): una carpeta por usuario; Nexus las escribe, así que el montaje lleva escritura.
     - ${NEXUS_STAFF_PHOTOS_DIR:-/srv/nexus/fotos-personal}:/app/storage/app/fotos-personal
   # Liveness para Docker. La preparación (BD, caché, migraciones…) la miran el deployer y Caddy en /health.
@@ -134,8 +135,9 @@ services:
       RUN_MIGRATIONS: "false"
     volumes:
       - app-storage:/app/storage/app
-      # Los lotes de fotos del personal (ProcessPhotoBatch) escriben aquí, igual que los colores (CO-03).
+      # Los lotes de fotos (ProcessPhotoBatch) escriben aquí, igual que los colores (CO-03, CO-06).
       - ${NEXUS_STAFF_PHOTOS_DIR:-/srv/nexus/fotos-personal}:/app/storage/app/fotos-personal
+      - ${NEXUS_STUDENT_PHOTOS_DIR:-/srv/nexus/fotos}:/app/storage/app/fotos
     logging: *logging
 
   # Corre lo programado (schedule:work); compose.yaml lo deja fuera del desarrollo con un perfil.
