@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Communication\Actions\StorePhotoBatch;
 use App\Modules\Communication\Enums\PhotoBatchKind;
 use App\Modules\Communication\Enums\PhotoBatchStatus;
 use App\Modules\Communication\Enums\PhotoOutcome;
@@ -158,12 +159,12 @@ it('CO-06: un ZIP de alumnos con más de 2000 archivos se rechaza', function () 
     $zip = new ZipArchive;
     $path = tempnam(sys_get_temp_dir(), 'nxz');
     $zip->open($path, ZipArchive::OVERWRITE);
-    for ($i = 0; $i <= App\Modules\Communication\Actions\StorePhotoBatch::MAX_ENTRIES; $i++) {
+    for ($i = 0; $i <= StorePhotoBatch::MAX_ENTRIES; $i++) {
         $zip->addFromString("a{$i}.jpg", 'x');
     }
     $zip->close();
 
-    expect(fn () => app(App\Modules\Communication\Actions\StorePhotoBatch::class)->handle(PhotoBatchKind::Alumnos, UploadedFile::fake()->createWithContent('g.zip', file_get_contents($path)), $this->by))
-        ->toThrow(Illuminate\Validation\ValidationException::class);
+    expect(fn () => app(StorePhotoBatch::class)->handle(PhotoBatchKind::Alumnos, UploadedFile::fake()->createWithContent('g.zip', file_get_contents($path)), $this->by))
+        ->toThrow(ValidationException::class);
     unlink($path);
 });
