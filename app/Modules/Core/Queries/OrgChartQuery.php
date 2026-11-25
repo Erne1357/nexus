@@ -400,7 +400,7 @@ final class OrgChartQuery
         return [[
             'name' => $assignment->user->name,
             'userId' => $assignment->user_id,
-            'photo' => StaffPhotoUrl::for($assignment->user),
+            'photo' => StaffPhotoUrl::for($assignment->user, mini: true),
             'summary' => $this->labels->one($assignment)->summary,
             'from' => $assignment->valid_from,
         ], null];

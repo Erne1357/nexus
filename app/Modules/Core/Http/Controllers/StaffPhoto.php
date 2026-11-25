@@ -9,16 +9,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Sirve la foto vigente de una persona (CO-04): solo con la URL firmada y vigente que arma StaffPhotoUrl, y con sesión.
- * Una versión que ya no es la vigente, o una persona sin foto, es 404. Responde `private, max-age=7200` y `nosniff`.
+ * Una versión que ya no es la vigente, o una persona sin foto, es 404. La ruta `-mini` sirve la miniatura de 150×200. Responde `private, max-age=7200` y `nosniff`.
  */
 final class StaffPhoto
 {
-    public function __invoke(string $user, string $version, StaffPhotos $photos): StreamedResponse
+    public function __invoke(string $user, string $version, StaffPhotos $photos, string $size = 'normal'): StreamedResponse
     {
         $person = KeyLookup::find(User::query(), $user);
         abort_if($person === null || $photos->version($person) !== $version, 404);
 
-        $response = $photos->stream($person);
+        $response = $photos->stream($person, $size === 'mini');
         abort_if($response === null, 404);
 
         return $response;

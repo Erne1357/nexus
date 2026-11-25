@@ -83,15 +83,17 @@ final class StaffPhotos
     }
 
     /**
-     * La foto normal vigente en flujo, con su caché privada de 2 horas; null si no hay foto o falta el archivo.
+     * La foto vigente en flujo (la miniatura con `$thumb`), con su caché privada de 2 horas; null si no hay foto o falta el archivo.
      */
-    public function stream(User $user): ?StreamedResponse
+    public function stream(User $user, bool $thumb = false): ?StreamedResponse
     {
-        if ($user->photo_path === null || ! $this->disk()->exists($user->photo_path)) {
+        $path = $thumb ? $this->thumbPath($user) : $user->photo_path;
+
+        if ($path === null || ! $this->disk()->exists($path)) {
             return null;
         }
 
-        return $this->disk()->response($user->photo_path, null, [
+        return $this->disk()->response($path, null, [
             'Content-Type' => 'image/jpeg',
             'Cache-Control' => 'private, max-age='.StaffPhotoUrl::TTL_SECONDS,
             'X-Content-Type-Options' => 'nosniff',

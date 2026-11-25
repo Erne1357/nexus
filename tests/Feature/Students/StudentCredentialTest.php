@@ -270,3 +270,14 @@ it('AC-20: el QR apunta a APP_URL aunque se entre por otro host, y una foto más
     expect(app(StudentPhotos::class)->locate('21111182'))->toBeNull()
         ->and(app(StudentPhotos::class)->read('21111182'))->toBeNull();
 });
+
+it('CO-04: la banda del alumno muestra su propia foto y sin foto las iniciales', function () {
+    $this->actingAs($this->user);
+    Livewire::test('core::components.band')->assertDontSeeHtml('data-testid="credential-photo"');
+
+    Storage::disk('student_photos')->put('2021/21111182.jpg', CREDENTIAL_FAKE_JPEG);
+
+    Livewire::actingAs($this->user->fresh())->test('core::components.band')
+        ->assertSeeHtml('data-testid="credential-photo"')
+        ->assertSeeHtml(route('students.my-record.photo').'?v=');
+});

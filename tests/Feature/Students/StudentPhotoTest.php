@@ -123,8 +123,19 @@ it('la URL firmada de la foto del alumno sirve a quien la pide y vencida da 403'
 
     $this->actingAs($this->by)->get($url)->assertOk()->assertHeader('Content-Type', 'image/jpeg');
 
-    $this->travel(3)->hours();
+    $this->travel(4)->hours();
     $this->actingAs($this->by)->get($url)->assertForbidden();
+});
+
+it('la URL firmada de la foto del alumno no cambia dentro de la hora', function () {
+    app(SetStudentPhoto::class)->handle($this->student, studentImage(), $this->by);
+    $student = $this->student->fresh();
+
+    $this->travelTo(now()->startOfHour()->addMinutes(2));
+    $first = StudentPhotoUrl::for($student);
+    $this->travelTo(now()->startOfHour()->addMinutes(50));
+
+    expect(StudentPhotoUrl::for($student))->toBe($first);
 });
 
 it('CO-10: un coordinador de otra carrera no ve la foto del alumno', function () {

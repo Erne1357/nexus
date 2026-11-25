@@ -10,6 +10,7 @@ use App\Modules\Core\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | «Fotos del personal» (`/comunicacion/fotos-personal`, communication::pages.staff-photos). CO-03 (C11): la jefa y el
@@ -70,7 +71,7 @@ it('CO-03: si el disco no deja escribir, la pantalla avisa y no guarda ni regist
     expect($this->ana->fresh()->photo_path)->toBeNull()
         ->and($this->ana->fresh()->photo_updated_at)->toBeNull()
         ->and(Storage::disk('staff_photos')->allFiles())->toBe([])
-        ->and(Spatie\Activitylog\Models\Activity::query()->where('description', 'Cambió la foto')->count())->toBe(0);
+        ->and(Activity::query()->where('description', 'Cambió la foto')->count())->toBe(0);
 });
 
 it('CO-03: el personal de Comunicación también entra, y no abre a un alumno', function () {

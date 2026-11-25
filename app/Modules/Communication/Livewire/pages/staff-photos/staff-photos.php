@@ -73,7 +73,7 @@ new #[Title('Fotos del personal')] class extends Component
 
         return [
             'people' => $people,
-            'photoUrls' => $people->getCollection()->mapWithKeys(fn (User $user): array => [$user->id => StaffPhotoUrl::for($user)])->all(),
+            'photoUrls' => $people->getCollection()->mapWithKeys(fn (User $user): array => [$user->id => StaffPhotoUrl::for($user, mini: true)])->all(),
             'person' => $person,
             'personPhoto' => $person === null ? null : StaffPhotoUrl::for($person),
             'preview' => $this->showPhoto && $this->photo !== null && $this->photo->isPreviewable() ? $this->photo->temporaryUrl() : null,
