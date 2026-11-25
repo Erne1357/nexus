@@ -11,6 +11,7 @@ use App\Modules\Students\Actions\MarkCredentialRequestReady;
 use App\Modules\Students\Actions\RejectCredentialRequest;
 use App\Modules\Students\Actions\RequestCredential;
 use App\Modules\Students\Actions\ScheduleCredentialRequest;
+use App\Modules\Students\Actions\SetStudentPhoto;
 use App\Modules\Students\Actions\TouchOpenPhotoRequests;
 use App\Modules\Students\Enums\CredentialRequestStatus as S;
 use App\Modules\Students\Enums\StudentStatus;
@@ -21,9 +22,11 @@ use App\Modules\Students\Queries\CredentialRequestQuery;
 use App\Modules\Students\Rules\InstitutionalEmail;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 function studentWithUser(array $attributes = []): array
@@ -240,4 +243,22 @@ test('CO-S1: la bandeja cuenta y filtra por estado y busca por nombre o número 
         ->and($query->tray(null, 'Ana')->total())->toBe(1)
         ->and($query->tray(null, '27110002')->total())->toBe(2)
         ->and($query->history($luis))->toHaveCount(2);
+});
+
+test('CO-S8: subir la foto con SetStudentPhoto marca la solicitud abierta y deja entregarla', function () {
+    Storage::fake('student_photos');
+    $by = communicationStaff();
+    $student = Student::factory()->create(['control_number' => '27110099']);
+    $request = CredentialRequest::factory()->for($student)->create(['wants_reposition' => false, 'wants_photo' => true, 'status' => S::Citada]);
+    $closed = CredentialRequest::factory()->for($student)->create(['wants_reposition' => true, 'wants_photo' => false, 'status' => S::Citada]);
+
+    expect(fn () => app(DeliverCredentialRequest::class)->handle($request, $by))->toThrow(ValidationException::class);
+
+    app(SetStudentPhoto::class)->handle($student, UploadedFile::fake()->image('f.jpg', 300, 400), $by);
+
+    expect($request->fresh()->photo_updated_at)->not->toBeNull()
+        ->and($closed->fresh()->photo_updated_at)->toBeNull();
+
+    app(DeliverCredentialRequest::class)->handle($request->fresh(), $by);
+    expect($request->fresh()->status)->toBe(S::Entregada);
 });

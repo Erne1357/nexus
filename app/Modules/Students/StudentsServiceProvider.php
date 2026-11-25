@@ -18,9 +18,11 @@ use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use App\Modules\Students\Enums\StudentsPermission;
 use App\Modules\Students\Enums\StudentStatus;
+use App\Modules\Students\Events\StudentPhotoChanged;
 use App\Modules\Students\Listeners\BlockPlanCareerChangeWithStudents;
 use App\Modules\Students\Listeners\BlockSubjectDeactivationWhileNeeded;
 use App\Modules\Students\Listeners\RecomputeProgressOnCurriculumChange;
+use App\Modules\Students\Listeners\TouchPhotoRequestsOnPhotoChange;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Rules\CredentialRequestSettings;
@@ -45,6 +47,7 @@ final class StudentsServiceProvider extends ModuleServiceProvider
         Event::listen(SubjectDeactivating::class, BlockSubjectDeactivationWhileNeeded::class);
         Event::listen(PlanCareerChanging::class, BlockPlanCareerChangeWithStudents::class);
         Event::listen(CurriculumChanged::class, RecomputeProgressOnCurriculumChange::class);
+        Event::listen(StudentPhotoChanged::class, TouchPhotoRequestsOnPhotoChange::class);
 
         // AC-20: la verificación pública del QR de la credencial. 30 por minuto por dirección y código, y 300 por dirección:
         // detrás del NAT del campus muchos teléfonos comparten dirección.
