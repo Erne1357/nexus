@@ -60,3 +60,54 @@ it('rechaza más de 10 MB', function () {
 it('rechaza un archivo que no existe', function () {
     expect(fn () => (new PhotoNormalizer)->normalize('/no/existe.jpg'))->toThrow(InvalidPhoto::class);
 });
+
+/** Un PNG que solo trae su cabecera, con las dimensiones que se le pidan (una bomba de descompresión). */
+function bombPng(int $width, int $height): string
+{
+    $ihdr = pack('NN', $width, $height)."\x08\x02\x00\x00\x00";
+
+    return "\x89PNG\r\n\x1a\n".pack('N', 13).'IHDR'.$ihdr.pack('N', crc32('IHDR'.$ihdr)).pack('N', 0).'IEND'.pack('N', crc32('IEND'));
+}
+
+it('rechaza una imagen con dimensiones enormes antes de decodificarla', function (int $width, int $height) {
+    $path = tempnam(sys_get_temp_dir(), 'ph');
+    file_put_contents($path, bombPng($width, $height));
+
+    expect(fn () => (new PhotoNormalizer)->normalize($path))->toThrow(InvalidPhoto::class, 'dimensiones');
+})->with([[20000, 20], [7000, 7000]]);
+
+/** Un JPEG de 400×300 con la mitad izquierda roja y la derecha azul, con la etiqueta EXIF de orientación dada. */
+function orientedJpeg(int $orientation): string
+{
+    $image = imagecreatetruecolor(400, 300);
+    imagefilledrectangle($image, 0, 0, 199, 299, imagecolorallocate($image, 250, 0, 0));
+    imagefilledrectangle($image, 200, 0, 399, 299, imagecolorallocate($image, 0, 0, 250));
+    ob_start();
+    imagejpeg($image, null, 95);
+    $jpeg = (string) ob_get_clean();
+
+    $tiff = 'II'.pack('v', 42).pack('V', 8).pack('v', 1).pack('vvVv', 0x0112, 3, 1, $orientation).pack('v', 0).pack('V', 0);
+    $app1 = "\xFF\xE1".pack('n', 2 + 6 + strlen($tiff))."Exif\0\0".$tiff;
+
+    $path = tempnam(sys_get_temp_dir(), 'ph');
+    file_put_contents($path, substr($jpeg, 0, 2).$app1.substr($jpeg, 2));
+
+    return $path;
+}
+
+it('endereza una foto de teléfono según su orientación EXIF', function () {
+    // Orientación 6: hay que girarla 90° a la derecha; la mitad izquierda (roja) queda arriba.
+    $result = (new PhotoNormalizer)->normalize(orientedJpeg(6));
+    $image = imagecreatefromstring($result['normal']);
+
+    expect(array_slice(getimagesizefromstring($result['normal']), 0, 2))->toBe([600, 800]);
+    expect((imagecolorat($image, 150, 20) >> 16) & 0xFF)->toBeGreaterThan(180)
+        ->and(imagecolorat($image, 150, 780) & 0xFF)->toBeGreaterThan(180);
+});
+
+it('una foto con orientación normal queda como viene', function () {
+    $image = imagecreatefromstring((new PhotoNormalizer)->normalize(orientedJpeg(1))['normal']);
+
+    expect((imagecolorat($image, 20, 400) >> 16) & 0xFF)->toBeGreaterThan(180)
+        ->and(imagecolorat($image, 580, 400) & 0xFF)->toBeGreaterThan(180);
+});

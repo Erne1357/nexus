@@ -10,13 +10,15 @@ La imagen de Docker no traía ninguna extensión de imágenes de PHP.
 ## Decisión
 - Se agrega la extensión `gd` a `install-php-extensions` del `Dockerfile` (base de dev, CI y producción).
 - `PhotoNormalizer` (Core) normaliza con GD: revisa el tipo real con `finfo` (jpg, png o webp, hasta 10 MB), recorta 3:4 centrado a lo ancho y pegado arriba, y produce un JPEG de 600×800 y una miniatura de 150×200 a calidad 85. Lo transparente se aplana sobre blanco.
+- Con la extensión `exif` (también en el `Dockerfile`) se lee la etiqueta de orientación de un JPEG y la foto se endereza antes de recortar, para que las de teléfono salgan derechas.
+- Antes de decodificar se leen las dimensiones: más de 8000 px por lado o 40 millones de píxeles se rechaza (una bomba de descompresión no debe agotar la memoria).
 - El original también se guarda: normalizar no destruye nada.
 - Sin dependencias de Composer: GD es una extensión de PHP, no un paquete.
 
 ## Consecuencias
 - Hay que reconstruir las imágenes `app`, `queue` y `vite` (y la de producción lo hace el release) para tener GD. En un contenedor que ya corre, `docker-php-ext-install gd` lo agrega solo hasta que se recrea.
 - GD lee webp si PHP se compiló con soporte; la imagen de FrankenPHP lo trae. Un avif o un gif se rechazan: solo jpg, png y webp.
-- La orientación EXIF de una foto de teléfono no se corrige (GD no la aplica sola); si Comunicación lo pide, se agrega en `PhotoNormalizer`.
+- Sin la extensión `exif` la foto se procesa sin enderezar.
 
 ## Alternativas descartadas
 - **Imagick:** más formatos y corrección de EXIF, pero exige ImageMagick en la imagen y su política de seguridad; GD basta para jpg, png y webp.

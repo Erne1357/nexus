@@ -96,12 +96,7 @@ final class ProcessPhotoBatch implements ShouldQueue
             $row = fn (PhotoOutcome $outcome, ?string $message = null): array => ['file' => $file, 'key' => $key, 'outcome' => $outcome->value, 'message' => $message];
             $folded = mb_strtolower($key);
 
-            if (isset($seen[$folded])) {
-                $report[] = $row(PhotoOutcome::Repetida, 'Otro archivo del lote ya traía este usuario.');
-            } else {
-                $seen[$folded] = true;
-                $report[] = $this->applyOne($zip, $index, $file, $key, $setStaffPhoto, $accounts, $uploader, $row);
-            }
+            $report[] = $this->applyOne($zip, $index, $file, $key, $folded, $seen, $setStaffPhoto, $accounts, $uploader, $row);
 
             if (($position + 1) % self::SAVE_EVERY === 0) {
                 $batch->update(['processed' => $position + 1, 'report' => $report]);
@@ -114,10 +109,11 @@ final class ProcessPhotoBatch implements ShouldQueue
     }
 
     /**
+     * @param  array<string, true>  $seen  las claves de archivos que ya pasaron el formato; una repetida se reporta, no se aplica
      * @param  callable(PhotoOutcome, ?string=): array{file: string, key: string, outcome: string, message: ?string}  $row
      * @return array{file: string, key: string, outcome: string, message: ?string}
      */
-    private function applyOne(ZipArchive $zip, int $index, string $file, string $key, SetStaffPhoto $setStaffPhoto, UserAccountRules $accounts, User $uploader, callable $row): array
+    private function applyOne(ZipArchive $zip, int $index, string $file, string $key, string $folded, array &$seen, SetStaffPhoto $setStaffPhoto, UserAccountRules $accounts, User $uploader, callable $row): array
     {
         $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         $size = (int) ($zip->statIndex($index)['size'] ?? 0);
@@ -129,6 +125,12 @@ final class ProcessPhotoBatch implements ShouldQueue
         if (! in_array($extension, StaffPhotos::EXTENSIONS, true)) {
             return $row(PhotoOutcome::FormatoInvalido, 'Solo jpg, png o webp.');
         }
+
+        if (isset($seen[$folded])) {
+            return $row(PhotoOutcome::Repetida, 'Otro archivo del lote ya traía este usuario.');
+        }
+
+        $seen[$folded] = true;
 
         $person = User::query()->whereRaw('lower(username) = ?', [mb_strtolower($key)])->first();
 
