@@ -15,7 +15,7 @@ use App\Modules\Core\Authorization\OrgTree;
  */
 enum Role: string
 {
-    /** Los atajos de Inicio a las pantallas de Comunicación y Difusión; Inicio solo muestra los que el menú deja ver (CO-07). */
+    /** Los atajos de Inicio a las pantallas de Comunicación y Difusión; Inicio solo muestra los que el menú deja ver (CO-01). */
     private const COMMUNICATION_SHORTCUTS = ['communication.credential-requests', 'communication.student-photos', 'communication.staff-photos'];
 
     case Admin = 'admin';

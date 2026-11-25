@@ -5,6 +5,7 @@ use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\User;
 use App\Modules\Students\Enums\CredentialRequestStatus as S;
+use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\CredentialRequest;
 use App\Modules\Students\Models\Student;
 use Carbon\CarbonImmutable;
@@ -54,6 +55,16 @@ it('CO-07: el alumno pide desde el drawer y ve su solicitud con estado y cita', 
         ->assertSee('10:30')
         ->assertSee('Ventanilla de Comunicación')
         ->assertDontSeeHtml('data-testid="cancel-request"');
+});
+
+it('CO-S4: sin credencial vigente el alumno no ve «Solicitar»', function () {
+    [$student, $user] = credentialStudent();
+
+    credentialPage($user)->assertSeeHtml('data-testid="credential-request-open"');
+
+    $student->forceFill(['status' => StudentStatus::BajaTemporal])->save();
+
+    credentialPage($user)->assertDontSeeHtml('data-testid="credential-request-open"');
 });
 
 it('CO-07: una casilla no disponible va deshabilitada y muestra el motivo de availability()', function () {

@@ -44,6 +44,7 @@ Route::middleware('throttle:60,1')->group(function () {
 Route::middleware('auth')->group(function () {
     // La foto vigente de una persona (CO-04): solo con la URL firmada que arma StaffPhotoUrl y vence a las 2 horas.
     Route::get('/personal/{user}/foto/{version}', StaffPhoto::class)->middleware('signed')->name('core.staff-photo');
+    Route::get('/personal/{user}/foto/{version}/mini', StaffPhoto::class)->middleware('signed')->defaults('size', 'mini')->name('core.staff-photo-mini');
     // El Inicio (`/`, nombre `home`) es el mapa del campus y lo registra Scheduling (tarea 1.24.1); lo que era el Inicio
     // —saludo, bloque del puesto, calendario y tarjetas— queda como «Resumen» en Mi espacio.
     Route::livewire('/resumen', 'core::pages.home')->name('core.summary');

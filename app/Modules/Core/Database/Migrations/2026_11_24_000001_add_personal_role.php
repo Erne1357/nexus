@@ -18,9 +18,12 @@ use Illuminate\Support\Facades\DB;
  *
  * down() lo regresa a la forma anterior. Se detiene sin cambiar nada si ya hay nombramientos de personal de área,
  * porque el código anterior no conoce el puesto: hay que quitarlos antes. Volver al release anterior sin regresar la
- * migración (`nexus rollback`), como con el directivo, deja filas que ese código no lee: el rol de fábrica
+ * migración (`nexus rollback`), como con el directivo, deja filas que ese código no conoce: el rol de fábrica
  * (`permission_sets.factory_role = 'personal'`, que PermissionSet convierte a Role) y, si ya hay, los nombramientos y
- * `users.last_role` de `personal`.
+ * `users.last_role` de `personal`. Esas filas no se ignoran: los casts de `RoleAssignment.role` y `User.last_role` del
+ * código anterior lanzan `ValueError` en «Personas y puestos», en el panel del organigrama de Comunicación y al iniciar
+ * sesión esas personas. Antes de volver, termina esos nombramientos y pon en null su `last_role`, o restaura el
+ * respaldo (docs/operacion/despliegue.md, «Volver a la versión anterior»).
  */
 return new class extends Migration
 {

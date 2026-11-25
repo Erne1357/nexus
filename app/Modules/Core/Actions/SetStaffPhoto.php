@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Exceptions\InvalidPhoto;
+use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Rules\UserAccountRules;
 use App\Modules\Core\Support\StaffPhotos;
@@ -23,7 +24,7 @@ final class SetStaffPhoto
     /**
      * @param  UploadedFile|string  $file  el archivo subido o la ruta de uno en disco (el lote en ZIP)
      *
-     * @throws ValidationException si la persona es un alumno o la imagen no sirve
+     * @throws ValidationException si la persona es un alumno, la imagen no sirve o el disco no deja guardarla
      */
     public function handle(User $person, UploadedFile|string $file, ?User $by = null): void
     {
@@ -38,6 +39,10 @@ final class SetStaffPhoto
             $stored = $this->photos->store($person, $path, $extension);
         } catch (InvalidPhoto $e) {
             throw ValidationException::withMessages(['photo' => $e->getMessage()]);
+        } catch (PhotoNotSaved $e) {
+            report($e);
+
+            throw ValidationException::withMessages(['photo' => PhotoNotSaved::MESSAGE]);
         }
 
         DB::transaction(function () use ($person, $stored, $by): void {

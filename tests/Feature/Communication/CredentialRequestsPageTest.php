@@ -3,13 +3,16 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Core\Actions\UpdatePermissionSet;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
+use App\Modules\Core\Models\PermissionSet;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\User;
 use App\Modules\Students\Enums\CredentialRequestStatus as Status;
+use App\Modules\Students\Enums\StudentsPermission;
 use App\Modules\Students\Models\CredentialRequest;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Rules\CredentialRequestSettings;
@@ -147,4 +150,24 @@ it('CO-07: subir foto a una solicitud cerrada se rechaza y una imagen inválida 
     $page->call('openRequest', $open->id)
         ->set('photo', UploadedFile::fake()->createWithContent('falsa.jpg', 'no soy una imagen'))->call('savePhoto')
         ->assertHasErrors('photo');
+});
+
+it('CO-09: quien atiende la bandeja pero no administra fotos no ve «Subir foto» ni puede subirla', function () {
+    $this->actingAs($this->head);
+    $set = PermissionSet::query()->where('factory_role', Role::Personal->value)->sole();
+    app(UpdatePermissionSet::class)->handle($set, ['permissions' => [StudentsPermission::CredentialRequestManage->value]]);
+    app()->forgetScopedInstances();
+    $staff = communicationStaff();
+    $request = CredentialRequest::factory()->create(['student_id' => $this->ana->id, 'wants_reposition' => false, 'wants_photo' => true]);
+
+    Livewire::actingAs($staff)->test('communication::pages.credential-requests')
+        ->call('openRequest', $request->id)
+        ->assertOk()
+        ->assertDontSeeHtml('data-testid="photo-form"')
+        ->set('photo', UploadedFile::fake()->image('ana.jpg', 700, 900))
+        ->call('savePhoto')
+        ->assertForbidden();
+
+    expect(Storage::disk('student_photos')->exists('2021/21111182.jpg'))->toBeFalse()
+        ->and($request->fresh()->photo_updated_at)->toBeNull();
 });

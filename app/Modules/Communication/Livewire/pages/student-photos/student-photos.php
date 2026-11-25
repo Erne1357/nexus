@@ -152,7 +152,7 @@ new #[Title('Fotos de alumnos')] class extends Component
     {
         $this->authorizeManage();
 
-        $this->validate(['zip' => ['required', 'file', 'mimes:zip', 'max:19456']], [
+        $this->validate(['zip' => ['required', 'file', 'mimes:zip', 'max:19000']], [
             'zip.required' => 'Elige el ZIP.',
             'zip.mimes' => 'Solo un archivo ZIP.',
             'zip.max' => 'El ZIP pesa más de 19 MB. Súbelo en varios lotes.',

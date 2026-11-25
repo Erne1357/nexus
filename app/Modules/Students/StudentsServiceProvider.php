@@ -31,6 +31,7 @@ use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Rules\CredentialRequestSettings;
 use App\Modules\Students\Support\StudentPhotos;
+use App\Modules\Students\Support\StudentPhotoUrl;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
@@ -69,6 +70,13 @@ final class StudentsServiceProvider extends ModuleServiceProvider
             } catch (InvalidPhoto) {
                 return null;
             }
+        });
+
+        // CO-04: la foto propia del alumno en la banda (su ruta propia, sin id); sin foto, null y salen las iniciales.
+        $this->app->make(CredentialPhotos::class)->extendUrl(static function (User $user): ?string {
+            $student = Student::query()->where('user_id', $user->getKey())->first();
+
+            return $student === null ? null : StudentPhotoUrl::own($student);
         });
 
         // AC-20: la verificación pública del QR de la credencial. 30 por minuto por dirección y código, y 300 por dirección:

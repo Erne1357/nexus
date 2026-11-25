@@ -4,11 +4,13 @@ use App\Modules\Communication\Enums\PhotoBatchStatus;
 use App\Modules\Communication\Models\PhotoBatch;
 use App\Modules\Core\Actions\SetStaffPhoto;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | «Fotos del personal» (`/comunicacion/fotos-personal`, communication::pages.staff-photos). CO-03 (C11): la jefa y el
@@ -53,6 +55,23 @@ it('CO-03: una foto que no es imagen da un error junto al campo', function () {
         ->assertHasErrors('photo');
 
     expect($this->ana->fresh()->photo_path)->toBeNull();
+});
+
+it('CO-03: si el disco no deja escribir, la pantalla avisa y no guarda ni registra nada', function () {
+    failingDisk('staff_photos', ['put']);
+
+    Livewire::actingAs($this->head)->test('communication::pages.staff-photos')
+        ->call('openPhoto', $this->ana->id)
+        ->set('photo', UploadedFile::fake()->image('ana.jpg', 700, 900))
+        ->call('savePhoto')
+        ->assertHasErrors(['photo' => PhotoNotSaved::MESSAGE])
+        ->assertSee(PhotoNotSaved::MESSAGE)
+        ->assertSet('showPhoto', true);
+
+    expect($this->ana->fresh()->photo_path)->toBeNull()
+        ->and($this->ana->fresh()->photo_updated_at)->toBeNull()
+        ->and(Storage::disk('staff_photos')->allFiles())->toBe([])
+        ->and(Activity::query()->where('description', 'Cambió la foto')->count())->toBe(0);
 });
 
 it('CO-03: el personal de Comunicación también entra, y no abre a un alumno', function () {

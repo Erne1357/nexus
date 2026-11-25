@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Support;
 
 use App\Modules\Core\Exceptions\InvalidPhoto;
+use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Models\User;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
@@ -25,6 +26,7 @@ final class StaffPhotos
      * Normaliza `$sourcePath` y guarda la normal, la miniatura y el original; devuelve la ruta de la normal.
      *
      * @throws InvalidPhoto
+     * @throws PhotoNotSaved si el disco no deja escribir alguno de los tres archivos (no queda ninguno)
      */
     public function store(User $user, string $sourcePath, string $extension): string
     {
@@ -37,9 +39,19 @@ final class StaffPhotos
         }
 
         $base = substr($path, 0, -4);
-        $this->disk()->put($path, $photos['normal']);
-        $this->disk()->put("{$base}-mini.jpg", $photos['thumb']);
-        $this->disk()->put("{$base}-original.{$extension}", (string) file_get_contents($sourcePath));
+        $files = [
+            $path => $photos['normal'],
+            "{$base}-mini.jpg" => $photos['thumb'],
+            "{$base}-original.{$extension}" => (string) file_get_contents($sourcePath),
+        ];
+
+        foreach ($files as $target => $bytes) {
+            if (! $this->disk()->put($target, $bytes)) {
+                $this->disk()->delete(array_keys($files));
+
+                throw new PhotoNotSaved($target);
+            }
+        }
 
         return $path;
     }
@@ -71,15 +83,17 @@ final class StaffPhotos
     }
 
     /**
-     * La foto normal vigente en flujo, con su caché privada de 2 horas; null si no hay foto o falta el archivo.
+     * La foto vigente en flujo (la miniatura con `$thumb`), con su caché privada de 2 horas; null si no hay foto o falta el archivo.
      */
-    public function stream(User $user): ?StreamedResponse
+    public function stream(User $user, bool $thumb = false): ?StreamedResponse
     {
-        if ($user->photo_path === null || ! $this->disk()->exists($user->photo_path)) {
+        $path = $thumb ? $this->thumbPath($user) : $user->photo_path;
+
+        if ($path === null || ! $this->disk()->exists($path)) {
             return null;
         }
 
-        return $this->disk()->response($user->photo_path, null, [
+        return $this->disk()->response($path, null, [
             'Content-Type' => 'image/jpeg',
             'Cache-Control' => 'private, max-age='.StaffPhotoUrl::TTL_SECONDS,
             'X-Content-Type-Options' => 'nosniff',

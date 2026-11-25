@@ -543,3 +543,20 @@ function zipOf(array $files): UploadedFile
 
     return UploadedFile::fake()->createWithContent('lote.zip', (string) file_get_contents($path));
 }
+
+/**
+ * Envuelve el disco falso `$name` (ya creado con Storage::fake) en uno que devuelve false (sin lanzar, como `'throw' => false`) en los métodos dados:
+ * simula un directorio sin permiso de escritura o un disco lleno. Lo demás pasa al disco falso de verdad.
+ *
+ * @param  list<string>  $methods
+ */
+function failingDisk(string $name, array $methods): void
+{
+    $disk = Mockery::mock(Storage::disk($name))->makePartial();
+
+    foreach ($methods as $method) {
+        $disk->shouldReceive($method)->andReturn(false);
+    }
+
+    Storage::set($name, $disk);
+}

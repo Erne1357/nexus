@@ -17,7 +17,7 @@
     <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div class="flex min-w-0 items-start gap-4">
             {{-- CO-04: la foto del docente (URL firmada de 2 horas); sin foto, sus iniciales. --}}
-            @if ($record->user !== null && ($photo = \App\Modules\Core\Support\StaffPhotoUrl::for($record->user)) !== null)
+            @if ($record->user !== null && ($photo = \App\Modules\Core\Support\StaffPhotoUrl::for($record->user, mini: true)) !== null)
                 <img src="{{ $photo }}" alt="" data-testid="teacher-photo" class="h-14 w-14 shrink-0 rounded-full bg-base-300 object-cover object-top" />
             @else
                 <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-base-300 text-lg font-semibold" aria-hidden="true">{{ \Illuminate\Support\Str::of($record->teacher->name)->explode(' ')->filter()->take(2)->map(fn (string $word): string => mb_strtoupper(mb_substr($word, 0, 1)))->implode('') }}</span>

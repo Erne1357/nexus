@@ -7,7 +7,6 @@ use App\Modules\Core\Queries\CredentialQuery;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Support\CredentialToken;
-use App\Modules\Students\Support\StudentPhotos;
 use App\Modules\Students\Support\StudentPhotoUrl;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
@@ -27,7 +26,6 @@ final class StudentCredentialQuery
 
     public function __construct(
         private readonly CredentialQuery $credentials,
-        private readonly StudentPhotos $photos,
         private readonly CredentialToken $tokens,
     ) {}
 
@@ -36,6 +34,8 @@ final class StudentCredentialQuery
      */
     public function of(Actor $context, Student $student): array
     {
+        $url = StudentPhotoUrl::own($student);
+
         return [
             'id' => (string) $student->getKey(),
             'name' => $student->name,
@@ -46,9 +46,9 @@ final class StudentCredentialQuery
             'initials' => $this->credentials->initials($student->name),
             'status' => self::statusLabel($student->status),
             'current' => self::isCurrent($student->status),
-            'has_photo' => ($version = $this->photos->version($student->control_number)) !== null,
+            'has_photo' => $url !== null,
             // `v` cambia por alumno y por foto: la URL de la foto propia es la misma para todos (MyCredentialPhoto).
-            'photo_url' => $version === null ? null : route('students.my-record.photo', ['v' => substr(hash('sha256', $student->getKey().'|'.$version), 0, 16)]),
+            'photo_url' => $url,
         ];
     }
 

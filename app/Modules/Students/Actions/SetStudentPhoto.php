@@ -3,6 +3,7 @@
 namespace App\Modules\Students\Actions;
 
 use App\Modules\Core\Exceptions\InvalidPhoto;
+use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Models\User;
 use App\Modules\Students\Events\StudentPhotoChanged;
 use App\Modules\Students\Models\Student;
@@ -43,6 +44,10 @@ final class SetStudentPhoto
             });
         } catch (InvalidPhoto $e) {
             throw ValidationException::withMessages(['photo' => $e->getMessage()]);
+        } catch (PhotoNotSaved $e) {
+            report($e);
+
+            throw ValidationException::withMessages(['photo' => PhotoNotSaved::MESSAGE]);
         }
 
         StudentPhotoChanged::dispatch((string) $student->getKey());

@@ -269,6 +269,6 @@ it('CO-S9: no se cita en el pasado', function () {
     $request = CredentialRequest::factory()->for($student)->create(['wants_reposition' => true, 'status' => S::Solicitada]);
 
     expect(fn () => app(ScheduleCredentialRequest::class)->handle($request, CarbonImmutable::now()->subDay(), 'Edificio A', communicationStaff()))
-        ->toThrow(ValidationException::class, 'La cita debe ser a partir de hoy.');
+        ->toThrow(ValidationException::class, 'La cita debe ser posterior a este momento.');
     expect($request->fresh()->status)->toBe(S::Solicitada);
 });

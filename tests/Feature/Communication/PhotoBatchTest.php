@@ -11,6 +11,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
 
 /*
 | Lotes de fotos del personal en ZIP (CO-S5): `<usuario>.<ext>` sin distinguir mayúsculas, carpetas ignoradas y un
@@ -41,7 +42,9 @@ it('aplica <usuario>.<ext> sin distinguir mayúsculas e ignora carpetas', functi
         ->and(collect($batch->report)->pluck('outcome')->unique()->all())->toBe(['aplicada']);
     expect($ana->fresh()->photo_path)->not->toBeNull()
         ->and($luis->fresh()->photo_path)->not->toBeNull();
-    Storage::disk('imports')->assertExists($batch->file_path);
+    // CO-S10: el ZIP se borra al terminar; el reporte se conserva.
+    Storage::disk('imports')->assertMissing($batch->file_path);
+    expect($batch->report)->toHaveCount(2);
 });
 
 it('reporta sin_persona, es_alumno, formato_invalido, muy_pesada y repetida', function () {
@@ -96,6 +99,7 @@ it('un lote que falla queda fallido', function () {
     $batch->refresh();
     expect($batch->status)->toBe(PhotoBatchStatus::Fallido)
         ->and($batch->error)->not->toBeNull();
+    Storage::disk('imports')->assertMissing($batch->file_path);
 });
 
 it('CO-06: un lote de alumnos se acepta y queda en cola como los del personal', function () {
@@ -137,4 +141,45 @@ it('un ZIP con más de 2000 archivos se rechaza', function () {
     expect(fn () => app(StorePhotoBatch::class)->handle(PhotoBatchKind::Personal, zipOf($files), $this->head))
         ->toThrow(ValidationException::class, 'El ZIP trae más de 2000 archivos; divídelo en lotes más chicos.');
     expect(PhotoBatch::query()->count())->toBe(0);
+});
+
+it('M-7: un nombre del ZIP que no es UTF-8 (CP437 del Explorador de Windows) no rompe el reporte', function () {
+    $batch = app(StorePhotoBatch::class)->handle(PhotoBatchKind::Personal, zipOf([
+        "a\xA4o/ANAA800101AAA.jpg" => batchImage(),
+        "mu\xA4oz\xE9.txt" => 'notas',
+    ]), $this->head);
+
+    $batch->refresh();
+    $files = collect($batch->report)->pluck('file')->all();
+
+    expect($batch->status)->toBe(PhotoBatchStatus::Terminado)
+        ->and($batch->total)->toBe(2)
+        ->and($files)->toContain('muñozÚ.txt')
+        ->and(collect($files)->every(fn (string $file): bool => mb_check_encoding($file, 'UTF-8')))->toBeTrue();
+});
+
+it('M-11: un ZIP del personal no aplica fotos a una cuenta inactiva', function () {
+    $ana = User::factory()->create(['username' => 'ANAA800101AAA', 'is_active' => false]);
+
+    $batch = app(StorePhotoBatch::class)->handle(PhotoBatchKind::Personal, zipOf(['ANAA800101AAA.jpg' => batchImage()]), $this->head);
+
+    $row = $batch->fresh()->report[0];
+    expect($row['outcome'])->toBe('sin_persona')
+        ->and($row['message'])->toBe('La cuenta no está activa.')
+        ->and($ana->fresh()->photo_path)->toBeNull();
+});
+
+it('M-8: el límite del ZIP es el mismo, 19 000 KB, en Livewire, en las pantallas y en el Action', function () {
+    expect(config('livewire.temporary_file_upload.rules'))->toContain('max:19000')
+        ->and(StorePhotoBatch::MAX_BYTES)->toBe(19_000 * 1024);
+
+    expect(fn () => app(StorePhotoBatch::class)->handle(PhotoBatchKind::Personal, UploadedFile::fake()->create('lote.zip', 19001, 'application/zip'), $this->head))
+        ->toThrow(ValidationException::class, 'El ZIP pesa más de 19 MB');
+
+    foreach (['communication::pages.staff-photos', 'communication::pages.student-photos'] as $page) {
+        Livewire::actingAs($this->head)->test($page)
+            ->set('zip', UploadedFile::fake()->create('lote.zip', 19001, 'application/zip'))
+            ->call('uploadZip')
+            ->assertHasErrors('zip');
+    }
 });

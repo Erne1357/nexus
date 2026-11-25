@@ -28,7 +28,10 @@ final class PhotoNormalizer
     /** Tope de la imagen decodificada: un PNG chico puede declarar miles de millones de píxeles (bomba de descompresión). */
     public const int MAX_SIDE = 8000;
 
-    public const int MAX_PIXELS = 40_000_000;
+    public const int MAX_PIXELS = 25_000_000;
+
+    /** El lado largo al que se achica la imagen antes de enderezarla: el doble de la altura final (600×800 sale de un recorte 3:4 de ahí). */
+    private const int WORK_SIDE = self::HEIGHT * 2;
 
     /** @var list<string> */
     private const array MIMES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -60,7 +63,7 @@ final class PhotoNormalizer
         }
 
         if ($size[0] > self::MAX_SIDE || $size[1] > self::MAX_SIDE || $size[0] * $size[1] > self::MAX_PIXELS) {
-            throw new InvalidPhoto('La imagen tiene dimensiones demasiado grandes (máximo 8000 px por lado y 40 millones de píxeles).');
+            throw new InvalidPhoto('La imagen tiene dimensiones demasiado grandes (máximo 8000 px por lado y 25 millones de píxeles).');
         }
 
         $source = @imagecreatefromstring($bytes);
@@ -69,12 +72,32 @@ final class PhotoNormalizer
             throw new InvalidPhoto('No se pudo leer la imagen. Solo jpg, png o webp.');
         }
 
-        $source = $this->upright($source, $bytes);
+        // Se achica primero y se endereza después: girar la imagen completa de una cámara duplicaría su memoria.
+        $source = $this->upright($this->shrink($source), $bytes);
 
         $normal = $this->fit($source, self::WIDTH, self::HEIGHT);
         $thumb = $this->fit($normal, self::THUMB_WIDTH, self::THUMB_HEIGHT);
 
         return ['normal' => $this->jpeg($normal), 'thumb' => $this->jpeg($thumb)];
+    }
+
+    /**
+     * Achica la imagen para que su lado largo no pase de WORK_SIDE; la grande se suelta al volver.
+     */
+    private function shrink(GdImage $image): GdImage
+    {
+        $width = imagesx($image);
+        $height = imagesy($image);
+
+        if (max($width, $height) <= self::WORK_SIDE) {
+            return $image;
+        }
+
+        $scaled = $width >= $height
+            ? imagescale($image, self::WORK_SIDE, max(1, intdiv($height * self::WORK_SIDE, $width)), IMG_BILINEAR_FIXED)
+            : imagescale($image, max(1, intdiv($width * self::WORK_SIDE, $height)), self::WORK_SIDE, IMG_BILINEAR_FIXED);
+
+        return $scaled instanceof GdImage ? $scaled : $image;
     }
 
     /**
@@ -87,7 +110,12 @@ final class PhotoNormalizer
             return $image;
         }
 
-        $exif = @exif_read_data('data://image/jpeg;base64,'.base64_encode($bytes));
+        // Desde un flujo en memoria: una `data://` URL con base64 sumaría otra copia de la foto.
+        $stream = fopen('php://memory', 'r+');
+        fwrite($stream, $bytes);
+        rewind($stream);
+        $exif = @exif_read_data($stream);
+        fclose($stream);
         $orientation = is_array($exif) ? (int) ($exif['Orientation'] ?? 1) : 1;
 
         $rotate = fn (GdImage $source, int $degrees): GdImage => imagerotate($source, $degrees, (int) imagecolorallocate($source, 255, 255, 255)) ?: $source;

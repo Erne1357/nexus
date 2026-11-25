@@ -25,7 +25,7 @@ final class ScheduleCredentialRequest
         }
 
         if ($at->lt(now())) {
-            throw ValidationException::withMessages(['scheduled_at' => 'La cita debe ser a partir de hoy.']);
+            throw ValidationException::withMessages(['scheduled_at' => 'La cita debe ser posterior a este momento.']);
         }
 
         $reschedule = DB::transaction(function () use ($request, $at, $place, $by): bool {

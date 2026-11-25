@@ -3,6 +3,7 @@
 namespace App\Modules\Students\Support;
 
 use App\Modules\Core\Exceptions\InvalidPhoto;
+use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Support\PhotoNormalizer;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Filesystem\Filesystem;
@@ -78,6 +79,7 @@ final class StudentPhotos
      * `_anteriores/` y escribe `<AAAA>/<número de control>.jpg`; devuelve esa ruta.
      *
      * @throws InvalidPhoto si no es una imagen jpg, png o webp legible, o el número de control no sirve de nombre de archivo
+     * @throws PhotoNotSaved si el disco no deja escribir o mover (la foto vigente queda como estaba)
      */
     public function store(string $controlNumber, string $sourcePath): string
     {
@@ -90,16 +92,37 @@ final class StudentPhotos
 
         $photos = $this->normalizer->normalize($sourcePath);
 
+        $path = "{$folder}/{$name}.jpg";
+        $temporary = "{$folder}/{$name}-nuevo.tmp";
+
+        // Primero la foto nueva con un nombre provisional: si el disco no deja escribir, la vigente ni se toca.
+        if (! $this->disk()->put($temporary, $photos['normal'])) {
+            $this->disk()->delete($temporary);
+
+            throw new PhotoNotSaved($temporary);
+        }
+
         $stamp = now();
-        foreach ($this->existing($folder, $name) as $path) {
-            $extension = pathinfo($path, PATHINFO_EXTENSION);
+        $moved = [];
+        foreach ($this->existing($folder, $name) as $current) {
+            $extension = pathinfo($current, PATHINFO_EXTENSION);
             while ($this->disk()->exists($archived = self::ARCHIVE."/{$folder}/{$name}-{$stamp->format('YmdHis')}.{$extension}")) {
                 $stamp = $stamp->addSecond();
             }
-            $this->disk()->move($path, $archived);
+
+            if (! $this->disk()->move($current, $archived)) {
+                $this->restore($moved, $temporary);
+
+                throw new PhotoNotSaved($archived);
+            }
+            $moved[$archived] = $current;
         }
 
-        $this->disk()->put($path = "{$folder}/{$name}.jpg", $photos['normal']);
+        if (! $this->disk()->move($temporary, $path)) {
+            $this->restore($moved, $temporary);
+
+            throw new PhotoNotSaved($path);
+        }
 
         return $path;
     }
@@ -176,6 +199,20 @@ final class StudentPhotos
         $path = $this->locate($controlNumber);
 
         return $path === null ? null : $this->disk()->response($path, null, ['Content-Type' => self::mimeOf($path), ...$headers]);
+    }
+
+    /**
+     * Deshace un guardado a medias: devuelve las fotos archivadas a su lugar y borra la provisional.
+     *
+     * @param  array<string, string>  $moved  archivada => original
+     */
+    private function restore(array $moved, string $temporary): void
+    {
+        foreach (array_reverse($moved, true) as $archived => $original) {
+            $this->disk()->move($archived, $original);
+        }
+
+        $this->disk()->delete($temporary);
     }
 
     /**

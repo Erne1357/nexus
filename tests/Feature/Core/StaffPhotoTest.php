@@ -82,8 +82,41 @@ it('CO-04: una URL vencida o alterada da 403', function () {
     $this->actingAs($this->head)->get($url.'x')->assertForbidden();
     $this->actingAs($this->head)->get(preg_replace('/signature=[a-f0-9]+/', 'signature=abc', $url))->assertForbidden();
 
-    $this->travel(3)->hours();
+    $this->travel(4)->hours();
     $this->actingAs($this->head)->get($url)->assertForbidden();
+});
+
+it('CO-04: la URL firmada no cambia dentro de la hora y siempre vale al menos 2 horas', function () {
+    app(SetStaffPhoto::class)->handle($this->person, UploadedFile::fake()->image('uno.jpg', 700, 900), $this->head);
+    $person = $this->person->fresh();
+
+    $this->travelTo(now()->startOfHour()->addMinutes(1));
+    $first = StaffPhotoUrl::for($person);
+    $this->travelTo(now()->startOfHour()->addMinutes(55));
+    $second = StaffPhotoUrl::for($person);
+
+    expect($second)->toBe($first);
+
+    // Aun a punto de cambiar de hora, la URL recién armada vale 2 horas.
+    $this->travelTo(now()->startOfHour()->addMinutes(59)->addSeconds(59));
+    $last = StaffPhotoUrl::for($person);
+    $this->travel(2)->hours();
+    $this->actingAs($this->head)->get($last)->assertOk();
+});
+
+it('CO-04: la miniatura de 150×200 sale por su propia URL firmada y el original por la suya', function () {
+    app(SetStaffPhoto::class)->handle($this->person, UploadedFile::fake()->image('uno.jpg', 700, 900), $this->head);
+    $person = $this->person->fresh();
+
+    $mini = StaffPhotoUrl::for($person, mini: true);
+    $response = $this->actingAs($this->head)->get($mini);
+
+    $response->assertOk();
+    $bytes = $response->streamedContent();
+    expect($mini)->not->toBe(StaffPhotoUrl::for($person))->and($mini)->toContain('/mini')
+        ->and(array_slice(getimagesizefromstring($bytes), 0, 2))->toBe([150, 200])
+        ->and($response->headers->get('Cache-Control'))->toContain('max-age=7200');
+    $this->actingAs($this->head)->get($mini.'x')->assertForbidden();
 });
 
 it('CO-04: sin foto no hay URL y sin sesión no se sirve', function () {
