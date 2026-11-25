@@ -11,6 +11,7 @@ use App\Modules\Students\Enums\CredentialRequestStatus;
 use App\Modules\Students\Models\CredentialRequest;
 use App\Modules\Students\Queries\CredentialRequestQuery;
 use App\Modules\Students\Rules\CredentialRequestSettings;
+use App\Modules\Students\Models\Student;
 use App\Modules\Students\Support\StudentPhotoUrl;
 use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
@@ -83,12 +84,15 @@ new #[Title('Solicitudes de credencial')] class extends Component
         $requests = $query->tray($status, $this->search);
         $current = $this->showRequest && $this->requestId !== null ? $query->findOrFail($this->requestId) : null;
 
+        $canManage = auth()->user()?->can('managePhotos', Student::class) ?? false;
+
         return [
             'requests' => $requests,
             'counts' => $query->counts(),
             'tabs' => array_values(array_filter(CredentialRequestStatus::cases(), fn (CredentialRequestStatus $case): bool => $case !== CredentialRequestStatus::Cancelada)),
             'current' => $current,
-            'currentPhoto' => $current === null ? null : StudentPhotoUrl::for($current->student),
+            'canManagePhotos' => $canManage,
+            'currentPhoto' => $current === null || ! $canManage ? null : StudentPhotoUrl::for($current->student),
             'preview' => $this->showRequest && $this->photo !== null && $this->photo->isPreviewable() ? $this->photo->temporaryUrl() : null,
         ];
     }
@@ -157,6 +161,8 @@ new #[Title('Solicitudes de credencial')] class extends Component
     public function savePhoto(SetStudentPhoto $setStudentPhoto): void
     {
         $this->authorizeManage();
+        // Subir la foto es de quien administra las fotos de alumnos (CO-06); atender la bandeja no basta.
+        $this->authorize('managePhotos', Student::class);
 
         $this->validate(['photo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:10240']], [
             'photo.required' => 'Elige la foto.',

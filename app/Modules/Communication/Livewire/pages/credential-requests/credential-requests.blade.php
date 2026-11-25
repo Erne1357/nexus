@@ -149,7 +149,7 @@
                         </form>
                     @endif
 
-                    @if ($open)
+                    @if ($open && $canManagePhotos)
                         <form wire:submit="savePhoto" class="space-y-3" data-testid="photo-form">
                             <h3 class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-secondary-muted">Foto</h3>
                             <x-file label="{{ $currentPhoto === null ? 'Subir foto' : 'Cambiar foto' }}" name="photo" wire:model="photo" accept="image/jpeg,image/png,image/webp" hint="jpg, png o webp de hasta 10 MB." data-testid="photo-input" />
