@@ -11,7 +11,7 @@
 
     <div role="tablist" class="tabs tabs-border">
         @foreach (['datos' => 'Mis datos', 'reticula' => 'Retícula', 'kardex' => 'Kárdex', 'credencial' => 'Credencial'] as $key => $label)
-            <button type="button" role="tab" @class(['tab', 'tab-active font-bold' => $tab === $key]) aria-selected="{{ $tab === $key ? 'true' : 'false' }}" wire:click="$set('tab', '{{ $key }}')" data-testid="tab-{{ $key }}">{{ $label }}</button>
+            <button type="button" role="tab" @class(['tab', 'tab-active font-bold' => $tab === $key]) aria-selected="{{ $tab === $key ? 'true' : 'false' }}" wire:click="$set('tab', '{{ $key }}')" id="tab-{{ $key }}" aria-controls="panel-{{ $key }}" data-testid="tab-{{ $key }}">{{ $label }}</button>
         @endforeach
     </div>
 
@@ -19,7 +19,7 @@
         @if ($record === null)
             <x-alert title="Todavía no encontramos tus datos escolares." description="Si eres alumno, acude a Servicios Escolares." icon="o-information-circle" class="alert-info" data-testid="my-record-empty" />
         @else
-            <section class="space-y-5" data-testid="{{ $tab === 'kardex' ? 'my-kardex' : 'my-reticula' }}">
+            <section class="space-y-5" role="tabpanel" id="panel-{{ $tab }}" aria-labelledby="tab-{{ $tab }}" data-testid="{{ $tab === 'kardex' ? 'my-kardex' : 'my-reticula' }}">
                 <div class="grid grid-cols-3 overflow-hidden rounded-box border border-base-300 bg-base-100">
                     @foreach ([
                         ['Créditos aprobados', $record->creditsApproved, $record->totalCredits],
