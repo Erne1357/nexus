@@ -73,7 +73,13 @@ final class ImportLoadProjection
      */
     public function handle(string $path, Term $term, Campus $campus, Modality $modality, bool $dryRun = false, ?User $actor = null): array
     {
-        $rows = LoadRelationSheet::isRelation($path) ? $this->relationRows($path) : $this->sheet->rows($path);
+        $isRelation = LoadRelationSheet::isRelation($path);
+
+        if (! $isRelation && strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'csv') {
+            throw new RuntimeException('El archivo csv no es la relación de materias: no trae el encabezado «CLAVE DE MATERIA».');
+        }
+
+        $rows = $isRelation ? $this->relationRows($path) : $this->sheet->rows($path);
         $report = ['dry_run' => $dryRun, 'rows' => count($rows), 'created' => 0, 'existing' => 0, 'no_schedule' => 0, 'rooms_set' => 0, 'rooms_requested' => 0, 'sessions' => 0, 'per_department' => [], 'resolved_via' => [], 'skipped' => [], 'skipped_by_kind' => [], 'unresolved_subjects' => [], 'warnings' => [], 'conflicts' => null];
 
         $plans = StudyPlan::query()->get(['id', 'code', 'career_id'])->keyBy(fn (StudyPlan $plan): string => mb_strtoupper($plan->code));
@@ -247,16 +253,22 @@ final class ImportLoadProjection
         ksort($report['per_department']);
 
         $roomsAsked = array_merge(
-            array_map(fn (array $item): array => ['line' => $item['row']['row'], 'room' => $item['room']], array_filter($plan, fn (array $item): bool => $item['room'] !== null && $item['startMinutes'] !== null)),
+            array_map(fn (array $item): array => ['line' => $item['row']['row'], 'room' => $item['room'], 'group_id' => null], array_filter($plan, fn (array $item): bool => $item['room'] !== null && $item['startMinutes'] !== null)),
             $existingRooms,
         );
 
         if ($dryRun) {
             foreach ($roomsAsked as $asked) {
-                $report['rooms_requested']++;
+                // Un grupo existente que ya tiene salón o no tiene sesiones no recibe uno.
+                if ($asked['group_id'] !== null && ! $this->canReceiveRoom($asked['group_id'])) {
+                    continue;
+                }
 
-                if ($this->findRoom($campus, $asked['room']) === null) {
-                    $report['warnings'][] = "Fila {$asked['line']}: el salón {$asked['room']} no existe en {$campus->code}; el grupo queda sin salón.";
+                $report['rooms_requested']++;
+                [$room, $problem] = $this->findRoom($campus, $asked['room']);
+
+                if ($room === null) {
+                    $report['warnings'][] = "Fila {$asked['line']}: {$problem}";
                 }
             }
 
@@ -266,8 +278,6 @@ final class ImportLoadProjection
         if ($plan === [] && $existingRooms === []) {
             return $report;
         }
-
-        $actor ??= $roomsAsked === [] ? null : User::query()->where('is_active', true)->oldest()->first();
 
         DB::transaction(function () use ($plan, $existingRooms, $term, $campus, $modality, $actor, &$report): void {
             foreach ($plan as $item) {
@@ -283,6 +293,7 @@ final class ImportLoadProjection
             }
 
             activity()
+                ->causedBy($actor)
                 ->event('load_projection_imported')
                 ->withProperties([
                     'term' => $term->code, 'campus' => $campus->code, 'modality' => $modality->code,
@@ -311,7 +322,7 @@ final class ImportLoadProjection
             'row' => $row->line,
             'relation' => true,
             'plan' => $row->planCode ?? '',
-            'semester' => $row->semester,
+            'semester' => $row->semester !== null && $row->semester < 1 ? null : $row->semester,
             'subject' => $row->subjectName,
             'code' => $row->subjectKey,
             'credits' => $row->credits,
@@ -324,9 +335,35 @@ final class ImportLoadProjection
         ], LoadRelationSheet::read($path));
     }
 
-    private function findRoom(Campus $campus, string $code): ?Room
+    /**
+     * El salón del campus con ese código (exacto, o sin importar mayúsculas si no hay uno exacto); si dos salones activos
+     * responden al mismo código no se adivina: sin salón y su motivo.
+     *
+     * @return array{?Room, ?string} el salón, o el motivo por el que no hay
+     */
+    private function findRoom(Campus $campus, string $code): array
     {
-        return Room::query()->where('campus_id', $campus->id)->whereRaw('upper(code) = ?', [mb_strtoupper($code)])->first();
+        $matches = Room::query()->where('campus_id', $campus->id)->whereRaw('upper(code) = ?', [mb_strtoupper($code)])->get();
+        $exact = $matches->where('code', $code);
+
+        if ($exact->count() === 1) {
+            return [$exact->first(), null];
+        }
+
+        if ($matches->where('is_active', true)->count() > 1) {
+            return [null, "hay más de un salón activo con la clave {$code} en {$campus->code}; el grupo queda sin salón."];
+        }
+
+        return $matches->isEmpty()
+            ? [null, "el salón {$code} no existe en {$campus->code}; el grupo queda sin salón."]
+            : [$matches->first(), null];
+    }
+
+    private function canReceiveRoom(string $groupId): bool
+    {
+        $sessions = GroupSession::query()->where('group_id', $groupId)->get(['room_id']);
+
+        return $sessions->isNotEmpty() && $sessions->every(fn (GroupSession $session): bool => $session->room_id === null);
     }
 
     /**
@@ -337,10 +374,10 @@ final class ImportLoadProjection
      */
     private function placeRoom(array &$report, Group $group, string $roomCode, int $line, Campus $campus, ?User $actor): void
     {
-        $room = $this->findRoom($campus, $roomCode);
+        [$room, $problem] = $this->findRoom($campus, $roomCode);
 
         if ($room === null) {
-            $report['warnings'][] = "Fila {$line}: el salón {$roomCode} no existe en {$campus->code}; el grupo queda sin salón.";
+            $report['warnings'][] = "Fila {$line}: {$problem}";
 
             return;
         }
@@ -358,7 +395,7 @@ final class ImportLoadProjection
         }
 
         try {
-            app(AssignSessionRoom::class)->handleMany($group, $sessions->mapWithKeys(fn (GroupSession $session): array => [$session->id => $room])->all(), $actor);
+            app(AssignSessionRoom::class)->handleMany($group, $sessions->mapWithKeys(fn (GroupSession $session): array => [$session->id => $room])->all(), $actor, importing: true);
             $report['rooms_set']++;
         } catch (ValidationException $exception) {
             $report['warnings'][] = "Fila {$line}: el salón {$roomCode} no se puso en el grupo {$group->code}: ".collect($exception->errors())->flatten()->first();

@@ -56,6 +56,13 @@ it('marca GL y el rango #N/D como sin horario fijo, y deja nulos los vacíos', f
         ->and($rows[2]->hasFixedSchedule())->toBeFalse();
 });
 
+it('entiende los tipos de espacio de la columna LABORATORIO / SALÓN y deja nulo lo desconocido', function () {
+    $path = relationCsv("CLAVE DE MATERIA;HORA;;CLAVE CARRERA;ALUMNOS;LABORATORIO / SALÓN\nA-1;B;8 - 9;ISIC-2010-224. X;20;Sala de cómputo\nA-2;B;8 - 9;ISIC-2010-224. X;20;laboratorio  de redes\nA-3;B;8 - 9;ISIC-2010-224. X;20;Aula\nA-4;B;8 - 9;ISIC-2010-224. X;20;Salón\nA-5;B;8 - 9;ISIC-2010-224. X;20;Taller\n");
+
+    expect(array_map(fn ($row) => $row->space, LoadRelationSheet::read($path)))
+        ->toBe(['SALA DE COMPUTO', 'LABORATORIO DE REDES', 'AULA', 'SALON', null]);
+});
+
 it('ignora el título, los renglones vacíos y encuentra las columnas aunque cambie su orden', function () {
     $path = relationCsv("TITULO;;;\n;;;\nALUMNOS;CLAVE DE MATERIA;SALÓN;HORA;;CLAVE CARRERA\n20;AAA-1;A1;B;8 - 9;ISIC-2010-224. X\n;;;;;\n");
     $rows = LoadRelationSheet::read($path);
