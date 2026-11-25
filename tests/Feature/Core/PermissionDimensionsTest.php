@@ -60,6 +60,11 @@ function dimensionTables(): array
         // Los permisos de parámetros, avisos y atajos (1.22-E y F) no llevan campus: son de toda la instalación.
         'core.login_notice' => 'login_notices',
         'core.login_shortcut' => 'login_shortcuts',
+        // Las fotos del personal (CO-01) son de las cuentas, que no llevan campus ni modalidad.
+        'core.staff_photo' => 'users',
+        // Nombrar al personal de área (CO-02) es sobre la unidad destino: el nombramiento de `personal` nunca lleva campus
+        // ni modalidad (RoleAssignmentRules los rechaza), así que no se acota por ellos.
+        'core.unit_staff' => 'org_units',
         'core.setting' => 'settings',
         'demand.setting' => 'settings',
         'solver.setting' => 'settings',

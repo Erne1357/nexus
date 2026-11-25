@@ -264,15 +264,15 @@ it('CF-01: Actor y RecipientsQuery preguntan a GrantTable, y el cambio vale en l
     $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(20)])->create();
     $this->actingAs($coordinator);
 
-    expect(app(Actor::class)->allowsAny(CorePermission::LoginNoticeView))->toBeFalse()
-        ->and(app(RecipientsQuery::class)->holders(CorePermission::LoginNoticeView, Target::of()))->toBe([]);
+    expect(app(Actor::class)->allowsAny(CorePermission::CampusViewInactive))->toBeFalse()
+        ->and(app(RecipientsQuery::class)->holders(CorePermission::CampusViewInactive, Target::of()))->toBe([]);
 
-    DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => CorePermission::LoginNoticeView->value]);
+    DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => CorePermission::CampusViewInactive->value]);
     app()->forgetScopedInstances();
 
-    $holders = app(RecipientsQuery::class)->holders(CorePermission::LoginNoticeView, Target::of());
+    $holders = app(RecipientsQuery::class)->holders(CorePermission::CampusViewInactive, Target::of());
 
-    expect(app(Actor::class)->allowsAny(CorePermission::LoginNoticeView))->toBeTrue()
+    expect(app(Actor::class)->allowsAny(CorePermission::CampusViewInactive))->toBeTrue()
         ->and(array_map(fn (array $holder): string => $holder['user']->id, $holders))->toBe([$coordinator->id])
         ->and($holders[0]['role'])->toBe(Role::Coordinador);
 });

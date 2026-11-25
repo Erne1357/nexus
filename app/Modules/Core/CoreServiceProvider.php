@@ -350,9 +350,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
     /**
      * CO-01 (C10 a C12, confirmados el 24 de noviembre de 2026): el jefe de departamento y el personal de área tienen los
-     * avisos, los atajos y las fotos del personal, y solo el jefe nombra al personal de su unidad (CO-02). Los dos
-     * permisos aplican solo a Comunicación y Difusión (CorePermission::appliesTo()), así que el jefe o el personal de
-     * otra unidad no reciben nada.
+     * avisos, los atajos y las fotos del personal, y solo el jefe nombra al personal de su unidad (CO-02). Todos aplican
+     * solo a Comunicación y Difusión (CorePermission::appliesTo()), así que el jefe o el personal de otra unidad no
+     * reciben nada.
      */
     public function grants(): array
     {

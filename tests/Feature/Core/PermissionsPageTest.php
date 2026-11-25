@@ -94,7 +94,7 @@ function nonAdminHolder(Role $role): User
 }
 
 describe('Puestos', function () {
-    it('lista los ocho puestos con sus personas, roles, sueltos y permisos, y abre el primero que se edita', function () {
+    it('lista los nueve puestos con sus personas, roles, sueltos y permisos, y abre el primero que se edita', function () {
         $html = $this->actingAs($this->admin)->get(route('core.permissions'))->assertOk();
         $dom = domOf($html);
         $cards = $dom->querySelectorAll('[data-testid="position-card"]');
@@ -105,6 +105,7 @@ describe('Puestos', function () {
             ->and(textOf($cards->item(0)))->toContain('Administración', "Todo menos {$exceptions} excepciones", '1')
             ->and(textOf($cards->item(2)))->toContain('Directivo', '1 rol · 0 sueltos · '.count($admin->matrix()['directivo']).' permisos')
             ->and(textOf($cards->item(5)))->toContain('Coordinador de carrera', '1 rol · 0 sueltos · '.count($admin->matrix()['coordinador']).' permisos')
+            ->and(textOf($cards->item(6)))->toContain('Personal de área', '1 rol · 0 sueltos · '.count($admin->matrix()['personal']).' permisos')
             ->and($cards->item(1)->getAttribute('aria-current'))->toBe('true')
             ->and(textOf($dom->querySelector('[data-testid="position-detail"] h2')))->toBe('Subdirección Académica')
             ->and(textOf($dom->querySelector('[data-testid="position-detail"]')))->toContain('Su unidad; todo el Tec en campus y modalidad');
@@ -252,7 +253,8 @@ describe('Puestos', function () {
     it('marca y desmarca de un jalón los permisos que se pueden dar de un grupo', function () {
         $page = permissionsPage(['puesto' => 'coordinador'])->call('openAddLoose')->call('toggleGroup', 'loose', 'core_accounts');
 
-        expect($page->get('looseKeys'))->toContain('core.setting.view', 'core.login_notice.view')->not->toContain('core.user.create');
+        // Los avisos del login declaran la unidad (CO-01): al coordinador, que no la lleva, no se le dan (CF-04).
+        expect($page->get('looseKeys'))->toContain('core.setting.view')->not->toContain('core.user.create')->not->toContain('core.login_notice.view');
 
         $page->call('toggleGroup', 'loose', 'core_accounts');
 
@@ -484,7 +486,7 @@ describe('Roles', function () {
         $page = permissionsPage(['vista' => 'roles']);
         $dom = domOf($page);
 
-        expect(count($dom->querySelectorAll('table tbody tr')))->toBe(9)
+        expect(count($dom->querySelectorAll('table tbody tr')))->toBe(10)
             ->and(textOf($dom->querySelector('[data-testid="catalog-toolbar"] .btn-primary')))->toBe('Nuevo rol')
             ->and(textOf($dom->querySelector('[data-testid="role-row-Docente (de fábrica)"]')))->toContain('Sigue al código', 'Docente')
             ->and(textOf($dom->querySelector('[data-testid="role-row-Consulta de catálogos"]')))->toContain('Activo', 'Coordinador de carrera')

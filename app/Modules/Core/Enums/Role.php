@@ -80,8 +80,8 @@ enum Role: string
      * (supuesto por confirmar). El directivo es el nombre de su unidad: «Dirección», «Subdirección de Planeación y
      * Vinculación» (AZ-03); con varias unidades, label() (supuesto por confirmar). El personal de área, con el mismo
      * patrón que el jefe de una unidad no académica: «Personal del Departamento de Comunicación y Difusión», «Personal de
-     * la División de …» y «Personal de la <oficina, subdirección o Dirección>» (CO-01); con varias unidades, label(). En
-     * los demás casos, label().
+     * la División de …» y, para una oficina, «Personal de la Coordinación General Campus II» (CO-01); con varias unidades,
+     * label(). En los demás casos, label().
      *
      * @param  list<array{kind: OrgUnitKind, code: string, name: string}>  $units
      */

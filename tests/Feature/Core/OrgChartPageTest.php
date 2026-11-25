@@ -401,7 +401,7 @@ it('R-V2-4: «Nombrar» queda habilitado en una oficina, que ya admite jefe con 
     expect($dom->querySelector('[data-testid="unit-appoint"]')->hasAttribute('disabled'))->toBeFalse()
         ->and($dom->querySelector('[data-testid="unit-appoint-blocker"]'))->toBeNull();
 
-    $panel->call('openAppoint')->assertSet('showAppoint', true)->assertViewHas('offered', [['id' => Role::JefeDepartamento->value, 'name' => 'Titular de la Oficina de Becas']]);
+    $panel->call('openAppoint')->assertSet('showAppoint', true)->assertViewHas('offered', [['id' => Role::JefeDepartamento->value, 'name' => 'Titular de la Oficina de Becas'], ['id' => Role::Personal->value, 'name' => 'Personal de la Oficina de Becas']]);
 
     $this->systems->update(['is_active' => false]);
     $panel->dispatch('org-unit-picked', id: $this->systems->id);

@@ -38,6 +38,7 @@ Calificaciones y actas, pagos, servicio social y residencias, titulación, contr
 | `jefe_departamento` | Jefe de departamento académico | Departamento, en todo el Tec |
 | `jefe_proyecto_docente` | Jefe de proyecto docente | Departamento en una modalidad; campus opcional (AZ-S17) |
 | `coordinador` | Coordinador de carrera | Una o varias carreras en una modalidad; campus opcional (AZ-S17) |
+| `personal` | Personal de área de una unidad que no es departamento académico | Su unidad; solo los permisos que aplican a ella (hoy, los de Comunicación y Difusión: avisos y atajos del acceso y fotos, CO-01) |
 | `docente` | Profesor | Su propia carga, en cualquier campus |
 | `alumno` (R3) | Estudiante | Su propia inscripción |
 | `servicios_escolares` (R3) | Servicios Escolares / División | Campus |

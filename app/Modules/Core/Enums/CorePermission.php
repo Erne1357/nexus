@@ -17,9 +17,11 @@ use App\Modules\Core\Authorization\UnitApplicability;
  * atajos y parámetros sí se pueden dar.
  *
  * CO-01 (C10 a C12, confirmados el 24 de noviembre de 2026): los avisos y los atajos del login, las fotos del personal
- * (`core.staff_photo.manage`) y nombrar al personal de área de la unidad propia (`core.unit_staff.appoint`, con la
- * unidad como dimensión) aplican al Departamento de Comunicación y Difusión (OrgTree::COMMUNICATION); el jefe y el
- * personal de área de esa unidad los tienen de fábrica, menos nombrar, que es solo del jefe (CO-02).
+ * (`core.staff_photo.manage`) y nombrar al personal de área de la unidad propia (`core.unit_staff.appoint`) aplican al
+ * Departamento de Comunicación y Difusión (OrgTree::COMMUNICATION); el jefe y el personal de área de esa unidad los
+ * tienen de fábrica, menos nombrar, que es solo del jefe (CO-02). Declaran la unidad como dimensión, como
+ * `academic.placement.validate`: un puesto con unidad los recibe acotados por ella (CF-04). Los de avisos, atajos y fotos
+ * se preguntan con allowsAny(), sin objetivo; nombrar, sobre la unidad destino.
  */
 enum CorePermission: string implements Permission
 {
@@ -134,7 +136,8 @@ enum CorePermission: string implements Permission
             self::CampusView => [Dimension::Campus],
             self::ModalityView, self::ModalityUpdateProfile => [Dimension::Modality],
             self::TermOpen => [Dimension::Modality],
-            self::UnitStaffAppoint => [Dimension::Unit],
+            self::LoginNoticeView, self::LoginNoticeManage, self::LoginShortcutView, self::LoginShortcutManage,
+            self::StaffPhotoManage, self::UnitStaffAppoint => [Dimension::Unit],
             default => [],
         };
     }
