@@ -1,4 +1,4 @@
-{{-- El kárdex del alumno por periodo, el mismo en la ficha del personal y en el «Perfil» del alumno. `$record` es el StudentRecord. --}}
+{{-- El kárdex del alumno por periodo, el mismo en la ficha del personal y en la pestaña «Kárdex» del alumno. `$record` es el StudentRecord. --}}
 @props(['record', 'audience' => 'personal'])
     <p class="text-neutral">{{ $audience === 'alumno' ? 'Cada materia que has cursado' : 'Cada materia que ha cursado' }}, por periodo y desde el primero, como viene en la última importación de kárdex.</p>
     <div class="overflow-hidden rounded-box border border-base-300 bg-base-100" data-testid="student-kardex" wire:key="student-kardex">

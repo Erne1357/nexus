@@ -10,11 +10,12 @@ use App\Modules\Core\Models\User;
 use App\Modules\Students\Actions\SyncStudentAccounts;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 
 /*
-| «Mis datos» con pestañas (AC-15, supuesto por confirmar): «Mis datos», «Perfil» (retícula y kárdex del propio alumno,
-| solo lectura) y «Credencial». Solo el alumno entra, y solo ve lo suyo.
+| «Mis datos» con pestañas (AC-15, supuesto por confirmar): «Mis datos», «Retícula» y «Kárdex» (del propio alumno,
+| solo lectura, con las cifras arriba; 1.42) y «Credencial». Solo el alumno entra, y solo ve lo suyo.
 */
 
 beforeEach(function () {
@@ -40,18 +41,22 @@ it('AC-15: por omisión muestra «Mis datos» y las otras pestañas no pintan su
     Livewire::actingAs($this->user)->test('students::pages.my-record')
         ->assertSet('tab', 'datos')
         ->assertSee('Tu acceso')
-        ->assertSeeHtml('data-testid="tab-perfil"')
+        ->assertSeeHtml('data-testid="tab-reticula"')
+        ->assertSeeHtml('data-testid="tab-kardex"')
+        ->assertDontSeeHtml('data-testid="tab-perfil"')
         ->assertSeeHtml('data-testid="tab-credencial"')
-        ->assertDontSeeHtml('data-testid="my-profile"')
+        ->assertDontSeeHtml('data-testid="my-reticula"')
+        ->assertDontSeeHtml('data-testid="my-kardex"')
         ->assertDontSeeHtml('data-testid="my-credential"');
 });
 
-it('AC-15: «Perfil» muestra su retícula y su kárdex, solo lectura y sin lo de otros', function () {
-    Livewire::actingAs($this->user)->withQueryParams(['tab' => 'perfil'])->test('students::pages.my-record')
-        ->assertSeeHtml('data-testid="my-profile"')
-        ->assertSeeInOrder(['ACF-0901', 'Cálculo Diferencial', 'Acreditada'])
+it('AC-15: «Retícula» muestra su retícula con las cifras arriba, solo lectura, y sin lo de otros ni el kárdex', function () {
+    Livewire::actingAs($this->user)->withQueryParams(['tab' => 'reticula'])->test('students::pages.my-record')
+        ->assertSeeHtml('data-testid="my-reticula"')
+        ->assertDontSeeHtml('data-testid="my-kardex"')
+        ->assertSeeInOrder(['Créditos aprobados', 'Materias acreditadas', 'Cursando', 'ACF-0901', 'Cálculo Diferencial', 'Acreditada'])
         ->assertSeeInOrder(['ACF-0902', 'Cálculo Integral', 'Puede seleccionarla'])
-        ->assertSeeInOrder(['20253', 'Ago-Dic 2025', 'ACF-0901', '88', 'Aprobada'])
+        ->assertDontSee('Cada materia que has cursado')
         ->assertDontSeeHtml('>Puede seleccionar</span>')
         ->assertDontSee('Beto Ruiz')
         ->assertDontSee('21110002')
@@ -59,6 +64,42 @@ it('AC-15: «Perfil» muestra su retícula y su kárdex, solo lectura y sin lo d
         ->assertDontSeeHtml('data-testid="chain-legend"')
         ->assertDontSeeHtml('x-on:click="toggleSubject')
         ->assertDontSeeHtml('aria-pressed');
+});
+
+it('AC-15: «Kárdex» muestra su kárdex con las cifras arriba, sin la retícula y sin lo de otros', function () {
+    Livewire::actingAs($this->user)->withQueryParams(['tab' => 'kardex'])->test('students::pages.my-record')
+        ->assertSeeHtml('data-testid="my-kardex"')
+        ->assertDontSeeHtml('data-testid="my-reticula"')
+        ->assertSeeInOrder(['Créditos aprobados', 'Materias acreditadas', 'Cursando', '20253', 'Ago-Dic 2025', 'ACF-0901', '88', 'Aprobada'])
+        ->assertDontSee('Puede seleccionarla')
+        ->assertDontSee('Beto Ruiz')
+        ->assertDontSee('21110002');
+});
+
+it('AC-15: ?tab=perfil, de los enlaces viejos, abre «Retícula»', function () {
+    Livewire::actingAs($this->user)->withQueryParams(['tab' => 'perfil'])->test('students::pages.my-record')
+        ->assertSet('tab', 'reticula')
+        ->assertSeeHtml('data-testid="my-reticula"');
+    $this->actingAs($this->user)->get(route('students.my-record', ['tab' => 'perfil']))->assertOk()->assertSee('my-reticula', false);
+});
+
+it('AC-15: la consulta de la retícula solo corre en «Retícula» y «Kárdex», no en «Mis datos» ni en «Credencial»', function () {
+    $kardexQueries = function (string $tab): int {
+        $count = 0;
+        DB::listen(function ($query) use (&$count) {
+            if (str_contains($query->sql, 'kardex_records')) {
+                $count++;
+            }
+        });
+        Livewire::actingAs($this->user)->withQueryParams(['tab' => $tab])->test('students::pages.my-record')->assertOk();
+
+        return $count;
+    };
+
+    expect($kardexQueries('datos'))->toBe(0)
+        ->and($kardexQueries('credencial'))->toBe(0)
+        ->and($kardexQueries('reticula'))->toBeGreaterThan(0)
+        ->and($kardexQueries('kardex'))->toBeGreaterThan(0);
 });
 
 it('AC-15: «Credencial» muestra la plantilla del ITCJ con nombre / número de control, carrera / estatus y la institución', function () {
@@ -78,17 +119,17 @@ it('AC-15: la ruta con ?tab=credencial abre la credencial y una pestaña inventa
     $this->actingAs($this->user)->get(route('students.my-record', ['tab' => 'otra']))->assertOk()->assertSee('Tu acceso');
 });
 
-it('AC-15: nadie ve el perfil ni la credencial de otro alumno: ni por la ficha ni manipulando la URL', function () {
+it('AC-15: nadie ve la retícula, el kárdex ni la credencial de otro alumno: ni por la ficha ni manipulando la URL', function () {
     $this->actingAs($this->user)->get(route('students.show', $this->other))->assertForbidden();
 
-    $page = Livewire::actingAs($this->user)->withQueryParams(['tab' => 'perfil', 'student' => $this->other->id, 'student_id' => $this->other->id])->test('students::pages.my-record')
+    $page = Livewire::actingAs($this->user)->withQueryParams(['tab' => 'reticula', 'student' => $this->other->id, 'student_id' => $this->other->id])->test('students::pages.my-record')
         ->assertSee('ACF-0901')
         ->assertDontSee('Beto Ruiz');
     $page->set('tab', 'credencial')->assertSee('21110001')->assertDontSee('21110002');
 });
 
 it('AC-15: el personal sin puesto de alumno no entra a ninguna pestaña de «Mis datos»', function (User $staff) {
-    foreach (['datos', 'perfil', 'credencial'] as $tab) {
+    foreach (['datos', 'reticula', 'kardex', 'credencial'] as $tab) {
         $this->actingAs($staff)->get(route('students.my-record', ['tab' => $tab]))->assertForbidden();
     }
 })->with([
@@ -116,21 +157,22 @@ it('AC-15: una pestaña con formato inválido en la URL (?tab[]=x) cae en «Mis 
     $this->actingAs($this->user)->get('/my-record?tab[]=x')->assertOk()->assertSee('Tu acceso');
 });
 
-it('AC-15: el alumno sin fila de alumno ve un vacío claro en Perfil y Credencial', function (string $tab) {
+it('AC-15: el alumno sin fila de alumno ve un vacío claro en Retícula, Kárdex y Credencial', function (string $tab) {
     $user = User::factory()->withRole(Role::Alumno)->create();
 
     Livewire::actingAs($user)->withQueryParams(['tab' => $tab])->test('students::pages.my-record')
         ->assertOk()
         ->assertSee('Todavía no encontramos tus datos escolares.')
-        ->assertDontSeeHtml('data-testid="my-profile"')
+        ->assertDontSeeHtml('data-testid="my-reticula"')
+        ->assertDontSeeHtml('data-testid="my-kardex"')
         ->assertDontSeeHtml('data-testid="my-credential"');
-})->with(['perfil', 'credencial']);
+})->with(['reticula', 'kardex', 'credencial']);
 
-it('AC-15: el Perfil habla de tú y la ficha del personal conserva su tercera persona', function () {
+it('AC-15: la retícula y el kárdex hablan de tú y la ficha del personal conserva su tercera persona', function () {
     KardexRecord::query()->delete();
     $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->career->id])->create();
 
-    Livewire::actingAs($this->user)->withQueryParams(['tab' => 'perfil'])->test('students::pages.my-record')
+    Livewire::actingAs($this->user)->withQueryParams(['tab' => 'kardex'])->test('students::pages.my-record')
         ->assertSee('Tu kárdex todavía no se importa.')
         ->assertSee('Cada materia que has cursado')
         ->assertDontSee('El kárdex de este alumno');
