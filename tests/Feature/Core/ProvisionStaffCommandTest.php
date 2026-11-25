@@ -140,3 +140,18 @@ it('CO-11: avisa si la persona no tiene puesto vigente', function () {
     $this->artisan('core:provision-staff', ['file' => provisionCsv($this->dir, ['U7,,'])])
         ->assertSuccessful()->expectsOutputToContain('U7: no tiene un puesto vigente.');
 });
+
+it('CO-11: un error inesperado en una fila se reporta y las demás se aplican, con el resumen', function () {
+    $bad = pendingStaff(['username' => 'U8']);
+    $good = pendingStaff(['username' => 'U9']);
+    User::saving(fn (User $user) => $user->username === 'U8' ? throw new LogicException('falla ficticia') : null);
+    $csv = provisionCsv($this->dir, ['U8,,', 'U9,,']);
+
+    $this->artisan('core:provision-staff', ['file' => $csv])->assertSuccessful()
+        ->expectsOutputToContain('U8: error inesperado')
+        ->expectsOutputToContain('2 filas, 1 con error')
+        ->doesntExpectOutputToContain('Clave-Ficticia-1');
+
+    expect($bad->fresh()->password)->toBeNull()
+        ->and($good->fresh()->password)->not->toBeNull();
+});

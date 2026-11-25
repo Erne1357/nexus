@@ -128,6 +128,9 @@ final class ProvisionStaffCommand extends Command
             } catch (\RuntimeException $e) {
                 $counts['errors']++;
                 $this->error("{$username}: {$e->getMessage()}.");
+            } catch (Throwable $e) {
+                $counts['errors']++;
+                $this->error("{$username}: error inesperado (".$e::class.'): '.$e->getMessage());
             }
         }
 
