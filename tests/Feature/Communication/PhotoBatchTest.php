@@ -23,37 +23,6 @@ beforeEach(function () {
     $this->head = communicationHead();
 });
 
-/** Los bytes de una imagen ficticia. */
-function batchImage(string $format = 'jpeg'): string
-{
-    $image = imagecreatetruecolor(300, 400);
-    imagefill($image, 0, 0, imagecolorallocate($image, 20, 120, 200));
-    ob_start();
-    $format === 'png' ? imagepng($image) : imagejpeg($image);
-
-    return (string) ob_get_clean();
-}
-
-/**
- * Un ZIP con esos archivos (nombre dentro del ZIP => bytes).
- *
- * @param  array<string, string>  $files
- */
-function zipOf(array $files): UploadedFile
-{
-    $path = tempnam(sys_get_temp_dir(), 'zip');
-    $zip = new ZipArchive;
-    $zip->open($path, ZipArchive::OVERWRITE);
-
-    foreach ($files as $name => $bytes) {
-        $zip->addFromString($name, $bytes);
-    }
-
-    $zip->close();
-
-    return UploadedFile::fake()->createWithContent('lote.zip', (string) file_get_contents($path));
-}
-
 it('aplica <usuario>.<ext> sin distinguir mayúsculas e ignora carpetas', function () {
     $ana = User::factory()->create(['username' => 'ANAA800101AAA']);
     $luis = User::factory()->create(['username' => 'LUIS750202BBB']);

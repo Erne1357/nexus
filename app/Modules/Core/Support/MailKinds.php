@@ -17,6 +17,7 @@ final class MailKinds
         'UserEmailChanged' => 'Aviso de cambio de correo',
         'MailAccountTest' => 'Correo de prueba de la cuenta de envío',
         'CatalogReviewsPending' => 'Validación de catálogos pendiente',
+        'CredentialRequestUpdated' => 'Solicitud de credencial',
         'LoadRepublished' => 'Carga republicada',
         'ChangeAlternativeMovesCareerGroup' => 'Grupo movido por una solicitud de cambio',
         'ChangeRequestMovedTeacherGroups' => 'Cambió el horario de tus grupos',

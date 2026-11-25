@@ -19,6 +19,8 @@ enum StudentsPermission: string implements Permission, ReachesInactiveModalities
 
     case StudentView = 'students.student.view';
     case MyRecordView = 'students.my_record.view';
+    case CredentialRequestCreate = 'students.credential_request.create';
+    case CredentialRequestManage = 'students.credential_request.manage';
     case PhotoManage = 'students.photo.manage';
 
     public function label(): string
@@ -26,6 +28,8 @@ enum StudentsPermission: string implements Permission, ReachesInactiveModalities
         return match ($this) {
             self::StudentView => 'Ver alumnos',
             self::MyRecordView => 'Ver mis datos (alumno)',
+            self::CredentialRequestCreate => 'Pedir la reposición de mi credencial o mi foto (alumno)',
+            self::CredentialRequestManage => 'Atender las solicitudes de credencial y fijar sus plazos',
             self::PhotoManage => 'Subir y cambiar las fotos de los alumnos',
         };
     }
@@ -38,8 +42,8 @@ enum StudentsPermission: string implements Permission, ReachesInactiveModalities
     {
         return match ($this) {
             self::StudentView => [Dimension::Modality, Dimension::Campus, Dimension::Unit, Dimension::Career],
-            self::PhotoManage => [Dimension::Unit],
-            self::MyRecordView => [],
+            self::CredentialRequestManage, self::PhotoManage => [Dimension::Unit],
+            self::MyRecordView, self::CredentialRequestCreate => [],
         };
     }
 
@@ -54,19 +58,19 @@ enum StudentsPermission: string implements Permission, ReachesInactiveModalities
 
     public function isPersonal(): bool
     {
-        return $this === self::MyRecordView;
+        return $this === self::MyRecordView || $this === self::CredentialRequestCreate;
     }
 
     /**
-     * Lo académico (AZ-02, AZ-S16): a los departamentos académicos y a la Subdirección Académica. «Mis datos» es
-     * personal y el alumno no tiene unidad: a cualquiera. Las fotos de los alumnos son de Comunicación y Difusión (CO-01,
-     * CO-06).
+     * Lo académico (AZ-02, AZ-S16): a los departamentos académicos y a la Subdirección Académica. Lo personal del
+     * alumno no tiene unidad: a cualquiera. Atender las solicitudes de credencial y las fotos de los alumnos es de
+     * Comunicación y Difusión (CO-01, CO-06).
      */
     public function appliesTo(): ?UnitApplicability
     {
-        return match ($this) {
-            self::PhotoManage => UnitApplicability::of(codes: [OrgTree::COMMUNICATION]),
-            self::MyRecordView => null,
+        return match (true) {
+            $this->isPersonal() => null,
+            $this === self::CredentialRequestManage, $this === self::PhotoManage => UnitApplicability::of(codes: [OrgTree::COMMUNICATION]),
             default => UnitApplicability::academic(),
         };
     }

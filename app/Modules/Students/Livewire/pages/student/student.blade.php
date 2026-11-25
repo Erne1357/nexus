@@ -74,10 +74,9 @@
                     @endif
                 </section>
 
-                {{-- El historial de solicitudes de credencial llega con la tarea 1.38 (CO-10): este es su lugar. --}}
                 <section class="space-y-2 rounded-box border border-base-300 bg-base-100 p-4" aria-labelledby="credential-history-title" data-testid="credential-history">
                     <h2 id="credential-history-title" class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Solicitudes de credencial</h2>
-                    <p class="text-sm text-neutral">Todavía no hay solicitudes.</p>
+                    <x-students::credential-requests-history :requests="$requests" />
                 </section>
             </div>
         </div>

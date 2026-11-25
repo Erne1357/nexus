@@ -1,6 +1,7 @@
 {
     "grants": {
         "alumno": [
+            "students.credential_request.create",
             "students.my_record.view"
         ],
         "coordinador": [
@@ -113,6 +114,7 @@
             "staffing.selection.view",
             "staffing.teacher.assign",
             "staffing.teacher_load.view",
+            "students.credential_request.manage",
             "students.photo.manage",
             "students.student.view"
         ],
@@ -144,6 +146,7 @@
             "core.login_shortcut.manage",
             "core.login_shortcut.view",
             "core.staff_photo.manage",
+            "students.credential_request.manage",
             "students.photo.manage"
         ],
         "subdireccion": [
@@ -213,6 +216,7 @@
         "catalog_validation.review.validate",
         "staffing.my_load.view",
         "staffing.offer.view",
+        "students.credential_request.create",
         "students.my_record.view"
     ],
     "applies_to": {
@@ -223,6 +227,7 @@
             "core.login_shortcut.view",
             "core.staff_photo.manage",
             "core.unit_staff.appoint",
+            "students.credential_request.manage",
             "students.photo.manage"
         ],
         "codes=SERVICIOS-ESCOLARES": [
