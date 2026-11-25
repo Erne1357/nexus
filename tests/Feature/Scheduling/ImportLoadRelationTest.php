@@ -13,8 +13,11 @@ use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Actions\ImportLoadProjection;
+use App\Modules\Scheduling\Actions\Sessions\AssignSessionRoom;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
@@ -223,4 +226,84 @@ it('el comando exige --user, también en --dry-run, y no escribe nada sin él', 
 
     $this->artisan('academic-load:import-projection', ['file' => $path, '--user' => $this->actor->username])->assertSuccessful();
     expect(Group::query()->count())->toBe(1);
+});
+
+it('la bitácora del resumen queda a nombre del usuario', function () {
+    ($this->import)([relationLine('AID-2501', 'C', '9 - 10', 1, 5, '', 30)]);
+
+    expect(Activity::query()->where('event', 'load_projection_imported')->sole()->causer_id)->toBe($this->actor->id);
+});
+
+it('un semestre menor que 1 se trata como vacío y toma el de la retícula', function () {
+    ($this->import)([relationLine('XYZ-9999', 'B', '8 - 9', 0, 4, '', 25)]);
+
+    expect(Group::query()->sole()->semester)->toBe(5);
+});
+
+it('dos grupos paralelos iguales se crean los dos y una segunda corrida no los duplica', function () {
+    $lines = [relationLine('AID-2501', 'C', '9 - 10', 1, 5, '', 30), relationLine('AID-2501', 'C', '9 - 10', 1, 5, '', 28)];
+
+    $first = ($this->import)($lines);
+    $second = ($this->import)($lines);
+
+    expect($first['created'])->toBe(2)->and($second['created'])->toBe(0)->and($second['existing'])->toBe(2)->and(Group::query()->count())->toBe(2);
+});
+
+it('un archivo con BOM y con espacios de no separación se lee igual', function () {
+    $path = relationFile([relationLine('AID-2501', 'C', '9 - 10', 1, 5, '', 30)]);
+    file_put_contents($path, "\xEF\xBB\xBF".str_replace('CLAVE DE MATERIA', "CLAVE\u{00A0}DE MATERIA", (string) file_get_contents($path)));
+
+    $report = app(ImportLoadProjection::class)->handle($path, $this->term, $this->campus, $this->pres, false, $this->actor);
+
+    expect($report['created'])->toBe(1);
+});
+
+it('--dry-run no deja cuotas ni salones y no cuenta salones a grupos que ya lo tienen o no tienen sesiones', function () {
+    ($this->import)([relationLine('AID-2501', 'C', '9 - 10', 1, 5, '703', 30)]);
+    $groups = Group::query()->count();
+
+    $report = ($this->import)([
+        relationLine('AID-2501', 'C', '9 - 10', 1, 5, '703', 30),
+        relationLine('XYZ-9999', 'GL', '#N/D', 5, 4, '703', 2),
+        relationLine('XYZ-9999', 'B', '8 - 9', 5, 4, '703', 20),
+    ], dry: true);
+
+    expect($report['rooms_requested'])->toBe(1)->and(Group::query()->count())->toBe($groups)
+        ->and(GroupQuota::query()->count())->toBe($groups)
+        ->and(GroupSession::query()->whereNull('room_id')->count())->toBe(0);
+});
+
+it('si dos salones activos responden al mismo código no se adivina: aviso y sin salón', function () {
+    foreach (['Ab1', 'aB1'] as $code) {
+        Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $this->campus->id])->id, 'code' => $code]);
+    }
+
+    $report = ($this->import)([relationLine('AID-2501', 'C', '9 - 10', 1, 5, 'AB1', 30)]);
+
+    expect($report['created'])->toBe(1)->and($report['rooms_set'])->toBe(0)
+        ->and(collect($report['warnings'])->contains(fn (string $w): bool => str_contains($w, 'más de un salón activo')))->toBeTrue();
+});
+
+it('un csv que no es la relación da un error claro y no cae al lector xlsx', function () {
+    $path = sys_get_temp_dir().'/'.uniqid('nexus-notrelation-', true).'.csv';
+    register_shutdown_function(fn () => @unlink($path));
+    file_put_contents($path, "A;B\n1;2\n");
+
+    $this->artisan('academic-load:import-projection', ['file' => $path, '--user' => $this->actor->username])
+        ->expectsOutputToContain('no es la relación de materias')
+        ->assertFailed();
+});
+
+it('handleMany sin importación rechaza la carga en borrador y con importación rechaza la publicada', function () {
+    ($this->import)([relationLine('AID-2501', 'C', '9 - 10', 1, 5, '', 30)]);
+    $group = Group::query()->sole();
+    $rooms = $group->sessions->mapWithKeys(fn ($session): array => [$session->id => $this->room])->all();
+    $assign = app(AssignSessionRoom::class);
+
+    $this->load->update(['status' => LoadStatus::Draft]);
+    expect(fn () => $assign->handleMany($group, $rooms, $this->actor, importing: false))->toThrow(ValidationException::class);
+
+    $this->load->update(['status' => LoadStatus::Published]);
+    expect(fn () => $assign->handleMany($group, $rooms, $this->actor, importing: true))->toThrow(ValidationException::class)
+        ->and(GroupSession::query()->whereNotNull('room_id')->count())->toBe(0);
 });

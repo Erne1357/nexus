@@ -91,6 +91,7 @@ final class LoadRelationSheet
             $content = mb_convert_encoding($content, 'UTF-8', 'Windows-1252');
         }
 
+        $content = str_replace("\u{00A0}", ' ', $content);
         $stream = fopen('php://temp', 'r+');
         fwrite($stream, $content);
         rewind($stream);

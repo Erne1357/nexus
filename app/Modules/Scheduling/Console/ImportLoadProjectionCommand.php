@@ -17,7 +17,7 @@ use RuntimeException;
  */
 final class ImportLoadProjectionCommand extends Command
 {
-    protected $signature = 'academic-load:import-projection {file : Ruta del xlsx (formato proyecto docente) o del csv de la «Relación de materias»} {--term=20271 : Clave del periodo} {--campus=C1 : Clave del campus} {--modality=PRES : Clave de la modalidad} {--user= : Username (obligatorio) a nombre de quien se registran los salones y la bitácora} {--dry-run : Calcula y reporta sin escribir}';
+    protected $signature = 'academic-load:import-projection {file : Ruta del xlsx (formato proyecto docente) o del csv de la «Relación de materias»} {--term=20271 : Clave del periodo} {--campus=C1 : Clave del campus} {--modality=PRES : Clave de la modalidad} {--user= : Username (obligatorio, con xlsx y con csv) a nombre de quien se registran los salones y la bitácora} {--dry-run : Calcula y reporta sin escribir}';
 
     protected $description = 'Carga la proyección de carga de un departamento (grupos, cupos y horas) desde un xlsx o el csv de la relación de materias';
 
