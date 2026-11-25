@@ -91,18 +91,23 @@ it('SEL-16: el paso 2 sigue pidiendo el CSV aunque la cola ya tenga renglones ag
 });
 
 it('SEL-16: el paso 5 no pide fecha de inicio cuando todos los renglones son elección previa, y sí si hay alguien con turno', function () {
-    $this->world->selection->update(['status' => SelectionStatus::Draft, 'starts_at' => null]);
-    $blockers = function (): array {
-        $page = Livewire::actingAs($this->world->admin)->test('staffing::pages.selection-admin', ['seleccion' => $this->world->selection->id])->instance();
-        $method = new ReflectionMethod($page, 'blockers');
+    $this->world->selection->update(['status' => SelectionStatus::Draft, 'starts_at' => null, 'window_starts' => '09:00', 'window_ends' => '15:00', 'weekdays' => [1, 2, 3, 4, 5], 'slot_minutes' => 30]);
 
-        return $method->invoke($page, $this->world->selection->fresh(), 5);
-    };
+    // Hay alguien con turno (Docente Espera): se pide la fecha y no pasa al paso 6.
+    Livewire::actingAs($this->world->admin)->test('staffing::pages.selection-admin', ['seleccion' => $this->world->selection->id])
+        ->set('step', 4)->call('goTo', 6)->assertSet('step', 5)->assertSee('Elige cuándo empieza');
 
-    // Hay alguien con turno (Docente Espera): se pide la fecha.
-    expect($blockers())->toBe(['Elige cuándo empieza.']);
+    $this->world->entryOf($this->espera)->update(['status' => SelectionEntryStatus::Done, 'prior_choice_at' => now(), 'slot_starts_at' => null, 'slot_ends_at' => null]);
 
-    $this->world->entryOf($this->espera)->update(['status' => SelectionEntryStatus::Done, 'prior_choice_at' => now()]);
+    Livewire::actingAs($this->world->admin)->test('staffing::pages.selection-admin', ['seleccion' => $this->world->selection->id])
+        ->set('step', 4)->call('goTo', 6)->assertSet('step', 6);
+});
 
-    expect($blockers())->toBe([]);
+it('1.33: el paso 5 del asistente dibuja el resumen y la tabla de turnos cuando hay renglones con turno', function () {
+    $this->world->selection->update(['status' => SelectionStatus::Draft, 'starts_at' => now()->addDays(2), 'window_starts' => '09:00', 'window_ends' => '15:00', 'weekdays' => [1, 2, 3, 4, 5], 'slot_minutes' => 30]);
+
+    Livewire::actingAs($this->world->admin)->test('staffing::pages.selection-admin', ['seleccion' => $this->world->selection->id])
+        ->set('step', 5)
+        ->assertSeeHtml('data-testid="slot-summary"')
+        ->assertSee('Cada número es un lugar del orden');
 });

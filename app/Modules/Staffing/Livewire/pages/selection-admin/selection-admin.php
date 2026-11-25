@@ -533,7 +533,7 @@ new #[Title('Orden de selección')] class extends Component
             'freeRooms' => $this->rooms($selection)->whereNull('department_id')->get(),
             'entries' => $entries,
             'priorHours' => $groups->hoursByTeacher($selection, $entries->whereNotNull('prior_choice_at')->pluck('teacher_id')->filter()->values()->all()),
-            'slots' => $this->slotPreview($entries, $selection),
+            'slotPreview' => $this->slotPreview($entries, $selection),
         ];
     }
 

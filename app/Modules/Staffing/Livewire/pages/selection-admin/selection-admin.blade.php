@@ -231,23 +231,23 @@
                                     @endforeach
                                 </div>
                             </div>
-                            @if ($slots)
+                            @if ($slotPreview)
                                 <x-alert icon="o-calendar-days" class="alert-info" data-testid="slot-summary">
-                                    <span><b>{{ $slots['turns'] }} turnos para {{ $slots['people'] }} docentes</b> ({{ $slots['ties'] }} {{ $slots['ties'] === 1 ? 'empate' : 'empates' }}). El último es el {{ $slots['last'] }}@if ($slots['extra']); la ronda extra empieza el {{ $slots['extra'] }}@endif.</span>
+                                    <span><b>{{ $slotPreview['turns'] }} turnos para {{ $slotPreview['people'] }} docentes</b> ({{ $slotPreview['ties'] }} {{ $slotPreview['ties'] === 1 ? 'empate' : 'empates' }}). El último es el {{ $slotPreview['last'] }}@if ($slotPreview['extra']); la ronda extra empieza el {{ $slotPreview['extra'] }}@endif.</span>
                                 </x-alert>
                             @endif
                         </div>
-                        @if ($slots)
+                        @if ($slotPreview)
                             <div class="overflow-x-auto rounded-box border border-base-300">
                                 <table class="table table-sm text-center">
-                                    <thead><tr><th></th>@foreach ($slots['days'] as $day)<th>{{ $day['label'] }}</th>@endforeach</tr></thead>
+                                    <thead><tr><th></th>@foreach ($slotPreview['days'] as $day)<th>{{ $day['label'] }}</th>@endforeach</tr></thead>
                                     <tbody>
-                                        @foreach ($slots['times'] as $time)
+                                        @foreach ($slotPreview['times'] as $time)
                                             <tr>
                                                 <th class="font-mono">{{ $time }}</th>
-                                                @foreach ($slots['days'] as $day)
+                                                @foreach ($slotPreview['days'] as $day)
                                                     @php
-                                                        $positions = $slots['cells'][$day['key'].' '.$time] ?? [];
+                                                        $positions = $slotPreview['cells'][$day['key'].' '.$time] ?? [];
                                                     @endphp
                                                     <td class="font-mono {{ $positions ? 'bg-info/10 font-semibold' : '' }}">{{ implode(' · ', $positions) }}@if (count($positions) > 1) <span class="font-sans text-xs text-info">empate</span>@endif</td>
                                                 @endforeach
