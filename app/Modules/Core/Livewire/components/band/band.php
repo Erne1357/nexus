@@ -55,7 +55,7 @@ new class extends Component
             'username' => $credential['username'],
             'initials' => $credential['initials'],
             // CO-04: la foto propia (la del personal, firmada, o la del alumno por su ruta propia); sin foto, las iniciales.
-            'photo' => ($user = $context->user()) === null ? null : $photos->urlFor($user),
+            'photo' => ($user = $context->user()) === null ? null : $photos->urlFor($user, withSources: $context->activeRole()?->isStaff() === false),
             'roleLabel' => $credential['role'],
             'summary' => $credential['summary'],
         ];

@@ -42,13 +42,14 @@ final class CredentialPhotos
 
     /**
      * La URL de la foto propia de quien tiene la sesión, para la banda: la miniatura firmada del personal o, si no hay,
-     * la que dé una fuente registrada con extendUrl() (la del alumno). Null sin foto.
+     * la que dé una fuente registrada con extendUrl() (la del alumno). Null sin foto. `$withSources` en false se salta las
+     * fuentes (consultan la base): la banda solo las pide cuando el puesto activo es el de alumno.
      */
-    public function urlFor(User $user): ?string
+    public function urlFor(User $user, bool $withSources = true): ?string
     {
         $url = StaffPhotoUrl::for($user, mini: true);
 
-        foreach ($this->urlSources as $source) {
+        foreach ($withSources ? $this->urlSources : [] as $source) {
             if ($url !== null) {
                 break;
             }
