@@ -188,7 +188,7 @@ it('CF-03 y CF-04: un permiso suelto no es candado ni amplía el alcance del pue
 
 it('CF-02: restablecer un puesto lo deja solo con su rol de fábrica y sin permisos sueltos', function () {
     PermissionSet::factory()->withPermissions([CorePermission::SettingView])->assignedTo(Role::Coordinador)->create(['name' => 'Parámetros']);
-    app(GrantPositionPermission::class)->handle(Role::Coordinador, CorePermission::LoginNoticeView);
+    app(GrantPositionPermission::class)->handle(Role::Coordinador, CorePermission::CampusViewInactive);
     app(UnassignPermissionSet::class)->handle(Role::Coordinador, factorySetOfPosition(Role::Coordinador));
     $before = Activity::count();
 
@@ -201,7 +201,7 @@ it('CF-02: restablecer un puesto lo deja solo con su rol de fábrica y sin permi
         ->and(Activity::count())->toBe($before + 1)
         ->and(Activity::query()->latest('id')->first()->attribute_changes->toArray())->toBe([
             'attributes' => ['permission_sets' => ['Coordinador de carrera (de fábrica)'], 'permissions' => []],
-            'old' => ['permission_sets' => ['Parámetros'], 'permissions' => ['core.login_notice.view']],
+            'old' => ['permission_sets' => ['Parámetros'], 'permissions' => ['core.campus.view_inactive']],
         ]);
 });
 

@@ -169,7 +169,7 @@ describe('deactivationGap (AZ-S12, P3)', function () {
     ]);
 });
 
-it('rolesForUnit: un departamento académico admite jefe y jefe de proyecto docente; Subdirección Académica, la Subdirección; la Dirección y las demás subdirecciones, el directivo (AZ-03); divisiones, departamentos y oficinas, el jefe de departamento con su título (R-V2-4)', function () {
+it('rolesForUnit: un departamento académico admite jefe y jefe de proyecto docente; Subdirección Académica, la Subdirección; la Dirección y las demás subdirecciones, el directivo (AZ-03); divisiones, departamentos y oficinas, el jefe de departamento con su título (R-V2-4) y el personal de área (CO-01)', function () {
     $rules = app(RoleAssignmentRules::class);
     $academic = OrgUnit::find(app(OrgTree::class)->idOf(OrgTree::ACADEMIC));
     $planning = OrgUnit::factory()->create(['kind' => OrgUnitKind::Subdireccion]);
@@ -179,6 +179,6 @@ it('rolesForUnit: un departamento académico admite jefe y jefe de proyecto doce
     expect($rules->rolesForUnit($department))->toBe([Role::JefeDepartamento, Role::JefeProyectoDocente])
         ->and($rules->rolesForUnit($academic))->toBe([Role::Subdireccion])
         ->and($rules->rolesForUnit($planning))->toBe([Role::Directivo])
-        ->and($rules->rolesForUnit($office))->toBe([Role::JefeDepartamento])
+        ->and($rules->rolesForUnit($office))->toBe([Role::JefeDepartamento, Role::Personal])
         ->and($rules->rolesForUnit(OrgUnit::where('code', 'DIRECCION')->sole()))->toBe([Role::Directivo]);
 });

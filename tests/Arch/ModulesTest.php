@@ -26,6 +26,7 @@ $leftOf = [
     'Staffing' => ['Scheduling', 'Solver'],
     'Solver' => ['Scheduling'],
     'Enrollment' => ['Scheduling', 'Students'],
+    'Communication' => ['Students'],
 ];
 
 $allowed = function (string $module) use (&$allowed, $leftOf): array {

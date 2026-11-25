@@ -209,7 +209,7 @@ it('detail trae la ruta, los puestos de la unidad, sus hijas y los motivos de bl
 
     expect($detail->unit->is($this->academic))->toBeTrue()
         ->and($detail->path)->toBe(['Dirección'])
-        ->and($detail->titular)->toEqual(['name' => 'Alejandro Rentería Cota', 'userId' => $alejandro->id, 'summary' => 'Subdirección Académica', 'from' => CarbonImmutable::parse('2025-09-01')])
+        ->and($detail->titular)->toEqual(['name' => 'Alejandro Rentería Cota', 'userId' => $alejandro->id, 'photo' => null, 'summary' => 'Subdirección Académica', 'from' => CarbonImmutable::parse('2025-09-01')])
         ->and($detail->titularNote)->toBeNull()
         ->and(array_column($detail->assignments, 'name'))->toBe(['Alejandro Rentería Cota', 'Berta Salas'])
         ->and(array_column($detail->assignments, 'userId'))->toBe([$alejandro->id, $berta->id])
@@ -328,7 +328,7 @@ it('detail dice por qué no se nombra sobre la unidad: inactiva; una oficina ya 
 
     expect($root->appointRoles)->toBe([Role::Directivo])
         ->and($root->appointBlocker)->toBeNull()
-        ->and($none->appointRoles)->toBe([Role::JefeDepartamento])
+        ->and($none->appointRoles)->toBe([Role::JefeDepartamento, Role::Personal])
         ->and($none->appointBlocker)->toBeNull()
         ->and($none->titularNote)->toBe('Sin jefe vigente. El jefe se nombra en «Personas y puestos» o aquí.')
         ->and($dormant->appointBlocker)->toBe('Departamento Dormido está inactiva.')

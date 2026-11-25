@@ -13,6 +13,7 @@ it('exige a cada rol las columnas de alcance de PROJECT.md (Actores y roles)', f
     'jefe de departamento: la unidad de un departamento en todo el Tec' => [Role::JefeDepartamento, ['org_unit_id']],
     'AZ-S17: jefe de proyecto docente: la unidad de un departamento en una modalidad' => [Role::JefeProyectoDocente, ['modality_id', 'org_unit_id']],
     'AZ-S17: coordinador: una carrera en una modalidad' => [Role::Coordinador, ['modality_id', 'career_id']],
+    'CO-01: personal de área: su unidad, sin campus ni modalidad' => [Role::Personal, ['org_unit_id']],
     'docente: todo el Tec, sin campus' => [Role::Docente, []],
 ]);
 
@@ -36,6 +37,7 @@ it('R-V2-4: solo el directivo lee en todo el Tec', function () {
 it('CF-04: el directivo acota todas las dimensiones (es general en todas para leer); la Subdirección y el jefe, campus y modalidad además de lo que llevan', function () {
     expect(Role::Directivo->boundedDimensions())->toBe(Dimension::cases())
         ->and(Role::Subdireccion->boundedDimensions())->toBe([Dimension::Campus, Dimension::Unit, Dimension::Modality])
+        ->and(Role::Personal->boundedDimensions())->toBe([Dimension::Campus, Dimension::Unit, Dimension::Modality])
         ->and(Role::Docente->boundedDimensions())->toBe([]);
 });
 
@@ -48,6 +50,7 @@ it('nombra cada rol como lo nombran PROJECT.md y el glosario, para la credencial
     [Role::JefeDepartamento, 'Jefe de departamento académico'],
     [Role::JefeProyectoDocente, 'Jefe de proyecto docente'],
     [Role::Coordinador, 'Coordinador de carrera'],
+    [Role::Personal, 'Personal de área'],
     [Role::Docente, 'Docente'],
 ]);
 
@@ -58,6 +61,7 @@ it('unitKinds: el directivo pide la Dirección o una subdirección; la Subdirecc
     [Role::Directivo, [OrgUnitKind::Direccion, OrgUnitKind::Subdireccion]],
     [Role::JefeDepartamento, [OrgUnitKind::DepartamentoAcademico, OrgUnitKind::Departamento, OrgUnitKind::Division, OrgUnitKind::Oficina]],
     [Role::JefeProyectoDocente, [OrgUnitKind::DepartamentoAcademico]],
+    'CO-01: el personal de área, lo mismo que el jefe sin el departamento académico' => [Role::Personal, [OrgUnitKind::Departamento, OrgUnitKind::Division, OrgUnitKind::Oficina]],
     [Role::Coordinador, []],
     [Role::Docente, []],
     [Role::Admin, []],
@@ -121,6 +125,7 @@ it('la pista del formulario «Nombrar» dice qué alcance pide cada puesto', fun
     [Role::JefeDepartamento, 'Este puesto pide un departamento (académico o no), una división o una oficina. Tiene un solo jefe vigente; si la unidad no es académica, solo lleva su título.'],
     [Role::JefeProyectoDocente, 'Este puesto pide modalidad y departamento académico. El campus es opcional: sin campus, trabaja todos los de su modalidad.'],
     [Role::Coordinador, 'Pide una modalidad y una o varias carreras; el campus es opcional: sin campus, trabaja todos los de su modalidad. Se crea un nombramiento por carrera.'],
+    [Role::Personal, 'Este puesto pide un departamento que no sea académico, una división o una oficina. Admite varias personas por unidad.'],
     [Role::Docente, null],
 ]);
 
@@ -137,4 +142,25 @@ it('R-V2-4: los títulos de unidad no académica', function () {
         ->and(Role::JefeDepartamento->descriptionOn([$hr]))->toBe('Tu área todavía no tiene funciones en Nexus.')
         ->and(Role::JefeDepartamento->descriptionOn([$division]))->toBe('Tu área todavía no tiene funciones en Nexus.')
         ->and(Role::JefeDepartamento->unitLabel())->toBe('Unidad');
+});
+
+it('CO-01: el personal de área se nombra por su unidad, con el patrón del jefe de una unidad no académica', function () {
+    $communication = ['kind' => OrgUnitKind::Departamento, 'code' => 'COMUNICACION', 'name' => 'Departamento de Comunicación y Difusión'];
+    $hr = ['kind' => OrgUnitKind::Departamento, 'code' => 'RECURSOS-HUMANOS', 'name' => 'Recursos Humanos'];
+    $division = ['kind' => OrgUnitKind::Division, 'code' => 'DIV-PROFESIONAL', 'name' => 'División de Estudios Profesionales'];
+    $office = ['kind' => OrgUnitKind::Oficina, 'code' => 'COORDINACION-CAMPUS-II', 'name' => 'Coordinación General Campus II'];
+    $services = ['kind' => OrgUnitKind::Departamento, 'code' => 'SERVICIOS-ESCOLARES', 'name' => 'Departamento de Servicios Escolares'];
+
+    expect(Role::Personal->titleOn([$communication]))->toBe('Personal del Departamento de Comunicación y Difusión')
+        ->and(Role::Personal->titleOn([$hr]))->toBe('Personal del Departamento de Recursos Humanos')
+        ->and(Role::Personal->titleOn([$division]))->toBe('Personal de la División de Estudios Profesionales')
+        ->and(Role::Personal->titleOn([$office]))->toBe('Personal de la Coordinación General Campus II')
+        ->and(Role::Personal->titleOn([$communication, $hr]))->toBe('Personal de área')
+        ->and(Role::Personal->titleOn([]))->toBe('Personal de área')
+        ->and(Role::Personal->descriptionOn([$communication]))->toBe('Manejas lo que se ve al entrar a Nexus, las fotos y las credenciales.')
+        ->and(Role::JefeDepartamento->descriptionOn([$communication]))->toBe('Manejas lo que se ve al entrar a Nexus, las fotos y las credenciales.')
+        ->and(Role::Personal->descriptionOn([$hr]))->toBe('Tu área todavía no tiene funciones en Nexus.')
+        ->and(Role::Personal->descriptionOn([$services]))->toBe('Tu área todavía no tiene funciones en Nexus.')
+        ->and(Role::Personal->unitLabel())->toBe('Unidad')
+        ->and(Role::Personal->isExclusive())->toBeFalse();
 });

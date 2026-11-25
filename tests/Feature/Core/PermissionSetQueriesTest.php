@@ -88,7 +88,7 @@ it('CF-02 y CF-S2: los roles salen sin los borrados, primero los de fábrica, co
 
     expect(array_column($sets, 'name'))->toBe([
         'Subdirección Académica (de fábrica)', 'Directivo (de fábrica)', 'Jefe de departamento (de fábrica)', 'Jefe de proyecto docente (de fábrica)',
-        'Coordinador de carrera (de fábrica)', 'Docente (de fábrica)', 'Alumno (de fábrica)', 'Apoyo',
+        'Coordinador de carrera (de fábrica)', 'Personal de área (de fábrica)', 'Docente (de fábrica)', 'Alumno (de fábrica)', 'Apoyo',
     ])
         ->and($own['positions'])->toBe([Role::Subdireccion, Role::Coordinador])
         ->and($own['factory_role'])->toBeNull()
@@ -134,15 +134,15 @@ it('CF-03 y CF-04: el catálogo marca para el drawer de agregar lo que valdría 
     $catalog = collect(app(PermissionCatalogQuery::class)->all())->keyBy('key');
 
     expect($catalog['core.term.create']['institution_wide'])->toBeTrue()
-        ->and($catalog['core.term.create']['institution_wide_for'])->toBe([Role::Subdireccion, Role::JefeDepartamento, Role::JefeProyectoDocente, Role::Coordinador])
+        ->and($catalog['core.term.create']['institution_wide_for'])->toBe([Role::Subdireccion, Role::JefeDepartamento, Role::JefeProyectoDocente, Role::Coordinador, Role::Personal])
         ->and($catalog['core.term.open']['institution_wide'])->toBeTrue()
-        ->and($catalog['core.term.open']['institution_wide_for'])->toBe([Role::Subdireccion, Role::JefeDepartamento])
-        ->and($catalog['core.modality.view']['institution_wide_for'])->toBe([Role::Subdireccion, Role::Directivo, Role::JefeDepartamento])
+        ->and($catalog['core.term.open']['institution_wide_for'])->toBe([Role::Subdireccion, Role::JefeDepartamento, Role::Personal])
+        ->and($catalog['core.modality.view']['institution_wide_for'])->toBe([Role::Subdireccion, Role::Directivo, Role::JefeDepartamento, Role::Personal])
         ->and($catalog['students.student.view']['institution_wide'])->toBeFalse()
         ->and($catalog['students.student.view']['institution_wide_for'])->toBe([Role::Directivo])
         ->and($catalog['staffing.my_load.view']['institution_wide'])->toBeFalse()
         ->and($catalog['core.campus.update']['blocked_for'])->toBe(array_fill_keys(
-            ['subdireccion', 'directivo', 'jefe_departamento', 'jefe_proyecto_docente', 'coordinador', 'docente', 'alumno'],
+            ['subdireccion', 'directivo', 'jefe_departamento', 'jefe_proyecto_docente', 'coordinador', 'personal', 'docente', 'alumno'],
             '«Editar datos y estado de un campus» es solo del admin: no se da a otro puesto.',
         ))
         ->and(array_keys($catalog['academic_load.load.close']['blocked_for']))->toBe(['directivo', 'coordinador', 'docente', 'alumno'])

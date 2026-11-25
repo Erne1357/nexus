@@ -24,6 +24,8 @@ use Illuminate\Validation\ValidationException;
  *   unidad tenga un jefe vigente o por empezar, porque su permiso «Por validar» aplica a esa clave; un cambio de tipo
  *   tampoco deja sin lugar a ese jefe (RoleAssignmentRules::kindNeeded()); y la Subdirección Académica no se mueve,
  *   para que ningún jefe la tenga debajo de su unidad.
+ * - CO-01: la clave de Comunicación y Difusión (OrgTree::COMMUNICATION) tampoco cambia mientras la unidad tenga un jefe
+ *   o personal de área vigente o por empezar, porque sus permisos de avisos, atajos y fotos aplican a esa clave.
  * - Un ciclo se revisa leyendo la base al momento (no OrgTree, que se memoriza por petición); el trigger
  *   `org_units_no_cycle` es la última defensa.
  */
@@ -183,7 +185,8 @@ final class OrgUnitRules
 
     /**
      * Por qué la clave de la unidad no cambia a `$code`; nulo si puede. La de la Dirección y la de Subdirección
-     * Académica, nunca (AZ-S13); la de Servicios Escolares, mientras tenga un jefe vigente o por empezar (AZ-S16).
+     * Académica, nunca (AZ-S13); la de Servicios Escolares, mientras tenga un jefe vigente o por empezar (AZ-S16); la de
+     * Comunicación y Difusión, mientras tenga un jefe o personal de área vigente o por empezar (CO-01).
      */
     public function fixedCodeProblem(OrgUnit $unit, string $code): ?string
     {
@@ -195,14 +198,21 @@ final class OrgUnitRules
             return "Nexus usa la clave {$unit->code}; no se cambia.";
         }
 
-        $headed = $unit->code === OrgTree::SCHOOL_SERVICES && RoleAssignment::query()->notEnded()
+        if (! in_array($unit->code, [OrgTree::SCHOOL_SERVICES, OrgTree::COMMUNICATION], true)) {
+            return null;
+        }
+
+        $held = RoleAssignment::query()->notEnded()
             ->where('org_unit_id', $unit->getKey())
             ->get()
-            ->contains(fn (RoleAssignment $assignment): bool => $this->assignmentRules->allowsUnit($assignment->role, $unit) && $assignment->role->isExclusive());
+            ->contains(fn (RoleAssignment $assignment): bool => $this->assignmentRules->allowsUnit($assignment->role, $unit)
+                && ($unit->code === OrgTree::COMMUNICATION || $assignment->role->isExclusive()));
 
-        return $headed
-            ? "Nexus usa la clave {$unit->code} para el jefe de Servicios Escolares; termina su nombramiento antes de cambiarla."
-            : null;
+        return match (true) {
+            ! $held => null,
+            $unit->code === OrgTree::SCHOOL_SERVICES => "Nexus usa la clave {$unit->code} para el jefe de Servicios Escolares; termina su nombramiento antes de cambiarla.",
+            default => "Nexus usa la clave {$unit->code} para el jefe y el personal de Comunicación y Difusión; termina sus nombramientos antes de cambiarla.",
+        };
     }
 
     /**

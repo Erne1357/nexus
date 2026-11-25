@@ -69,8 +69,15 @@ Carpetas del servidor (`NEXUS_HOME=/opt/nexus`):
    ```bash
    sudo install -d -o "$USER" -g "$USER" /opt/nexus /opt/nexus/inbox
    sudo install -d -o "$(id -u)" -g "$(id -g)" -m 700 /var/backups/nexus
-   sudo install -d -m 755 /srv/nexus/fotos
+   sudo install -d -o 1000 -g 1000 -m 750 /srv/nexus/fotos
+   sudo install -d -o 1000 -g 1000 -m 750 /srv/nexus/fotos-personal
    ```
+
+   **En un servidor que ya existía** (preparado antes de la tarea 1.35), `/srv/nexus/fotos-personal` no existe: créalo con dueño uid 1000 **antes** de desplegar este release (`sudo install -d -o 1000 -g 1000 -m 750 /srv/nexus/fotos-personal`); si no, Docker lo crea como `root` y Nexus no podrá escribir las fotos (la pantalla avisará «No se pudo guardar la foto»). Lo mismo con `/srv/nexus/fotos`, que desde 1.37 también se escribe: `sudo chown -R 1000:1000 /srv/nexus/fotos`.
+
+   `fotos-personal` (`NEXUS_STAFF_PHOTOS_DIR`) guarda las fotos del personal que sube Comunicación (CO-03): Nexus las escribe, así que el contenedor (usuario `app`, uid 1000) debe poder escribir ahí. Son datos personales: inclúyela en el respaldo del servidor junto con `/srv/nexus/fotos`; nunca va al repositorio.
+
+   `fotos` (`NEXUS_STUDENT_PHOTOS_DIR`) guarda las fotos de la credencial de los alumnos. Desde la tarea 1.37 (CO-06) Comunicación también las sube, así que el montaje ya no es de solo lectura y el contenedor (uid 1000) debe poder escribir ahí; una foto reemplazada pasa a `_anteriores/<AAAA>/` y no se borra. Si el directorio ya existía con otro dueño: `sudo chown -R 1000:1000 /srv/nexus/fotos`.
 
 3. **El `.env`**, desde la plantilla que trae el paquete:
 
@@ -162,14 +169,14 @@ Las contraseñas nuevas se entregan aparte, en un archivo privado; no viajan en 
    nexus resume
    ```
 
-4. **Fotos de las credenciales.** No viven en la base. Copia la carpeta de fotos de la demo (`storage/app/fotos`, con la forma `<AAAA>/<número de control>.jpg`) a `/srv/nexus/fotos` (o a `NEXUS_STUDENT_PHOTOS_DIR`), sin los archivos `Zone.Identifier` que deja Windows. `compose.prod.yaml` la monta de solo lectura:
+4. **Fotos de las credenciales.** No viven en la base. Copia la carpeta de fotos de la demo (`storage/app/fotos`, con la forma `<AAAA>/<número de control>.jpg`) a `/srv/nexus/fotos` (o a `NEXUS_STUDENT_PHOTOS_DIR`), sin los archivos `Zone.Identifier` que deja Windows. `compose.prod.yaml` la monta con escritura (CO-06; el contenedor debe poder escribir, ver la preparación de directorios):
 
    ```bash
-   sudo install -d -m 755 /srv/nexus/fotos
    rsync -a --exclude='*Zone.Identifier' fotos/ servidor:/srv/nexus/fotos/
+   sudo chown -R 1000:1000 /srv/nexus/fotos /srv/nexus/fotos-personal
    ```
 
-5. **Variables.** `APP_URL` sale de `APP_DOMAIN` (`nexus.cdjuarez.tecnm.mx`); `NEXUS_CREDENTIAL_URL` va vacía en producción (el QR usa `APP_URL`; en la demo apuntaba al túnel); `NEXUS_DEFAULT_PASSWORD` no hace falta (el personal entra por invitación). El correo, en «Correo saliente (Microsoft 365)».
+5. **Variables.** `APP_URL` sale de `APP_DOMAIN` (`nexus.cdjuarez.tecnm.mx`); `NEXUS_CREDENTIAL_URL` va vacía en producción (el QR usa `APP_URL`; en la demo apuntaba al túnel); `NEXUS_DEFAULT_PASSWORD` solo hace falta al correr `core:provision-staff` (1.39; ver el punto de `riel/comunicacion` en «Qué hacer al desplegar cada release»); el personal que no se activa así entra por invitación. El correo, en «Correo saliente (Microsoft 365)».
 6. **Horarios del SII de todos los periodos** (tarea 1.32: el mapa del Inicio sigue el periodo de la credencial y necesita los horarios de cada uno). Una vez, en el color activo; tarda alrededor de un minuto (40 periodos, unas 315 000 sesiones) y se puede repetir:
 
    ```bash
@@ -237,6 +244,7 @@ Cada riel que traiga uno lo anota aquí: el release (o PR) a partir del cual apl
 | 1.32 (#824) y otra vez desde 1.33 (D-01: la sesión sin RFC toma el del grupo) | `php artisan academic-load:import-sii-groups` (todos los periodos; reemplaza el historial de grupos `sii` y sus horarios desde `sii_archivo`) | Una vez después del release que trae 1.33, y después de restaurar una copia de la demo o de reimportar el SII | Sí (idempotente) | ~1 min |
 | `riel/orden-seleccion` (1.33) | `php artisan faculty:derive-qualifications` (D-02: perfil «Apto» de los últimos 6 semestres) y después `php artisan staffing:rank <periodo>` (p. ej. `staffing:rank 20271`; opcional `--modality=` y `--department=`), que recalcula el ranking docente con el perfil nuevo | Después de importar los grupos; el ranking, justo después de derivar el perfil | Sí, los dos | segundos el perfil; el ranking, en el momento y sin la cola (unos segundos por departamento) |
 | `riel/orden-seleccion` (1.33) | `php artisan facilities:set-room-types C1 701=sala_computo 703=sala_computo 705=sala_computo 706=sala_computo 702=laboratorio 707=laboratorio` (tipos de los salones de Sistemas) | Después de derivar el perfil | Sí | segundos |
+| `riel/comunicacion` (1.39) | `php artisan core:provision-staff storage/app/imports/comunicacion/<archivo>.csv` (CSV `usuario,nombre,foto`, con las fotos junto al CSV; primero `--dry-run`). Activa las cuentas del personal con la contraseña por defecto y cambio obligatorio, corrige nombres y pone fotos (CO-11). Es la excepción a AC-03: el panel ya no da esa contraseña. Requiere `NEXUS_DEFAULT_PASSWORD` en el `.env` | Después del release que trae 1.35 y 1.39; subir el CSV y las fotos con el procedimiento de arriba y borrarlos después | Sí (idempotente: no toca a quien ya eligió su contraseña ni repite fotos iguales) | segundos |
 | `riel/carga-sistemas` (1.40) | `php artisan academic-load:import-projection storage/app/imports/carga-sistemas/<relacion>.csv --term=20271 --campus=C1 --modality=PRES --user=<username del admin>`, primero con `--dry-run` (carga de Sistemas Ene-Jun 2027 desde la «Relación de materias»; el archivo lo pone el operador en el servidor) | Después del release que trae 1.40 y del respaldo diario manual | Sí (idempotente: lo que ya existe no se duplica) | segundos |
 | `riel/carga-sistemas` (1.41) | `php artisan staffing:import-prior-choices storage/app/imports/carga-sistemas/<relacion>.csv --term=20271 --campus=C1 --modality=PRES --user=<username del admin>`, primero con `--dry-run` (elección previa de los maestros escritos en la relación y tipo de espacio vacío de las materias) | Justo después del anterior, con el mismo archivo, y **antes** de publicar la orden de selección (con la selección publicada se rechaza) | Sí (idempotente) | segundos |
 
@@ -255,6 +263,7 @@ También sin entrar al servidor: un archivo vacío `rollback-previous` o `rollba
 
 - Usa las imágenes exactas de ese release, sin descargar nada, y el mismo cambio de color sin caídas. Si el contenedor detenido ya es esa versión, solo lo enciende.
 - No revierte migraciones: el esquema nuevo es compatible con el código viejo. `/health` dirá `degraded` («la base tiene migraciones que el código no conoce»), que es lo esperado.
+- **Si ya había nombramientos `personal`** (el puesto «Personal de área», migración `2026_11_24_000001_add_personal_role`, tarea 1.34), el código anterior a 1.34 no conoce ese valor: los `casts` de `RoleAssignment.role` y `User.last_role` lanzan `ValueError` en «Personas y puestos», en el panel del organigrama de Comunicación y al iniciar sesión esas personas. Antes de volver a una versión previa a 1.34, termina esos nombramientos (desde «Personas y puestos» con el release actual, o con `delete from role_assignments where role = 'personal'`) y pon en `null` el `users.last_role` que valga `personal` (`update users set last_role = null where last_role = 'personal'`); o restaura el respaldo previo a migrar (`--restore`).
 - **Si de por medio se aplicó una contracción** (una migración con `#[Contract]` que borró o renombró columnas o tablas, aunque el despliegue que la trajo haya fallado después), el código viejo ya no funcionaría con el esquema y el deployer se niega (código 7) diciendo qué respaldo habría que restaurar. Lo mismo con `nexus deploy --sha <un release anterior>`. Con `nexus rollback <sha> --restore --yes`:
   1. verifica que el respaldo exista y se pueda leer (si no, no toca nada);
   2. pone la app en mantenimiento y restaura el respaldo en una base aparte;

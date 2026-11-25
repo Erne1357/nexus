@@ -210,8 +210,8 @@ it('CF-01: lo que cambia una Action vale en la misma petición después de ella 
 
     expect(app(GrantTable::class)->version())->toBe($version);
 
-    app(UpdatePermissionSet::class)->handle($set, ['permissions' => [CorePermission::SettingView->value, CorePermission::LoginNoticeView->value]]);
+    app(UpdatePermissionSet::class)->handle($set, ['permissions' => [CorePermission::SettingView->value, CorePermission::CampusViewInactive->value]]);
 
     expect(app(GrantTable::class)->version())->toBeGreaterThan($version)
-        ->and(app(GrantTable::class)->grants(Role::Coordinador, CorePermission::LoginNoticeView))->toBeTrue();
+        ->and(app(GrantTable::class)->grants(Role::Coordinador, CorePermission::CampusViewInactive))->toBeTrue();
 });

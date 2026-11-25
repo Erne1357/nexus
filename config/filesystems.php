@@ -55,8 +55,21 @@ return [
         'student_photos' => [
             'driver' => 'local',
             'root' => env('STUDENT_PHOTOS_PATH', storage_path('app/fotos')),
-            // Nexus solo lee (en el servidor es un montaje de solo lectura): no crea la carpeta; si no existe, no hay fotos.
+            // Nexus lee y, desde la tarea 1.37, también escribe (CO-06): el directorio ya existe con dueño uid 1000 y no se
+            // crea aquí; si no existe, no hay fotos. Un fallo de escritura no lanza aquí: StudentPhotos revisa cada resultado
+            // y lanza PhotoNotSaved, para que una lectura de una carpeta ausente siga siendo «sin foto».
             'lazy_root_creation' => true,
+            'throw' => false,
+            'report' => false,
+        ],
+
+        // Fotos del personal (Core, tarea 1.35, CO-03): una carpeta por usuario con la foto normal, su miniatura y el
+        // original; las anteriores se conservan. Datos personales: fuera de git (storage/app/.gitignore), de public/ y de
+        // la raíz del disco `local`; se sirven solo por la ruta firmada `core.staff-photo`. En el servidor,
+        // STAFF_PHOTOS_PATH apunta al directorio montado con escritura (compose.prod.yaml).
+        'staff_photos' => [
+            'driver' => 'local',
+            'root' => env('STAFF_PHOTOS_PATH', storage_path('app/fotos-personal')),
             'throw' => false,
             'report' => false,
         ],

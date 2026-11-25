@@ -76,8 +76,8 @@ it('CF-S6: de fábrica ningún otro puesto ve ni maneja avisos ni atajos', funct
 ]);
 
 it('CF-03: si se le da «ver avisos» a un puesto, ve pero no maneja avisos, ni toca los atajos', function () {
-    grantLoginContent(Role::Subdireccion, [CorePermission::LoginNoticeView]);
-    $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => Campus::factory()->create()->id])->create();
+    grantLoginContent(Role::Coordinador, [CorePermission::LoginNoticeView]);
+    $user = User::factory()->withRole(Role::Coordinador, ['career_id' => careerKey(20)])->create();
 
     expect($user->can('viewAny', LoginNotice::class))->toBeTrue()
         ->and($user->can('create', LoginNotice::class))->toBeFalse()
@@ -86,14 +86,22 @@ it('CF-03: si se le da «ver avisos» a un puesto, ve pero no maneja avisos, ni 
 });
 
 it('CF-03: si se le da «manejar atajos» a un puesto, maneja atajos pero no avisos', function () {
-    grantLoginContent(Role::Subdireccion, [CorePermission::LoginShortcutManage]);
-    $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => Campus::factory()->create()->id])->create();
+    grantLoginContent(Role::Coordinador, [CorePermission::LoginShortcutManage]);
+    $user = User::factory()->withRole(Role::Coordinador, ['career_id' => careerKey(20)])->create();
 
     expect($user->can('create', LoginShortcut::class))->toBeTrue()
         ->and($user->can('update', LoginShortcut::factory()->create()))->toBeTrue()
         ->and($user->can('delete', LoginShortcut::factory()->create()))->toBeTrue()
         ->and($user->can('create', LoginNotice::class))->toBeFalse()
         ->and($user->can('delete', LoginNotice::factory()->create()))->toBeFalse();
+});
+
+it('CO-01: dárselos a un puesto con unidad solo le sirve en Comunicación y Difusión: a la Subdirección no', function () {
+    grantLoginContent(Role::Subdireccion, [CorePermission::LoginNoticeView, CorePermission::LoginShortcutManage]);
+    $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => Campus::factory()->create()->id])->create();
+
+    expect($user->can('viewAny', LoginNotice::class))->toBeFalse()
+        ->and($user->can('create', LoginShortcut::class))->toBeFalse();
 });
 
 it('niega todo a un admin desactivado', function () {
