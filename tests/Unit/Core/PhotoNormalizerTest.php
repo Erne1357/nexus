@@ -111,3 +111,33 @@ it('una foto con orientación normal queda como viene', function () {
     expect((imagecolorat($image, 20, 400) >> 16) & 0xFF)->toBeGreaterThan(180)
         ->and(imagecolorat($image, 580, 400) & 0xFF)->toBeGreaterThan(180);
 });
+
+it('una foto grande de cámara con orientación 6 no agota la memoria y sale 600×800 derecha', function () {
+    // 6000×4000 (24 millones de píxeles): la mitad izquierda roja y la derecha azul, con la etiqueta de orientación 6.
+    $image = imagecreatetruecolor(6000, 4000);
+    imagefilledrectangle($image, 0, 0, 2999, 3999, imagecolorallocate($image, 250, 0, 0));
+    imagefilledrectangle($image, 3000, 0, 5999, 3999, imagecolorallocate($image, 0, 0, 250));
+    ob_start();
+    imagejpeg($image, null, 60);
+    $jpeg = (string) ob_get_clean();
+    unset($image);
+
+    $tiff = 'II'.pack('v', 42).pack('V', 8).pack('v', 1).pack('vvVv', 0x0112, 3, 1, 6).pack('v', 0).pack('V', 0);
+    $app1 = "\xFF\xE1".pack('n', 2 + 6 + strlen($tiff))."Exif\0\0".$tiff;
+    $path = tempnam(sys_get_temp_dir(), 'ph');
+    file_put_contents($path, substr($jpeg, 0, 2).$app1.substr($jpeg, 2));
+    unset($jpeg);
+
+    memory_reset_peak_usage();
+    $before = memory_get_usage();
+    $result = (new PhotoNormalizer)->normalize($path);
+    $growth = memory_get_peak_usage() - $before;
+    unlink($path);
+
+    $normal = imagecreatefromstring($result['normal']);
+
+    expect($growth)->toBeLessThan(128 * 1024 * 1024)
+        ->and(array_slice(getimagesizefromstring($result['normal']), 0, 2))->toBe([600, 800])
+        ->and((imagecolorat($normal, 300, 20) >> 16) & 0xFF)->toBeGreaterThan(180)
+        ->and(imagecolorat($normal, 300, 780) & 0xFF)->toBeGreaterThan(180);
+});
