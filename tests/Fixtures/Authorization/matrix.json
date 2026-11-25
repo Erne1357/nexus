@@ -60,6 +60,7 @@
         ],
         "jefe_departamento": [
             "academic.placement.validate",
+            "academic.subject.set_space",
             "academic_load.agreement.decide",
             "academic_load.agreement.request",
             "academic_load.agreement.view",
@@ -230,6 +231,7 @@
             "academic.study_plan.update",
             "academic.study_plan.view",
             "academic.subject.create",
+            "academic.subject.set_space",
             "academic.subject.update",
             "academic.subject.view",
             "academic_load.agreement.decide",

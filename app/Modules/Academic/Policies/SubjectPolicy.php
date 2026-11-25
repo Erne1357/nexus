@@ -4,6 +4,7 @@ namespace App\Modules\Academic\Policies;
 
 use App\Modules\Academic\Enums\AcademicPermission;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
@@ -17,7 +18,17 @@ final class SubjectPolicy
 {
     use AuthorizesActor;
 
+    /**
+     * Abrir el catálogo: quien ve las materias o quien cambia el tipo de espacio de las de su departamento (SEL-17); este
+     * último ve solo las suyas y solo ese control (`viewCatalog` distingue al primero).
+     */
     public function viewAny(User $user): bool
+    {
+        return $this->viewCatalog($user) || $this->actor($user)->allowsAny(AcademicPermission::SubjectSpaceSet);
+    }
+
+    /** El catálogo completo, con sus datos y acciones. */
+    public function viewCatalog(User $user): bool
     {
         return $this->actor($user)->allowsAny(AcademicPermission::SubjectView);
     }
@@ -39,5 +50,19 @@ final class SubjectPolicy
     public function update(User $user, Subject $subject): bool
     {
         return $this->actor($user)->allows(AcademicPermission::SubjectUpdate);
+    }
+
+    /**
+     * Cambiar el tipo de espacio que pide la materia (SEL-17): el jefe de su departamento y el admin; nadie más.
+     */
+    public function setSpace(User $user, Subject $subject): bool
+    {
+        return $this->setSpaceIn($user, $subject->department_id);
+    }
+
+    /** Lo mismo, preguntado por el departamento de la materia (para listar solo las que puede cambiar). */
+    public function setSpaceIn(User $user, string $departmentId): bool
+    {
+        return $this->actor($user)->allows(AcademicPermission::SubjectSpaceSet, Target::of(unit: $departmentId));
     }
 }

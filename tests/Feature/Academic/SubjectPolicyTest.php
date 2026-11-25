@@ -38,10 +38,21 @@ it('niega todo a la subdirección, al jefe, al coordinador y al docente de C2', 
         ->and($user->can('update', $this->subject))->toBeFalse();
 })->with([
     'subdirección' => [Role::Subdireccion, []],
-    'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
     'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
     'docente' => [Role::Docente, []],
 ]);
+
+it('SEL-17: el jefe de departamento abre el catálogo solo para cambiar el tipo de espacio de las materias de su departamento', function () {
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->subject->department_id])->create();
+    $other = Subject::factory()->create();
+
+    expect($jefe->can('viewAny', Subject::class))->toBeTrue()
+        ->and($jefe->can('viewCatalog', Subject::class))->toBeFalse()
+        ->and($jefe->can('create', Subject::class))->toBeFalse()
+        ->and($jefe->can('update', $this->subject))->toBeFalse()
+        ->and($jefe->can('setSpace', $this->subject))->toBeTrue()
+        ->and($jefe->can('setSpace', $other))->toBeFalse();
+});
 
 it('niega todo a un admin desactivado', function () {
     $admin = User::factory()->admin()->create(['is_active' => false]);
