@@ -257,6 +257,7 @@ final class PermissionCatalogQuery
             ...array_map(fn (string $code): string => match ($code) {
                 OrgTree::ACADEMIC => 'la Subdirección Académica',
                 OrgTree::SCHOOL_SERVICES => 'Servicios Escolares',
+                OrgTree::COMMUNICATION => 'Comunicación y Difusión',
                 default => $code,
             }, $applies->codes),
         ];

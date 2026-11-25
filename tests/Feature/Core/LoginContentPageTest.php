@@ -74,8 +74,8 @@ it('CF-S6: un puesto sin permiso no entra a la página', function (Role $role, a
 ]);
 
 it('CF-03: con solo el permiso de atajos, la página muestra solo la pestaña Atajos y no deja manejar avisos', function () {
-    grantLoginContent(Role::Subdireccion, [CorePermission::LoginShortcutView, CorePermission::LoginShortcutManage]);
-    $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => Campus::factory()->create()->id])->create();
+    grantLoginContent(Role::Coordinador, [CorePermission::LoginShortcutView, CorePermission::LoginShortcutManage]);
+    $user = User::factory()->withRole(Role::Coordinador, ['career_id' => careerKey(20)])->create();
     LoginShortcut::factory()->create(['title' => 'Sitio']);
     $notice = LoginNotice::factory()->create(['title' => 'Aviso oculto']);
 
@@ -95,8 +95,8 @@ it('CF-03: con solo el permiso de atajos, la página muestra solo la pestaña At
 });
 
 it('CF-03: con solo «ver», los controles de manejo están deshabilitados y las acciones se niegan', function () {
-    grantLoginContent(Role::Subdireccion, [CorePermission::LoginNoticeView]);
-    $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => Campus::factory()->create()->id])->create();
+    grantLoginContent(Role::Coordinador, [CorePermission::LoginNoticeView]);
+    $user = User::factory()->withRole(Role::Coordinador, ['career_id' => careerKey(20)])->create();
     $notice = LoginNotice::factory()->create(['title' => 'Aviso']);
 
     $dom = domOf($this->actingAs($user)->get('/configuracion/avisos-y-atajos')->assertOk());

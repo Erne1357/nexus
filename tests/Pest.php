@@ -442,6 +442,49 @@ function schoolServicesHead(array $attributes = []): User
 }
 
 /**
+ * La unidad del Departamento de Comunicación y Difusión (OrgTree::COMMUNICATION), colgada de la Subdirección de
+ * Planeación y Vinculación como en el organigrama oficial (AZ-S1): la crea la primera vez. Sus permisos son los de
+ * CO-01.
+ */
+function communicationUnit(): OrgUnit
+{
+    $tree = app(OrgTree::class);
+
+    if (($id = $tree->idOf(OrgTree::COMMUNICATION)) !== null) {
+        return OrgUnit::query()->findOrFail($id);
+    }
+
+    $planning = OrgUnit::query()->where('code', 'SUB-PLANEACION')->first()
+        ?? OrgUnit::factory()->create(['code' => 'SUB-PLANEACION', 'name' => 'Subdirección de Planeación y Vinculación', 'kind' => OrgUnitKind::Subdireccion, 'parent_id' => $tree->idOf(OrgTree::ROOT)]);
+    $unit = OrgUnit::factory()->create(['code' => OrgTree::COMMUNICATION, 'name' => 'Departamento de Comunicación y Difusión', 'kind' => OrgUnitKind::Departamento, 'parent_id' => $planning->id]);
+
+    app()->forgetScopedInstances();
+
+    return $unit;
+}
+
+/**
+ * La jefa del Departamento de Comunicación y Difusión (CO-01). Crea la unidad si falta.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function communicationHead(array $attributes = []): User
+{
+    return User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => communicationUnit()->id])->create($attributes);
+}
+
+/**
+ * Una persona del personal de Comunicación y Difusión: el puesto «Personal de área» sobre su unidad (CO-01, CO-02).
+ * Crea la unidad si falta.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function communicationStaff(array $attributes = []): User
+{
+    return User::factory()->withRole(Role::Personal, ['org_unit_id' => communicationUnit()->id])->create($attributes);
+}
+
+/**
  * Deja validadas en el periodo las revisiones generales (sin salones) que exige HC-14 a la carga de `$departmentId`: su
  * revisión de docentes y las de Servicios Escolares (materias, planes y carreras, una sola del Tec; CV15). Las crea si
  * faltan y, si ya existían, las valida; las de Servicios Escolares sirven a todos los departamentos. `$except` deja fuera

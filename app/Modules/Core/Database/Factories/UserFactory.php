@@ -57,7 +57,8 @@ class UserFactory extends Factory
      * Con un nombramiento vigente con las columnas de `$scope` (`campus_id`, `org_unit_id`,
      * `career_id`, `modality_id`, `valid_from`, `valid_to`); el de admin, sin alcance. `department_id` es otro nombre de
      * `org_unit_id`: el id de un departamento es el de su unidad. Sin `org_unit_id`, la Subdirección va sobre la unidad
-     * Subdirección Académica (AZ-S3) y el directivo sobre la Dirección (AZ-03). Sin `campus_id`, el nombramiento es de
+     * Subdirección Académica (AZ-S3) y el directivo sobre la Dirección (AZ-03); el jefe y el personal de área (CO-01) la
+     * piden siempre. Sin `campus_id`, el nombramiento es de
      * todo el Tec (en el coordinador y el jefe de proyecto docente, de todos los campus de su modalidad). Sin
      * `modality_id`, el coordinador y el jefe de proyecto docente van en Presencial (RoleAssignmentFactory). Se encadena
      * para dar varios puestos o varios nombramientos del mismo puesto.

@@ -328,7 +328,7 @@ it('detail dice por qué no se nombra sobre la unidad: inactiva; una oficina ya 
 
     expect($root->appointRoles)->toBe([Role::Directivo])
         ->and($root->appointBlocker)->toBeNull()
-        ->and($none->appointRoles)->toBe([Role::JefeDepartamento])
+        ->and($none->appointRoles)->toBe([Role::JefeDepartamento, Role::Personal])
         ->and($none->appointBlocker)->toBeNull()
         ->and($none->titularNote)->toBe('Sin jefe vigente. El jefe se nombra en «Personas y puestos» o aquí.')
         ->and($dormant->appointBlocker)->toBe('Departamento Dormido está inactiva.')

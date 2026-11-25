@@ -35,6 +35,7 @@ it('CF-04: cada puesto acota las dimensiones de su nombramiento y las de su regl
         'jefe_departamento' => ['campus', 'unit', 'modality'],
         'jefe_proyecto_docente' => ['campus', 'unit', 'modality'],
         'coordinador' => ['campus', 'career', 'modality'],
+        'personal' => ['campus', 'unit', 'modality'],
         'docente' => [],
         'alumno' => [],
     ]);
