@@ -30,7 +30,7 @@ use Mary\Traits\Toast;
  * CreateSubject o UpdateSubject, que hacen cumplir las reglas. Desactivar una materia que todavía
  * necesitan alumnos lo veta Students: el motivo sale en un toast de error.
  *
- * El tipo de espacio que pide la materia (SEL-16) lo cambian el admin y el jefe del departamento de la materia, con
+ * El tipo de espacio que pide la materia (SEL-17) lo cambian el admin y el jefe del departamento de la materia, con
  * SetSubjectRequiredSpace y `setSpace` de la policy. El jefe, que no ve el catálogo completo, llega a esta pantalla solo
  * con las materias de su departamento y ese control: sin alta, sin edición y sin desactivar.
  *
@@ -190,7 +190,7 @@ new #[Title('Materias')] class extends Component
     }
 
     /**
-     * Abre el drawer del tipo de espacio de la materia, con el que tiene hoy (aula si todavía no se marca).
+     * Abre el drawer del tipo de espacio de la materia, con el que tiene hoy; sin marcar abre sin valor y guardar exige elegir uno.
      */
     public function editSpace(string $id, SubjectQuery $subjects): void
     {
@@ -198,7 +198,7 @@ new #[Title('Materias')] class extends Component
         $this->authorize('setSpace', $subject);
 
         $this->spaceSubjectId = $subject->id;
-        $this->spaceChoice = ($subject->required_space ?? RequiredSpace::Aula)->value;
+        $this->spaceChoice = $subject->required_space?->value ?? '';
         $this->resetValidation();
         $this->showSpaceDrawer = true;
     }

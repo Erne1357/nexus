@@ -19,7 +19,7 @@ final class SubjectPolicy
     use AuthorizesActor;
 
     /**
-     * Abrir el catálogo: quien ve las materias o quien cambia el tipo de espacio de las de su departamento (SEL-16); este
+     * Abrir el catálogo: quien ve las materias o quien cambia el tipo de espacio de las de su departamento (SEL-17); este
      * último ve solo las suyas y solo ese control (`viewCatalog` distingue al primero).
      */
     public function viewAny(User $user): bool
@@ -53,7 +53,7 @@ final class SubjectPolicy
     }
 
     /**
-     * Cambiar el tipo de espacio que pide la materia (SEL-16): el jefe de su departamento y el admin; nadie más.
+     * Cambiar el tipo de espacio que pide la materia (SEL-17): el jefe de su departamento y el admin; nadie más.
      */
     public function setSpace(User $user, Subject $subject): bool
     {

@@ -9,7 +9,7 @@ use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| SEL-16: el tipo de espacio de una materia lo cambian el jefe de su departamento y el admin, desde el catálogo de
+| SEL-17: el tipo de espacio de una materia lo cambian el jefe de su departamento y el admin, desde el catálogo de
 | Materias (`academic.subject.set_space`, alcance: el departamento de la materia).
 */
 
@@ -23,7 +23,7 @@ beforeEach(function () {
     $this->jefeEle = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create();
 });
 
-it('SEL-16: el jefe cambia el tipo de espacio de una materia de su departamento y queda en la bitácora', function () {
+it('SEL-17: el jefe cambia el tipo de espacio de una materia de su departamento y queda en la bitácora', function () {
     actingAsRole($this->jefeSis, Role::JefeDepartamento);
 
     Livewire::test('academic::pages.subjects')
@@ -36,7 +36,7 @@ it('SEL-16: el jefe cambia el tipo de espacio de una materia de su departamento 
         ->and(Activity::query()->where('subject_id', $this->redes->id)->where('causer_id', $this->jefeSis->id)->exists())->toBeTrue();
 });
 
-it('SEL-16: el jefe ve solo las materias de su departamento y su control, sin alta ni edición', function () {
+it('SEL-17: el jefe ve solo las materias de su departamento y su control, sin alta ni edición', function () {
     actingAsRole($this->jefeSis, Role::JefeDepartamento);
 
     Livewire::test('academic::pages.subjects')
@@ -48,7 +48,7 @@ it('SEL-16: el jefe ve solo las materias de su departamento y su control, sin al
         ->assertDontSee('Editar SCA-1001');
 });
 
-it('SEL-16: el jefe de otro departamento no ve las materias ni puede llamar la acción', function () {
+it('SEL-17: el jefe de otro departamento no ve las materias ni puede llamar la acción', function () {
     actingAsRole($this->jefeEle, Role::JefeDepartamento);
 
     Livewire::test('academic::pages.subjects')->assertDontSee('SCA-1001');
@@ -57,7 +57,7 @@ it('SEL-16: el jefe de otro departamento no ve las materias ni puede llamar la a
     expect($this->redes->fresh()->required_space)->toBeNull();
 });
 
-it('SEL-16: el jefe no edita, da de alta ni desactiva los demás datos de la materia', function (string $method, array $arguments) {
+it('SEL-17: el jefe no edita, da de alta ni desactiva los demás datos de la materia', function (string $method, array $arguments) {
     actingAsRole($this->jefeSis, Role::JefeDepartamento);
 
     Livewire::test('academic::pages.subjects')->call($method, ...$arguments)->assertForbidden();
@@ -67,7 +67,7 @@ it('SEL-16: el jefe no edita, da de alta ni desactiva los demás datos de la mat
     'desactivar' => fn () => ['toggleActive', [$this->redes->id]],
 ]);
 
-it('SEL-16: el jefe de proyecto docente y el docente no ven el catálogo ni cambian el tipo', function (Role $role) {
+it('SEL-17: el jefe de proyecto docente y el docente no ven el catálogo ni cambian el tipo', function (Role $role) {
     $user = User::factory()->withRole($role, ['department_id' => $this->sis->id])->create();
     actingAsRole($user, $role);
 
@@ -76,7 +76,7 @@ it('SEL-16: el jefe de proyecto docente y el docente no ven el catálogo ni camb
     $this->get(route('academic.subjects'))->assertForbidden();
 })->with([Role::JefeProyectoDocente, Role::Docente]);
 
-it('SEL-16: el admin cambia el tipo de cualquier materia y filtra por tipo de espacio, incluido «Sin marcar»', function () {
+it('SEL-17: el admin cambia el tipo de cualquier materia y filtra por tipo de espacio, incluido «Sin marcar»', function () {
     $admin = User::factory()->admin()->create();
     actingAsRole($admin, Role::Admin);
 
@@ -90,4 +90,16 @@ it('SEL-16: el admin cambia el tipo de cualquier materia y filtra por tipo de es
         ->assertSee('AEF-1002')->assertDontSee('SCA-1001');
 
     expect($this->circuitos->fresh()->required_space)->toBe(RequiredSpace::SalaComputo);
+});
+
+it('SEL-17: una materia sin marcar abre el drawer sin valor y guardar exige elegir uno', function () {
+    actingAsRole($this->jefeSis, Role::JefeDepartamento);
+
+    Livewire::test('academic::pages.subjects')
+        ->call('editSpace', $this->redes->id)
+        ->assertSet('spaceChoice', '')
+        ->call('saveSpace')
+        ->assertHasErrors(['spaceChoice']);
+
+    expect($this->redes->fresh()->required_space)->toBeNull();
 });

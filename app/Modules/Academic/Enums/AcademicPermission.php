@@ -12,7 +12,7 @@ use App\Modules\Core\Authorization\UnitApplicability;
  * Permisos del módulo Academic: catálogos de departamentos, carreras, materias y planes de estudio. La clave es
  * `academic.<recurso>.<accion>`. Todos son solo del admin, salvo `academic.placement.validate`: validar las materias
  * de la migración del SII que esperan semestre (D19), y `academic.subject.set_space`: cambiar el tipo de espacio que pide una
- * materia de su departamento (SEL-16; el jefe y el admin). Se concede al jefe de departamento, declara la unidad y aplica
+ * materia de su departamento (SEL-17; el jefe y el admin). Se concede al jefe de departamento, declara la unidad y aplica
  * solo a Servicios Escolares (AZ-02, AZ-S16): solo lo ejerce el jefe nombrado sobre esa unidad, y StudyPlanPolicy lo pregunta
  * sobre ella.
  */

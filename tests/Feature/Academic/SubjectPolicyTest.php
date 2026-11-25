@@ -42,7 +42,7 @@ it('niega todo a la subdirección, al jefe, al coordinador y al docente de C2', 
     'docente' => [Role::Docente, []],
 ]);
 
-it('SEL-16: el jefe de departamento abre el catálogo solo para cambiar el tipo de espacio de las materias de su departamento', function () {
+it('SEL-17: el jefe de departamento abre el catálogo solo para cambiar el tipo de espacio de las materias de su departamento', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->subject->department_id])->create();
     $other = Subject::factory()->create();
 

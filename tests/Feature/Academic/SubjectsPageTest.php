@@ -267,7 +267,7 @@ describe('admin', function () {
 describe('otros roles e invitados', function () {
     $roles = [
         'subdirección' => [Role::Subdireccion, []],
-        // El jefe de departamento sí entra, solo al control del tipo de espacio de su departamento (SEL-16).
+        // El jefe de departamento sí entra, solo al control del tipo de espacio de su departamento (SEL-17).
         'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
         'docente' => [Role::Docente, []],
     ];

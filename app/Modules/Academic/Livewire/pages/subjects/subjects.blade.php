@@ -132,7 +132,7 @@
                 <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="$wire.showSpaceDrawer = false" aria-label="Cerrar el panel" />
             </header>
             <div class="flex-1 space-y-4 px-5 pt-4 pb-8">
-                <x-select label="Tipo de espacio" name="spaceChoice" wire:model="spaceChoice" :options="$spaces" />
+                <x-select label="Tipo de espacio" name="spaceChoice" wire:model="spaceChoice" :options="$spaces" placeholder="Elige el tipo…" />
                 <p class="text-sm text-neutral">Laboratorio es el laboratorio de verdad, como el de redes; la sala de cómputo es lo que en la relación de materias dice «laboratorio». Con laboratorio, la materia también queda como «Requiere laboratorio».</p>
             </div>
             <footer class="flex justify-end gap-2 border-t border-base-300 px-5 py-3">

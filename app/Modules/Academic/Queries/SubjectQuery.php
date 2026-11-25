@@ -29,7 +29,7 @@ final class SubjectQuery
      * valor de SubjectKind o WITHOUT_KIND, y `$active` por estado; `null` no filtra. Quién la ve lo
      * decide SubjectPolicy en el componente. `$space` filtra por un valor de RequiredSpace o WITHOUT_SPACE, y
      * `$onlyDepartments`, si no es null, deja solo las de esos departamentos (quien cambia el tipo de espacio sin ver
-     * el catálogo completo, SEL-16).
+     * el catálogo completo, SEL-17).
      *
      * @param  list<string>|null  $onlyDepartments
      * @return LengthAwarePaginator<int, Subject>

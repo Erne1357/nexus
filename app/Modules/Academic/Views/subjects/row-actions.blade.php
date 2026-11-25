@@ -4,7 +4,7 @@
     de fila"). En la tabla (`$inTable`), los botones quedan solo con su icono entre 768 y 1199 px y
     «Editar» lleva el data-testid del browser test; en el celular siempre llevan su texto y no repiten
     el data-testid. No hay «Borrar»: una materia no se borra, se desactiva, y si todavía la necesitan
-    alumnos, desactivarla se rechaza con un toast que dice cuántos. «Tipo de espacio» (SEL-16) lo ve solo quien puede
+    alumnos, desactivarla se rechaza con un toast que dice cuántos. «Tipo de espacio» (SEL-17) lo ve solo quien puede
     cambiarlo en esa materia (el jefe de su departamento y el admin); quien solo eso puede no ve «Editar» ni «Acciones»
     (sin `viewCatalog`).
 --}}
