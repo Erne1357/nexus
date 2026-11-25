@@ -441,18 +441,35 @@ La ficha del alumno muestra su retícula como la del SII, que es la que conocen 
   2. el nombre, en dos renglones a lo más, partido con guiones (`lang="es"`), completo en `title` y en el texto para lectores de pantalla;
   3. si todavía no la puede cursar, qué le falta, en un renglón recortado y completo en `title`: «Pide ACF-0902, ACF-0903», «Fuera de su avance» o «Pide 70 % de los créditos»;
   4. al pie, en Mono, sus créditos («5 cr») y, a la derecha, la oportunidad si pasa de la primera («2.ª») y la calificación.
-- **Estados**, con los nombres del SII (`SubjectStanding`; reglas-de-negocio.md, "Retícula del alumno"). Su relleno, borde e icono salen de `SubjectStanding::tileClasses()` y `icon()`, y el estado va en texto para lectores de pantalla:
+- **Estados**, con los nombres del SII (`SubjectStanding`; reglas-de-negocio.md, "Retícula del alumno"). Desde la tarea 1.43 (variante A «Tinte suave», elegida por el usuario entre tres maquetas, `.impeccable/mocks/decision/reticula-colores/`) cada estado tiene sus propios tonos, inspirados en el SII y no los cuatro semáforos de daisyUI: un tinte muy claro de relleno, el tono medio en el borde y el tono oscuro en la clave, el icono y las cifras. **El nombre de la materia va siempre en `base-content`.** Su relleno, borde e icono salen de `SubjectStanding::tileClasses()` y `icon()`, y el estado va en texto para lectores de pantalla. La leyenda de arriba usa los mismos tokens:
 
 | Estado | Tono | Borde | Icono |
 |---|---|---|---|
-| Acreditada | `success` | filete del tono | `o-check-circle` |
-| Cursando | `info` | filete del tono | `o-clock` |
-| Sin calificar | `info` | punteado | `o-question-mark-circle` |
-| Reprobada · prioridad | `warning` | filete del tono | `o-arrow-path` |
-| A curso especial | `warning` | doble | `o-exclamation-triangle` |
-| Curso especial reprobado | `error` | filete del tono | `o-x-circle` |
-| Puede seleccionarla | `primary` sobre blanco | doble | `o-arrow-right-circle` |
-| No permitida aún | `neutral` sobre `base-200` | punteado | `o-lock-closed` |
+| Acreditada | verde de siempre (`success`) | filete del tono | `o-check-circle` |
+| Cursando | berenjena | filete del tono | `o-clock` |
+| Sin calificar | amarillo | punteado | `o-question-mark-circle` |
+| Reprobada · prioridad | turquesa | filete del tono | `o-arrow-path` |
+| A curso especial | naranja | doble | `o-exclamation-triangle` |
+| Curso especial reprobado | rojo | filete del tono | `o-x-circle` |
+| Puede seleccionarla | azul | doble | `o-arrow-right-circle` |
+| No permitida aún | gris | punteado | `o-lock-closed` |
+| Seleccionada solamente | lila (**reservado, sin uso**: no tiene estado en Nexus hasta la inscripción, R3) | | |
+
+- **Tokens de los estados.** Por cada estado, `--nexus-standing-<caso>` (relleno), `-border` y `-content` (clave, icono y cifras), definidos en los temas `nexus` y `nexus-dark` de `resources/css/app.css` y expuestos como `--color-standing-<caso>[-border|-content]` (utilidades `bg-standing-<caso>`, `border-standing-<caso>-border`, `text-standing-<caso>-content`). Acreditada conserva exactamente el verde de antes (`success` al 10 % de relleno, al 40 % de borde y a pleno de texto, ya mezclados contra `base-100`). Contraste medido (WCAG, `contrast.mjs` de las maquetas): el texto y el icono contra su relleno piden 4.5, el borde contra `base-100` y `base-200` pide 3, y el nombre en `base-content` sobre cada relleno pasa de 11.
+
+| Estado | Texto/icono · claro | Texto/icono · oscuro | Borde · claro | Borde · oscuro |
+|---|---|---|---|---|
+| Acreditada | 5.30 | 7.03 | 1.69 (decorativo) | 2.51 (decorativo) |
+| Cursando | 10.73 | 10.43 | 7.63 | 5.79 |
+| Sin calificar | 8.04 | 10.76 | 3.47 | 8.52 |
+| Reprobada · prioridad | 7.99 | 9.32 | 4.26 | 7.64 |
+| A curso especial | 7.51 | 9.81 | 4.16 | 7.03 |
+| Curso especial reprobado | 7.58 | 9.25 | 5.98 | 6.88 |
+| Puede seleccionarla | 7.51 | 8.96 | 4.51 | 6.36 |
+| No permitida aún | 6.43 | 7.23 | 3.20 | 3.71 |
+| Seleccionada (reservado) | 7.96 | 9.10 | 4.56 | 6.28 |
+
+  El borde de Acreditada al 40 % queda como estaba: es decorativo, porque el estado se dice con el icono, el verde del texto y el texto para lectores de pantalla (el color nunca va solo).
 
 - **Arriba de la retícula** solo va la leyenda de los estados, en un renglón compacto: un recuadro de 24 px con el icono de 16 px centrado y dentro. **Sin textos de ayuda:** ni hasta qué semestre puede seleccionar ni «toca una materia»; el mosaico lleva `cursor-pointer`. La pestaña **Kárdex** muestra el historial por periodo, del más antiguo al más reciente (FIFO: el primer periodo que cursó va arriba), con el resultado en su insignia.
 - **Cadenas de seriación.** Cada grupo de materias unidas por su seriación tiene su color, que se ve siempre como una **franja a la izquierda** de cada materia: una sombra interior con el token `chain-N` en `--chain`, que no toca el borde del estado. **Debajo de la retícula**, una leyenda nombra cada cadena por su primera materia y dice cuántas tiene (`ChainColor::swatchClasses()`). Tocar una materia resalta su cadena completa (lo que pide y lo que abre) y atenúa lo demás; tocar una cadena de la leyenda resalta todas sus materias; tocar lo mismo otra vez, «Quitar resaltado» o Esc lo quita. Solo al tocar, no al pasar el cursor, y sin líneas entre materias (decidido por el usuario el 29 de octubre de 2026). Lo hace el componente Alpine `studentGrid` (`resources/js/app.js`). En celular (menos de 768 px) la leyenda de cadenas va plegada: «Cadenas de seriación (N)» se abre con un toque (decidido por el usuario el 29 de octubre de 2026).

@@ -65,3 +65,33 @@ it('solo las que puede cursar y no agotó cuentan para seleccionar: reprobar el 
     [SubjectStanding::SinCalificar, false],
     [SubjectStanding::NoPermitida, false],
 ]);
+
+it('1.43: cada estado pinta su mosaico con sus propios tokens standing-* (relleno, borde y texto), no con los semáforos de daisyUI', function (SubjectStanding $standing) {
+    $token = str_replace('_', '-', $standing->value);
+
+    expect($standing->tileClasses())
+        ->toContain("bg-standing-{$token}")
+        ->toContain("border-standing-{$token}-border")
+        ->toContain("text-standing-{$token}-content")
+        ->not->toMatch('/(bg|border|text)-(success|info|warning|error|primary|base-\d+|neutral)\b/');
+})->with(SubjectStanding::cases());
+
+it('1.43: los tokens de cada estado, y el lila reservado de «Seleccionada solamente» (S3), existen en el tema claro y en el oscuro', function () {
+    $css = file_get_contents(dirname(__DIR__, 3).'/resources/css/app.css');
+    $themes = preg_split('/@plugin \'daisyui\/theme\'/', $css);
+    $tokens = [...array_map(fn (SubjectStanding $standing): string => str_replace('_', '-', $standing->value), SubjectStanding::cases()), 'seleccionada'];
+
+    expect($themes)->toHaveCount(3);
+    foreach ([1, 2] as $theme) {
+        foreach ($tokens as $token) {
+            foreach (['', '-border', '-content'] as $suffix) {
+                expect($themes[$theme])->toContain("--nexus-standing-{$token}{$suffix}:");
+            }
+        }
+    }
+    foreach ($tokens as $token) {
+        foreach (['', '-border', '-content'] as $suffix) {
+            expect($css)->toContain("--color-standing-{$token}{$suffix}: var(--nexus-standing-{$token}{$suffix});");
+        }
+    }
+});

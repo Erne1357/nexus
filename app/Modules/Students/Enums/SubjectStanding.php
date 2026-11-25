@@ -96,14 +96,14 @@ enum SubjectStanding: string
     public function tileClasses(): string
     {
         return match ($this) {
-            self::Acreditada => 'border-success/40 bg-success/10 text-success',
-            self::Cursando => 'border-info/40 bg-info/10 text-info',
-            self::SinCalificar => 'border-dashed border-info bg-info/5 text-info',
-            self::ReprobadaPrioridad => 'border-warning/40 bg-warning/10 text-warning',
-            self::ACursoEspecial => 'border-2 border-warning bg-warning/10 text-warning',
-            self::CursoEspecialReprobado => 'border-error/40 bg-error/10 text-error',
-            self::PuedeSeleccionarla => 'border-2 border-primary bg-base-100 text-primary',
-            self::NoPermitida => 'border-dashed border-base-content/25 bg-base-200 text-neutral',
+            self::Acreditada => 'border-standing-acreditada-border bg-standing-acreditada text-standing-acreditada-content',
+            self::Cursando => 'border-standing-cursando-border bg-standing-cursando text-standing-cursando-content',
+            self::SinCalificar => 'border-dashed border-standing-sin-calificar-border bg-standing-sin-calificar text-standing-sin-calificar-content',
+            self::ReprobadaPrioridad => 'border-standing-reprobada-prioridad-border bg-standing-reprobada-prioridad text-standing-reprobada-prioridad-content',
+            self::ACursoEspecial => 'border-2 border-standing-a-curso-especial-border bg-standing-a-curso-especial text-standing-a-curso-especial-content',
+            self::CursoEspecialReprobado => 'border-standing-curso-especial-reprobado-border bg-standing-curso-especial-reprobado text-standing-curso-especial-reprobado-content',
+            self::PuedeSeleccionarla => 'border-2 border-standing-puede-seleccionarla-border bg-standing-puede-seleccionarla text-standing-puede-seleccionarla-content',
+            self::NoPermitida => 'border-dashed border-standing-no-permitida-border bg-standing-no-permitida text-standing-no-permitida-content',
         };
     }
 }
