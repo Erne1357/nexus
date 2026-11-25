@@ -47,4 +47,13 @@ final class UserPolicy
     {
         return $this->actor($user)->allows(CorePermission::UserInvite);
     }
+
+    /**
+     * CO-03: subir y quitar las fotos del personal (`core.staff_photo.manage`): la jefa y el personal de Comunicación y
+     * Difusión y el admin. Que la cuenta no sea de un alumno lo decide SetStaffPhoto.
+     */
+    public function managePhotos(User $user): bool
+    {
+        return $this->actor($user)->allows(CorePermission::StaffPhotoManage);
+    }
 }

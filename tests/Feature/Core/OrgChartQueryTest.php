@@ -209,7 +209,7 @@ it('detail trae la ruta, los puestos de la unidad, sus hijas y los motivos de bl
 
     expect($detail->unit->is($this->academic))->toBeTrue()
         ->and($detail->path)->toBe(['Dirección'])
-        ->and($detail->titular)->toEqual(['name' => 'Alejandro Rentería Cota', 'userId' => $alejandro->id, 'summary' => 'Subdirección Académica', 'from' => CarbonImmutable::parse('2025-09-01')])
+        ->and($detail->titular)->toEqual(['name' => 'Alejandro Rentería Cota', 'userId' => $alejandro->id, 'photo' => null, 'summary' => 'Subdirección Académica', 'from' => CarbonImmutable::parse('2025-09-01')])
         ->and($detail->titularNote)->toBeNull()
         ->and(array_column($detail->assignments, 'name'))->toBe(['Alejandro Rentería Cota', 'Berta Salas'])
         ->and(array_column($detail->assignments, 'userId'))->toBe([$alejandro->id, $berta->id])
