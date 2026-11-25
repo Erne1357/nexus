@@ -116,7 +116,7 @@ new #[Title('Materias')] class extends Component
         $spaceFilters = [...$spaces, ['id' => SubjectQuery::WITHOUT_SPACE, 'name' => 'Sin marcar']];
         $kinds = array_map(fn (SubjectKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], SubjectKind::cases());
         $kindFilters = [...$kinds, ['id' => SubjectQuery::WITHOUT_KIND, 'name' => 'Sin tipo']];
-        $this->forgetFiltersOutside($departments, $kindFilters);
+        $this->forgetFiltersOutside($departments, $kindFilters, $spaceFilters);
 
         return [
             'subjects' => $subjects->forTable(
@@ -299,8 +299,9 @@ new #[Title('Materias')] class extends Component
      *
      * @param  list<array{id: string, name: string}>  $departments
      * @param  list<array{id: string, name: string}>  $kinds
+     * @param  list<array{id: string, name: string}>  $spaces
      */
-    private function forgetFiltersOutside(array $departments, array $kinds): void
+    private function forgetFiltersOutside(array $departments, array $kinds, array $spaces): void
     {
         if ($this->departmentFilter !== '' && ! in_array($this->departmentFilter, array_column($departments, 'id'), true)) {
             $this->departmentFilter = '';
@@ -308,6 +309,10 @@ new #[Title('Materias')] class extends Component
 
         if ($this->kindFilter !== '' && ! in_array($this->kindFilter, array_column($kinds, 'id'), true)) {
             $this->kindFilter = '';
+        }
+
+        if ($this->spaceFilter !== '' && ! in_array($this->spaceFilter, array_column($spaces, 'id'), true)) {
+            $this->spaceFilter = '';
         }
     }
 

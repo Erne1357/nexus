@@ -43,8 +43,9 @@ it('SEL-17: el jefe ve solo las materias de su departamento y su control, sin al
         ->assertOk()
         ->assertSee('SCA-1001')
         ->assertDontSee('AEF-1002')
-        ->assertSee('Tipo de espacio')
+        ->assertSeeHtml('aria-label="Tipo de espacio de SCA-1001"')
         ->assertDontSeeHtml('wire:click="create"')
+        ->assertDontSeeHtml('aria-label="Editar SCA-1001"')
         ->assertDontSee('Editar SCA-1001');
 });
 
@@ -102,4 +103,43 @@ it('SEL-17: una materia sin marcar abre el drawer sin valor y guardar exige eleg
         ->assertHasErrors(['spaceChoice']);
 
     expect($this->redes->fresh()->required_space)->toBeNull();
+});
+
+it('SEL-17: el jefe que pone el filtro de otro departamento sigue sin ver sus materias', function () {
+    actingAsRole($this->jefeSis, Role::JefeDepartamento);
+
+    Livewire::test('academic::pages.subjects')
+        ->set('departmentFilter', $this->ele->id)
+        ->assertDontSee('AEF-1002')
+        ->assertSee('SCA-1001');
+});
+
+it('SEL-17: una página abierta por el admin no deja guardar al jefe de otro departamento', function () {
+    $admin = User::factory()->admin()->create();
+    $page = Livewire::actingAs($admin)->test('academic::pages.subjects')
+        ->call('editSpace', $this->redes->id)
+        ->set('spaceChoice', RequiredSpace::Laboratorio->value);
+
+    actingAsRole($this->jefeEle, Role::JefeDepartamento);
+    $page->call('saveSpace')->assertForbidden();
+
+    expect($this->redes->fresh()->required_space)->toBeNull();
+});
+
+it('SEL-17: un tipo de espacio que no existe falla la validación y no escribe', function () {
+    actingAsRole($this->jefeSis, Role::JefeDepartamento);
+
+    Livewire::test('academic::pages.subjects')
+        ->call('editSpace', $this->redes->id)
+        ->set('spaceChoice', 'x')
+        ->call('saveSpace')
+        ->assertHasErrors(['spaceChoice']);
+
+    expect($this->redes->fresh()->required_space)->toBeNull();
+});
+
+it('SEL-17: un filtro de tipo de espacio que no existe se olvida', function () {
+    actingAsRole($this->jefeSis, Role::JefeDepartamento);
+
+    Livewire::test('academic::pages.subjects')->set('spaceFilter', 'x')->assertSet('spaceFilter', '')->assertSee('SCA-1001');
 });
