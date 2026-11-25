@@ -42,7 +42,7 @@ final class PriorChoiceHoursQuery
 
         $hours = $this->groups->hoursByTeacher($selection, $entries->pluck('teacher_id')->all());
         $appended = $entries->where('source', SelectionEntrySource::Appended)->pluck('teacher_id')->all();
-        $nexusBase = $appended === [] ? [] : $this->baseHours->forTerm($term ?? ($selection->relationLoaded('term') ? $selection->term : null) ?? Term::query()->whereKey($selection->term_id)->firstOrFail(), $appended);
+        $nexusBase = $appended === [] ? [] : $this->baseHours->forTerm($this->termWithDates($selection, $term), $appended);
         $result = [];
 
         foreach ($entries as $entry) {
@@ -61,5 +61,23 @@ final class PriorChoiceHoursQuery
         }
 
         return $result;
+    }
+
+    /**
+     * El periodo con su fecha de inicio, que es la que mide la base de Nexus (TeacherBaseHoursQuery). El que trae quien
+     * llama o la relación ya cargada solo sirven si traen `starts_on`: la pantalla «Oferta» carga el periodo sin sus
+     * fechas (solo id, clave y nombre), así que en ese caso se busca completo.
+     */
+    private function termWithDates(Selection $selection, ?Term $term): Term
+    {
+        $loaded = $selection->relationLoaded('term') ? $selection->term : null;
+
+        foreach ([$term, $loaded] as $candidate) {
+            if ($candidate instanceof Term && $candidate->starts_on !== null) {
+                return $candidate;
+            }
+        }
+
+        return Term::query()->whereKey($selection->term_id)->firstOrFail();
     }
 }
