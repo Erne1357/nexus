@@ -43,7 +43,7 @@ final class LoginResponse implements LoginResponseContract
             'redirect' => $target->getTargetUrl(),
             'band' => $page !== null,
             'page' => $page,
-            'credential' => app(CredentialQuery::class)->of(app(Actor::class)),
+            'credential' => app(CredentialQuery::class)->of(app(Actor::class), withPhoto: true),
         ]);
     }
 }
