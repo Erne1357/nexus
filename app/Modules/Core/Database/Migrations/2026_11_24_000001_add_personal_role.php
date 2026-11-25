@@ -17,7 +17,10 @@ use Illuminate\Support\Facades\DB;
  *    puesto ya tiene su rol de fábrica, no lo toca.
  *
  * down() lo regresa a la forma anterior. Se detiene sin cambiar nada si ya hay nombramientos de personal de área,
- * porque el código anterior no conoce el puesto: hay que quitarlos antes.
+ * porque el código anterior no conoce el puesto: hay que quitarlos antes. Volver al release anterior sin regresar la
+ * migración (`nexus rollback`), como con el directivo, deja filas que ese código no lee: el rol de fábrica
+ * (`permission_sets.factory_role = 'personal'`, que PermissionSet convierte a Role) y, si ya hay, los nombramientos y
+ * `users.last_role` de `personal`.
  */
 return new class extends Migration
 {

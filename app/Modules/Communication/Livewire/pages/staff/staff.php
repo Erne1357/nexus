@@ -142,8 +142,14 @@ new #[Title('Personal')] class extends Component
         try {
             $appointRole->handle($person, $query->role(), null, $unit, null, CarbonImmutable::parse($this->from), $this->to === '' ? null : CarbonImmutable::parse($this->to));
         } catch (ValidationException $exception) {
+            // La fecha de fin va bajo «Hasta»; todo lo demás que diga AppointRole (la persona, el puesto, la unidad o lo que
+            // agregue después), bajo la persona, para que ningún error se quede sin mostrar.
             $errors = $exception->errors();
-            $toPerson = array_merge(...array_values(array_intersect_key($errors, array_flip(['user', 'role', 'unit']))));
+            $toPerson = array_merge(...array_values(array_diff_key($errors, ['to' => true])));
+
+            if ($toPerson === [] && ! isset($errors['to'])) {
+                $toPerson = [$exception->getMessage()];
+            }
 
             throw ValidationException::withMessages(array_filter([
                 'personId' => $toPerson === [] ? null : $toPerson,
