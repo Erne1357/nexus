@@ -5,20 +5,21 @@ namespace App\Modules\Scheduling\Console;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\ImportLoadProjection;
 use Illuminate\Console\Command;
 use RuntimeException;
 
 /**
- * Carga la proyección de carga de un departamento desde su xlsx (ImportLoadProjection, R-PRY-1). Con `--dry-run` calcula y
+ * Carga la proyección de carga de un departamento desde su xlsx o desde el csv de la «Relación de materias» (ImportLoadProjection, R-PRY-1). Con `--dry-run` calcula y
  * reporta sin escribir. Días por créditos: 5 = lunes a viernes, 4 = lunes a jueves y 1 = viernes; 6 = lunes a viernes con la sexta hora por acomodar a mano (confirmado); 2 y 3
  * son supuestos por confirmar (2 y 3: los primeros días; 6: lunes a viernes y la sexta hora el lunes).
  */
 final class ImportLoadProjectionCommand extends Command
 {
-    protected $signature = 'academic-load:import-projection {file : Ruta del xlsx (formato proyecto docente)} {--term=20271 : Clave del periodo} {--campus=C1 : Clave del campus} {--modality=PRES : Clave de la modalidad} {--dry-run : Calcula y reporta sin escribir}';
+    protected $signature = 'academic-load:import-projection {file : Ruta del xlsx (formato proyecto docente) o del csv de la «Relación de materias»} {--term=20271 : Clave del periodo} {--campus=C1 : Clave del campus} {--modality=PRES : Clave de la modalidad} {--user= : Username a nombre de quien se ponen los salones (por omisión, el usuario activo más antiguo)} {--dry-run : Calcula y reporta sin escribir}';
 
-    protected $description = 'Carga la proyección de carga de un departamento (grupos, cupos y horas) desde un xlsx';
+    protected $description = 'Carga la proyección de carga de un departamento (grupos, cupos y horas) desde un xlsx o el csv de la relación de materias';
 
     public function handle(ImportLoadProjection $import): int
     {
@@ -34,15 +35,27 @@ final class ImportLoadProjectionCommand extends Command
             }
         }
 
+        $actor = null;
+
+        if ((string) $this->option('user') !== '') {
+            $actor = User::query()->where('username', $this->option('user'))->first();
+
+            if ($actor === null) {
+                $this->error("No existe el usuario {$this->option('user')}.");
+
+                return self::FAILURE;
+            }
+        }
+
         try {
-            $report = $import->handle((string) $this->argument('file'), $term, $campus, $modality, (bool) $this->option('dry-run'));
+            $report = $import->handle((string) $this->argument('file'), $term, $campus, $modality, (bool) $this->option('dry-run'), $actor);
         } catch (RuntimeException $exception) {
             $this->error($exception->getMessage());
 
             return self::FAILURE;
         }
 
-        $this->info(($report['dry_run'] ? 'Simulacro, no se escribió nada. ' : '')."Filas leídas: {$report['rows']}. Grupos ".($report['dry_run'] ? 'por crear' : 'creados').": {$report['created']} ({$report['sessions']} sesiones).");
+        $this->info(($report['dry_run'] ? 'Simulacro, no se escribió nada. ' : '')."Filas leídas: {$report['rows']}. Grupos ".($report['dry_run'] ? 'por crear' : 'creados').": {$report['created']} ({$report['sessions']} sesiones). Ya existían: {$report['existing']}. Sin horario fijo: {$report['no_schedule']}. Salones ".($report['dry_run'] ? 'por poner' : 'puestos').': '.($report['dry_run'] ? $report['rooms_requested'] : $report['rooms_set']).'.');
 
         foreach ($report['per_department'] as $department => $count) {
             $this->line("  Departamento {$department}: {$count} grupos");
