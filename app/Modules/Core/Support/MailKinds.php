@@ -26,6 +26,7 @@ final class MailKinds
         'SelectionExtraRoundScheduled' => 'Ronda extra de selección',
         'SelectionFinishedWithPending' => 'Selección terminada con pendientes',
         'SelectionCancelled' => 'Selección cancelada',
+        'PriorChoiceHoursPending' => 'Confirmar horas de la elección previa',
     ];
 
     public static function knows(string $kind): bool
