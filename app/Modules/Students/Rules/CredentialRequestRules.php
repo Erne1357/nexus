@@ -67,10 +67,11 @@ final class CredentialRequestRules
             return null;
         }
 
-        $from = CarbonImmutable::parse($last)->addDays($days);
+        // Por día calendario de Ciudad Juárez: se puede pedir desde las 00:00 de ese día, no desde la hora de la entrega.
+        $from = CarbonImmutable::parse($last)->setTimezone(self::TIMEZONE)->startOfDay()->addDays($days);
 
         return $from->greaterThan($now)
-            ? 'Podrás pedirla desde el '.$from->setTimezone(self::TIMEZONE)->locale('es')->isoFormat('D [de] MMMM [de] YYYY').'.'
+            ? 'Podrás pedirla desde el '.$from->locale('es')->isoFormat('D [de] MMMM [de] YYYY').'.'
             : null;
     }
 }

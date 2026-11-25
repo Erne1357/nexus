@@ -39,3 +39,15 @@ test('CO-07: una abierta del mismo tipo bloquea ese tipo y no el otro', function
     expect(CredentialRequestRules::availability($student, CarbonImmutable::now()))
         ->toBe(['reposition' => 'Ya tienes una abierta.', 'photo' => null]);
 });
+
+test('CO-07: el plazo es por día calendario de Ciudad Juárez: se puede pedir desde las 00:00 del día, no desde la hora de la entrega', function () {
+    $student = Student::factory()->create();
+    credentialSetting('students.credential_reposition_days', 1);
+    $delivered = CarbonImmutable::parse('2027-03-01 15:00', 'America/Ciudad_Juarez');
+
+    CredentialRequest::factory()->for($student)->delivered($delivered)->create(['wants_reposition' => true, 'wants_photo' => false]);
+
+    expect(CredentialRequestRules::availability($student, CarbonImmutable::parse('2027-03-01 23:59', 'America/Ciudad_Juarez'))['reposition'])
+        ->toBe('Podrás pedirla desde el 2 de marzo de 2027.')
+        ->and(CredentialRequestRules::availability($student, CarbonImmutable::parse('2027-03-02 00:00', 'America/Ciudad_Juarez'))['reposition'])->toBeNull();
+});
