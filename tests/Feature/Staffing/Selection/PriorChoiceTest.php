@@ -199,7 +199,8 @@ it('SEL-16: si todos los de la cola son elección previa, la selección no tiene
         ->status->toBe(SelectionStatus::Finished)
         ->published_at->not->toBeNull()
         ->finished_at->not->toBeNull()
-        ->and($world->entryOf($previo))->closed_at->not->toBeNull()
+        ->and($world->entryOf($previo))->closed_at->not->toBeNull()->closed_hours->toBe(5)
+        ->and(TeacherHourAllowance::query()->where('teacher_id', $previo->id)->sole())->hours->toBe(5)->reason->toContain('Elección previa')
         ->and($world->load->fresh()->status)->toBe(LoadStatus::Staffing)
         ->and(app(SelectionGroupsQuery::class)->liveSelectionFor($world->load->fresh()))->toBeNull()
         ->and(app(SelectionGroupsQuery::class)->finishedSelectionFor($world->load->fresh())?->getKey())->toBe($world->selection->getKey());
@@ -264,4 +265,17 @@ it('SEL-16: la lista de la orden los marca aparte, sin turno ni empate, con las 
         ->tie->toBeFalse()
         ->in_turn->toBeFalse()
         ->and($rows['Docente Espera'])->prior->toBeFalse()->tie->toBeFalse();
+});
+
+it('SEL-16: una selección en borrador sin CSV con elección previa sigue bloqueada para publicar (la cola recalculada no sustituye al CSV)', function () {
+    $world = priorWorld();
+    $world->selection->entries()->delete();
+    $world->selection->update(['starts_at' => CarbonImmutable::now()->addDays(3)->setTime(9, 0), 'window_starts' => '09:00', 'window_ends' => '15:00', 'weekdays' => [1, 2, 3, 4, 5], 'slot_minutes' => 30]);
+    $previo = $world->teacher(name: 'Docente Previo', entry: ['source' => SelectionEntrySource::Appended]);
+    $world->selection->entries()->delete();
+    markPrior($world, $previo, [$world->group('A', [[1, '09:00', '10:00']])]);
+
+    expect($world->selection->entries()->where('source', SelectionEntrySource::Csv)->exists())->toBeFalse()
+        ->and($world->selection->entries()->exists())->toBeTrue()
+        ->and(fn () => app(PublishSelection::class)->handle($world->selection->fresh(), $world->admin))->toThrow(ValidationException::class, 'CSV');
 });

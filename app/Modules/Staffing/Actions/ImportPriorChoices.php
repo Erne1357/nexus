@@ -22,6 +22,7 @@ use App\Modules\Scheduling\Support\LoadRelationSheet;
 use App\Modules\Scheduling\Support\SubjectResolver;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Staffing\Rules\TeacherNameMatcher;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -35,8 +36,8 @@ use RuntimeException;
  *   docentes activos adscritos al departamento de la materia; sin coincidencia exacta o con más de una, el renglón es un error.
  * - **Grupo:** del periodo, la modalidad y el campus, no cancelado. Con horario fijo, por la llave de 1.40: materia, plan,
  *   semestre (el del renglón o el de la materia en el plan) y minuto de inicio del rango; la letra del archivo no cuenta
- *   (la de Nexus sale de la hora). Sin horario fijo (D3) es un grupo sin sesiones: primero uno que ya sea del docente y no se
- *   haya usado en la corrida; si no, el k-ésimo grupo sin sesiones, con k = el lugar del renglón entre TODOS los renglones
+ *   (la de Nexus sale de la hora). Sin horario fijo (D3) es un grupo sin sesiones: primero uno propio (sin sesiones y, si no, con ellas) no
+ *   usado en la corrida; si no, el k-ésimo grupo sin sesiones, con k = el lugar del renglón entre TODOS los renglones
  *   sin horario fijo de su materia, plan y semestre (con o sin maestro, sin los que 1.40 omite).
  * - **Todo o nada por docente** (el docente es el nombre del renglón, aunque no empate): si algún renglón suyo es un error, no se registra su elección previa (quedaría a
  *   medias y el docente saldría de la orden sin tener todos sus grupos); los demás docentes siguen. Un docente cuyo registro
@@ -205,11 +206,23 @@ final class ImportPriorChoices
             $report['recorded']++;
             $report['groups_assigned'] += $new;
         } catch (ValidationException $exception) {
-            $message = collect($exception->errors())->flatten()->first();
+            $this->fail($report, $item, (string) collect($exception->errors())->flatten()->first());
+        } catch (QueryException $exception) {
+            // Un error de base (deadlock, restricción) de un docente no detiene a los demás: se reporta y sigue. Con la
+            // transacción externa de --dry-run, la de RecordPriorChoice es un savepoint que ya se deshizo.
+            report($exception);
+            $this->fail($report, $item, 'La base de datos rechazó el registro; vuelve a correr el comando.');
+        }
+    }
 
-            foreach ($item['rows'] as $line) {
-                $report['errors'][] = ['row' => $line, 'message' => "{$item['name']}: {$message}"];
-            }
+    /**
+     * @param  array{name: string, rows: list<int>}  $item
+     * @param  array<string, mixed>  $report
+     */
+    private function fail(array &$report, array $item, string $message): void
+    {
+        foreach ($item['rows'] as $line) {
+            $report['errors'][] = ['row' => $line, 'message' => "{$item['name']}: {$message}"];
         }
     }
 
@@ -361,7 +374,10 @@ final class ImportPriorChoices
         }
 
         $sessionless = (clone $base)->whereDoesntHave('sessions')->orderBy('created_at')->orderBy('id');
-        $own = $teacherId === null ? null : (clone $sessionless)->where('teacher_id', $teacherId)->whereNotIn('id', array_keys($used))->first();
+        // Un grupo propio de la materia, plan y semestre, sin sesiones primero, y si no con ellas (ya se programó), que no se
+        // haya usado en la corrida: así una re-corrida tras programar un GL no pide otro grupo.
+        $own = $teacherId === null ? null : ((clone $sessionless)->where('teacher_id', $teacherId)->whereNotIn('id', array_keys($used))->first()
+            ?? (clone $base)->where('teacher_id', $teacherId)->whereNotIn('id', array_keys($used))->orderBy('created_at')->orderBy('id')->first());
 
         if ($own !== null) {
             return $own;

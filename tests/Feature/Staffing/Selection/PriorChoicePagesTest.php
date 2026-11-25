@@ -79,3 +79,30 @@ it('alcance: otro departamento no ve la lista de la orden ni el monitor de esta 
 
     Livewire::actingAs($stranger->user)->test('staffing::pages.selection-admin', ['seleccion' => $this->world->selection->id])->assertForbidden();
 });
+
+it('SEL-16: el paso 2 sigue pidiendo el CSV aunque la cola ya tenga renglones agregados por la elección previa', function () {
+    $this->world->selection->update(['status' => SelectionStatus::Draft]);
+    $this->world->selection->entries()->where('source', '!=', 'appended')->delete();
+    $this->world->selection->entries()->update(['source' => 'appended']);
+
+    Livewire::actingAs($this->world->admin)->test('staffing::pages.selection-admin', ['seleccion' => $this->world->selection->id])
+        ->set('step', 2)
+        ->assertSee('Sube el CSV de criterios');
+});
+
+it('SEL-16: el paso 5 no pide fecha de inicio cuando todos los renglones son elección previa, y sí si hay alguien con turno', function () {
+    $this->world->selection->update(['status' => SelectionStatus::Draft, 'starts_at' => null]);
+    $blockers = function (): array {
+        $page = Livewire::actingAs($this->world->admin)->test('staffing::pages.selection-admin', ['seleccion' => $this->world->selection->id])->instance();
+        $method = new ReflectionMethod($page, 'blockers');
+
+        return $method->invoke($page, $this->world->selection->fresh(), 5);
+    };
+
+    // Hay alguien con turno (Docente Espera): se pide la fecha.
+    expect($blockers())->toBe(['Elige cuándo empieza.']);
+
+    $this->world->entryOf($this->espera)->update(['status' => SelectionEntryStatus::Done, 'prior_choice_at' => now()]);
+
+    expect($blockers())->toBe([]);
+});

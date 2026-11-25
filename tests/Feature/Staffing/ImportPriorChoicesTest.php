@@ -257,8 +257,9 @@ it('D3: con [GL sin maestro, GL de Luna] Luna recibe el segundo grupo sin horari
     GroupSession::factory()->for($segundo)->on(1, '09:00', '10:00')->create();
     $again = app(ImportPriorChoices::class)->handle(priorRelation($lines), $this->term, $this->campus, $this->pres, $this->actor);
 
-    expect(Group::query()->where('teacher_id', $this->luna->id)->pluck('id')->all())->toBe([$segundo->id])
-        ->and($again['groups_assigned'])->toBe(0)
+    expect($again['errors'])->toBe([])
+        ->and($again)->toMatchArray(['recorded' => 1, 'groups_assigned' => 0])
+        ->and(Group::query()->where('teacher_id', $this->luna->id)->pluck('id')->all())->toBe([$segundo->id])
         ->and(Group::query()->where('subject_id', $this->redes->id)->whereNull('teacher_id')->count())->toBe(1);
 });
 
@@ -305,7 +306,7 @@ it('1.40: dos grupos de la misma materia, plan, semestre y hora son ambiguos y e
 });
 
 it('--dry-run va en una sola transacción: el mismo grupo en dos docentes reporta el choque y no escribe ni deja bitácora', function () {
-    $gomez = Teacher::factory()->adscribedTo($this->department)->create(['name' => 'Gomez Beto']);
+    Teacher::factory()->adscribedTo($this->department)->create(['name' => 'Gomez Beto']);
     // Un solo grupo (la carga se arma con un renglón sin maestro) y dos renglones de docentes distintos que lo piden.
     app(ImportLoadProjection::class)->handle(priorRelation([priorLine('', 'AID-2501', 'C', '9 - 10')]), $this->term, $this->campus, $this->pres, false, $this->actor);
     $path = priorRelation([
@@ -320,6 +321,15 @@ it('--dry-run va en una sola transacción: el mismo grupo en dos docentes report
         ->and(collect($report['errors'])->pluck('message')->join(' '))->toContain('otro docente')
         ->and(Activity::query()->count())->toBe($logs)
         ->and(PriorChoice::query()->count())->toBe(0)
-        ->and(Group::query()->whereNotNull('teacher_id')->count())->toBe(0)
-        ->and($gomez->fresh()->id)->toBe($gomez->id);
+        ->and(Group::query()->whereNotNull('teacher_id')->count())->toBe(0);
+});
+
+it('1.40: un renglón con horario sin grupo a ese minuto de inicio es un error del renglón y no registra al docente', function () {
+    app(ImportLoadProjection::class)->handle(priorRelation([priorLine('', 'AID-2501', 'C', '9 - 10')]), $this->term, $this->campus, $this->pres, false, $this->actor);
+
+    $report = app(ImportPriorChoices::class)->handle(priorRelation([priorLine('LUNA ANA', 'AID-2501', 'E', '11 - 12')]), $this->term, $this->campus, $this->pres, $this->actor);
+
+    expect($report['recorded'])->toBe(0)
+        ->and(collect($report['errors'])->pluck('message')->join(' '))->toContain('No hay un grupo de AID-2501')->toContain('11:00')
+        ->and(PriorChoice::query()->count())->toBe(0);
 });

@@ -170,8 +170,8 @@ final class PublishSelection
             $reasons[] = 'La fecha de inicio debe estar en el futuro.';
         }
 
-        if (! $selection->entries()->exists()) {
-            $reasons[] = 'La cola no tiene docentes: importa el CSV.';
+        if (! $selection->entries()->where('source', SelectionEntrySource::Csv)->exists()) {
+            $reasons[] = 'La cola no tiene renglones del CSV: importa el CSV de criterios.';
         }
 
         $unresolved = $selection->entries()->whereNull('teacher_id')->count();

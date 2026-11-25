@@ -29,10 +29,13 @@ trait LocksDraftSelections
             return collect();
         }
 
+        // Candado de TODAS las selecciones no canceladas del periodo y la modalidad, en orden de id, y después se filtra por
+        // departamento ya bajo el candado: así no se decide con una lectura sin proteger. Orden: candado consultivo, filas
+        // de selección, docente, carga (FOR SHARE) y grupo. PublishSelection toma el mismo candado consultivo primero,
+        // así que las dos Actions se serializan en la selección y no cruzan sus bloqueos de carga y docente.
         $ids = Selection::query()
             ->where('term_id', $term->getKey())->where('modality_id', $modality->getKey())
             ->where('status', '!=', SelectionStatus::Cancelled->value)
-            ->when($departments !== null, fn ($query) => $query->whereHas('loads', fn ($loads) => $loads->whereIn('academic_loads.department_id', $departments)))
             ->orderBy('id')
             ->pluck('id');
 
@@ -40,7 +43,9 @@ trait LocksDraftSelections
             DB::select('select pg_advisory_xact_lock(hashtext(?))', ["staffing_selection:{$id}"]);
         }
 
-        $selections = Selection::query()->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get();
+        $selections = Selection::query()->whereIn('id', $ids)
+            ->when($departments !== null, fn ($query) => $query->whereHas('loads', fn ($loads) => $loads->whereIn('academic_loads.department_id', $departments)))
+            ->orderBy('id')->lockForUpdate()->get();
         $notDraft = $selections->first(fn (Selection $selection): bool => $selection->status !== SelectionStatus::Draft);
 
         if ($notDraft !== null) {

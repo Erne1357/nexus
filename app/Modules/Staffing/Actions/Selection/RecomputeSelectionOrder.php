@@ -61,8 +61,8 @@ final class RecomputeSelectionOrder
 
     /**
      * Los docentes con elección previa que aplica a esta selección (SEL-16): la marca es del periodo y la modalidad y
-     * sus departamentos incluyen alguno de las cargas de la selección (una marca sin departamentos, de antes de
-     * guardarlos, aplica siempre). Un docente adscrito a dos departamentos conserva su turno en la selección del otro.
+     * sus departamentos (los de sus grupos) incluyen alguno de las cargas de la selección, también como carga de apoyo.
+     * Un docente cuyos grupos previos son de un solo departamento conserva su turno en la selección de otro.
      *
      * @return list<string>
      */
@@ -74,8 +74,9 @@ final class RecomputeSelectionOrder
             ->where('term_id', $selection->term_id)
             ->where('modality_id', $selection->modality_id)
             ->get(['teacher_id', 'department_ids'])
-            ->filter(fn (PriorChoice $mark): bool => $mark->department_ids === null || array_intersect($mark->department_ids, $departments) !== [])
+            ->filter(fn (PriorChoice $mark): bool => array_intersect($mark->department_ids ?? [], $departments) !== [])
             ->pluck('teacher_id')
+            ->values()
             ->all();
     }
 

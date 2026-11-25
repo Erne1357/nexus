@@ -77,6 +77,9 @@ final class RecordPriorChoice
             $assigned = [];
             $departments = [];
 
+            // En orden de id, para que dos corridas con los mismos grupos no se crucen al bloquearlos.
+            usort($groups, fn (array $a, array $b): int => strcmp((string) $a['group']->getKey(), (string) $b['group']->getKey()));
+
             foreach ($groups as $item) {
                 $group = $item['group'];
                 $load = $this->editability->lockLoad($group);
