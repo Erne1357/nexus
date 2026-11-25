@@ -138,7 +138,7 @@ new #[Title('Materias')] class extends Component
             'kinds' => $kinds,
             'kindFilters' => $kindFilters,
             'statuses' => [['id' => 'active', 'name' => 'Activas'], ['id' => 'inactive', 'name' => 'Inactivas']],
-            // El tipo y el laboratorio son las columnas descriptivas: se ocultan debajo de 1200 px.
+            // El tipo, el laboratorio y el espacio son las columnas descriptivas: se ocultan debajo de 1536 px (el espacio sigue a la vista bajo el nombre).
             'headers' => [
                 ['key' => 'code', 'label' => 'Clave'],
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
@@ -146,7 +146,7 @@ new #[Title('Materias')] class extends Component
                 ['key' => 'hours', 'label' => 'HT-HP-Créditos', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'kind', 'label' => 'Tipo', 'class' => 'max-[1535px]:hidden'],
                 ['key' => 'needs_lab', 'label' => 'Laboratorio', 'class' => 'max-[1535px]:hidden'],
-                ['key' => 'required_space', 'label' => 'Tipo de espacio', 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'required_space', 'label' => 'Espacio', 'class' => 'max-[1535px]:hidden'],
                 ['key' => 'study_plans_count', 'label' => 'Planes', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'is_active', 'label' => 'Estado'],
             ],
