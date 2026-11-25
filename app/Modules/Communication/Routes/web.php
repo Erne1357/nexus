@@ -9,4 +9,5 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->prefix('comunicacion')->name('communication.')->group(function () {
     Route::livewire('/personal', 'communication::pages.staff')->name('staff');
+    Route::livewire('/fotos-personal', 'communication::pages.staff-photos')->name('staff-photos');
 });
