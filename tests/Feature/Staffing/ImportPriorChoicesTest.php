@@ -76,6 +76,29 @@ it('SEL-16: asigna sus grupos al maestro, deja su elección previa y llena el ti
         ->and($this->redes->fresh()->required_space)->toBe(RequiredSpace::Laboratorio);
 });
 
+it('empata «APELLIDOS NOMBRES» de la relación con «Nombres Apellidos» de Nexus, sin importar acentos ni orden', function () {
+    $maria = Teacher::factory()->adscribedTo($this->department)->create(['name' => 'Ana María Luna Pérez']);
+
+    $report = ($this->run)([priorLine('LUNA PEREZ ANA MARIA', 'AID-2501', 'C', '9 - 10')]);
+
+    expect($report['errors'])->toBe([])
+        ->and(Group::query()->where('subject_id', $this->prog->id)->sole()->teacher_id)->toBe($maria->id);
+});
+
+it('dos docentes con las mismas palabras son ambiguos y un nombre con una palabra distinta no empata', function () {
+    Teacher::factory()->adscribedTo($this->department)->count(2)->sequence(['name' => 'Ana María Luna Pérez'], ['name' => 'Pérez Luna Ana María'])->create();
+
+    $report = ($this->run)([
+        priorLine('LUNA PEREZ ANA MARIA', 'AID-2501', 'C', '9 - 10'),
+        priorLine('LUNA PEREZ ANA', 'XYZ-9999', 'D', '10 - 11', 'SALON', 4),
+    ]);
+    $messages = collect($report['errors'])->pluck('message', 'row');
+
+    expect($report['recorded'])->toBe(0)
+        ->and($messages[3])->toContain('más de un docente')
+        ->and($messages[4])->toContain('No hay un docente');
+});
+
 it('es idempotente: repetir no duplica asignaciones, marcas ni bitácora', function () {
     $lines = [priorLine('LUNA ANA', 'AID-2501', 'C', '9 - 10')];
     ($this->run)($lines);

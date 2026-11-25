@@ -17,6 +17,7 @@ use App\Modules\Scheduling\Support\LoadRelationRow;
 use App\Modules\Scheduling\Support\LoadRelationSheet;
 use App\Modules\Scheduling\Support\SubjectResolver;
 use App\Modules\Staffing\Rules\TeacherNameMatcher;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -25,8 +26,8 @@ use RuntimeException;
  * Carga las elecciones previas (SEL-16, tarea 1.41) de la «Relación de materias» (LoadRelationSheet, 1.40): por cada
  * renglón con MAESTRO busca al docente y su grupo, y por docente llama a RecordPriorChoice con todos sus grupos.
  *
- * - **Docente:** TeacherNameMatcher entre los docentes activos adscritos al departamento de la materia; sin coincidencia o
- *   con más de una, el renglón es un error.
+ * - **Docente:** mismo conjunto de palabras normalizadas (la relación escribe «APELLIDOS NOMBRES», Nexus «Nombres Apellidos») entre los
+ *   docentes activos adscritos al departamento de la materia; sin coincidencia exacta o con más de una, el renglón es un error.
  * - **Grupo:** del periodo, la modalidad y el campus, de la materia y el plan del renglón, no cancelado, cuyo código es la
  *   letra del renglón. Sin horario fijo (D3) es un grupo sin sesiones de esa materia y plan: el k-ésimo renglón así de la
  *   materia y el plan es el k-ésimo grupo sin sesiones, en el orden en que se crearon (el de la carga de 1.40).
@@ -95,14 +96,14 @@ final class ImportPriorChoices
                     ->where('is_active', true)
                     ->whereHas('adscriptions', fn ($query) => $query->where('department_id', $subject['department_id']))
                     ->get(['id', 'name']);
-                $match = TeacherNameMatcher::match($row->teacherName, $pool);
+                $candidates = $this->candidates($row->teacherName, $pool);
 
-                if ($match['teacher_id'] === null) {
-                    $problem = $match['candidates'] === []
+                if (count($candidates) !== 1) {
+                    $problem = $candidates === []
                         ? "No hay un docente activo del departamento de la materia que se llame «{$row->teacherName}»."
-                        : "«{$row->teacherName}» coincide con más de un docente del departamento ({$pool->whereIn('id', $match['candidates'])->count()}): resuélvelo a mano.";
+                        : "«{$row->teacherName}» coincide con más de un docente del departamento (".count($candidates).'): resuélvelo a mano.';
                 } else {
-                    $teacher = $match['teacher_id'];
+                    $teacher = $candidates[0];
                 }
             }
 
@@ -189,6 +190,22 @@ final class ImportPriorChoices
                 DB::rollBack();
             }
         }
+    }
+
+    /**
+     * Los docentes del grupo cuyo nombre tiene el mismo conjunto de palabras que el del renglón: la relación escribe
+     * «APELLIDOS NOMBRES» y Nexus «Nombres Apellidos», así que no se compara el orden. Sin acentos, en mayúsculas y con los
+     * espacios colapsados. No adivina: sin el mismo conjunto exacto no hay candidato.
+     *
+     * @param  Collection<int, Teacher>  $pool
+     * @return list<string>
+     */
+    private function candidates(string $name, $pool): array
+    {
+        $tokens = fn (string $text): array => collect(explode(' ', TeacherNameMatcher::normalize($text)))->filter()->unique()->sort()->values()->all();
+        $target = $tokens($name);
+
+        return $target === [] ? [] : $pool->filter(fn (Teacher $teacher): bool => $tokens($teacher->name) === $target)->pluck('id')->values()->all();
     }
 
     /**
