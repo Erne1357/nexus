@@ -4,6 +4,7 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Staffing\Actions\Selection\ConfirmPriorChoiceHours;
 use App\Modules\Staffing\Actions\Selection\FinishMyLoad;
 use App\Modules\Staffing\Enums\RankingMark;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
@@ -12,6 +13,7 @@ use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
+use App\Modules\Staffing\Queries\PriorChoiceHoursQuery;
 use App\Modules\Staffing\Queries\SelectionOrderQuery;
 use App\Modules\Staffing\Queries\SelectionTimetableQuery;
 use App\Modules\Staffing\Queries\TeacherOfferQuery;
@@ -105,6 +107,9 @@ new #[Title('Oferta del departamento')] class extends Component
     public bool $showFinish = false;
 
     public bool $acknowledged = false;
+
+    /** La casilla de «Confirmar» de la elección previa con horas de más (SEL-16 ampliada, 1.45). */
+    public bool $priorAcknowledged = false;
 
     /** La selección de esta petición, para no buscarla dos veces (no viaja al navegador). */
     private ?Selection $selectionMemo = null;
@@ -205,6 +210,35 @@ new #[Title('Oferta del departamento')] class extends Component
         $this->success('Confirmaste tu carga', "{$entry->closed_hours} h. Tus grupos quedan a tu nombre.");
     }
 
+    /**
+     * SEL-16 ampliada (1.45): el docente con elección previa arriba de la banda de su base confirma con la casilla; no
+     * toma ni suelta nada.
+     */
+    public function confirmPrior(Actor $context, SelectionTimetableQuery $timetable, ConfirmPriorChoiceHours $action): void
+    {
+        $user = $context->user() ?? abort(403);
+        $selection = $this->selection($context, $timetable) ?? abort(404);
+        $this->authorize('pickOwn', $selection);
+        $teacher = $this->teacherMemo ?? abort(403);
+        $this->resetValidation();
+
+        try {
+            $entry = $action->handle($selection, $teacher, $this->priorAcknowledged, $user);
+        } catch (ValidationException $e) {
+            foreach ($e->errors() as $key => $messages) {
+                $this->addError($key, $messages[0]);
+            }
+
+            $this->error('No se confirmaron tus horas', e(collect($e->errors())->flatten()->first()));
+
+            return;
+        }
+
+        $this->priorAcknowledged = false;
+        $this->entryMemo = $entry;
+        $this->success('Confirmaste tus horas', "{$entry->closed_hours} h de tu elección previa quedan justificadas.");
+    }
+
     public function open(string $id): void
     {
         $this->groupId = $id;
@@ -216,12 +250,12 @@ new #[Title('Oferta del departamento')] class extends Component
         $this->reset('search', 'semester', 'state');
     }
 
-    public function with(Actor $context, TeacherOfferQuery $query, SelectionTimetableQuery $timetable, SelectionOrderQuery $order): array
+    public function with(Actor $context, TeacherOfferQuery $query, SelectionTimetableQuery $timetable, SelectionOrderQuery $order, PriorChoiceHoursQuery $priorHours): array
     {
         $selection = $this->selection($context, $timetable);
 
         if ($selection !== null) {
-            return $this->selectionView($selection, $timetable, $order, $context);
+            return $this->selectionView($selection, $timetable, $order, $context, $priorHours);
         }
 
         $user = $context->user();
@@ -313,7 +347,7 @@ new #[Title('Oferta del departamento')] class extends Component
      *
      * @return array<string, mixed>
      */
-    private function selectionView(Selection $selection, SelectionTimetableQuery $timetable, SelectionOrderQuery $order, Actor $context): array
+    private function selectionView(Selection $selection, SelectionTimetableQuery $timetable, SelectionOrderQuery $order, Actor $context, PriorChoiceHoursQuery $priorHours): array
     {
         $now = CarbonImmutable::now();
         // Ya terminada, quien la ve como jefatura (el jefe o el JPD que también está en la cola) la ve como jefatura y no
@@ -354,6 +388,7 @@ new #[Title('Oferta del departamento')] class extends Component
             'assigns' => collect($strips)->flatMap(fn (array $strip): array => $strip['visible'])->contains('can_assign', true),
             'bar' => $this->turnBar($selection, $entry !== null, $turn, $data, $now),
             'band' => $entry === null ? null : LoadBand::classify($data['my_hours'], $data['base_hours']),
+            'prior' => $entry?->isPriorChoice() ? ($priorHours->forSelection($selection, collect([$entry]))[$entry->getKey()] ?? null) : null,
             'order' => $this->showOrder ? $order->forSelection($selection, $now) : [],
         ];
     }

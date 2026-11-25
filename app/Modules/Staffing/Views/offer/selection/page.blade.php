@@ -35,6 +35,8 @@
 
     @include('staffing::offer.selection.turn-bar')
 
+    @include('staffing::offer.selection.prior-confirm')
+
     <div class="flex flex-wrap items-center gap-3" role="search" aria-label="Filtrar el horario">
         <div class="w-full md:w-64">
             <x-input wire:model.live.debounce.300ms="search" icon="o-magnifying-glass" placeholder="Materia o clave" aria-label="Buscar por materia o clave" clearable data-testid="selection-search" />

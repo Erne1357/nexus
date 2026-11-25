@@ -113,7 +113,7 @@
                                                 <span class="text-neutral">—</span>
                                             @endif
                                         </td>
-                                        <td>@include('staffing::offer.selection.status', ['status' => $row['status'], 'inTurn' => $row['in_turn']])</td>
+                                        <td>@include('staffing::offer.selection.status', ['status' => $row['status'], 'inTurn' => $row['in_turn'], 'confirmation' => $row['confirmation']])</td>
                                     </tr>
                                 @endforeach
                             @endforeach
@@ -128,7 +128,7 @@
                             <p class="flex items-center gap-2">
                                 <span class="w-6 font-mono text-neutral">{{ $row['prior'] ? '—' : $row['position'] }}</span>
                                 <b class="min-w-0 flex-1">{{ $row['name'] }}@if ($me) <span class="badge badge-info badge-sm ms-1">tú</span>@endif</b>
-                                @include('staffing::offer.selection.status', ['status' => $row['status'], 'inTurn' => $row['in_turn']])
+                                @include('staffing::offer.selection.status', ['status' => $row['status'], 'inTurn' => $row['in_turn'], 'confirmation' => $row['confirmation']])
                             </p>
                             <p class="ps-8 text-[12.5px] text-neutral">
                                 @if ($row['prior'])
