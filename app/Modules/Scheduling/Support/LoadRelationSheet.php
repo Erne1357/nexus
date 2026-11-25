@@ -166,10 +166,17 @@ final class LoadRelationSheet
         return preg_match('/^\d+$/', $text) === 1 ? (int) $text : null;
     }
 
+    /**
+     * Valores que entiende la columna «LABORATORIO / SALÓN», en mayúsculas y sin acentos. En las relaciones de Sistemas
+     * «LABORATORIO» es la sala de cómputo y «SALÓN» el aula; el laboratorio de verdad se escribe «LABORATORIO DE REDES»
+     * (usuario, 25 de noviembre de 2026). Qué tipo de espacio da cada valor lo decide quien lo usa (Staffing, 1.41).
+     */
+    public const array SPACES = ['LABORATORIO', 'SALON', 'AULA', 'SALA DE COMPUTO', 'LABORATORIO DE REDES'];
+
     private static function space(string $text): ?string
     {
         $text = self::normalize($text);
 
-        return in_array($text, ['LABORATORIO', 'SALON'], true) ? $text : null;
+        return in_array($text, self::SPACES, true) ? $text : null;
     }
 }
