@@ -55,7 +55,9 @@ return [
         'student_photos' => [
             'driver' => 'local',
             'root' => env('STUDENT_PHOTOS_PATH', storage_path('app/fotos')),
-            // Nexus solo lee (en el servidor es un montaje de solo lectura): no crea la carpeta; si no existe, no hay fotos.
+            // Nexus lee y, desde la tarea 1.37, también escribe (CO-06): el directorio ya existe con dueño uid 1000 y no se
+            // crea aquí; si no existe, no hay fotos. Un fallo de escritura no lanza aquí: StudentPhotos revisa cada resultado
+            // y lanza PhotoNotSaved, para que una lectura de una carpeta ausente siga siendo «sin foto».
             'lazy_root_creation' => true,
             'throw' => false,
             'report' => false,

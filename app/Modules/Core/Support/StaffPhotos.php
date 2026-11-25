@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Support;
 
 use App\Modules\Core\Exceptions\InvalidPhoto;
+use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Models\User;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
@@ -25,6 +26,7 @@ final class StaffPhotos
      * Normaliza `$sourcePath` y guarda la normal, la miniatura y el original; devuelve la ruta de la normal.
      *
      * @throws InvalidPhoto
+     * @throws PhotoNotSaved si el disco no deja escribir alguno de los tres archivos (no queda ninguno)
      */
     public function store(User $user, string $sourcePath, string $extension): string
     {
@@ -37,9 +39,19 @@ final class StaffPhotos
         }
 
         $base = substr($path, 0, -4);
-        $this->disk()->put($path, $photos['normal']);
-        $this->disk()->put("{$base}-mini.jpg", $photos['thumb']);
-        $this->disk()->put("{$base}-original.{$extension}", (string) file_get_contents($sourcePath));
+        $files = [
+            $path => $photos['normal'],
+            "{$base}-mini.jpg" => $photos['thumb'],
+            "{$base}-original.{$extension}" => (string) file_get_contents($sourcePath),
+        ];
+
+        foreach ($files as $target => $bytes) {
+            if (! $this->disk()->put($target, $bytes)) {
+                $this->disk()->delete(array_keys($files));
+
+                throw new PhotoNotSaved($target);
+            }
+        }
 
         return $path;
     }

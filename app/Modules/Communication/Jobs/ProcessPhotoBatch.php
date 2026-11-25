@@ -7,6 +7,7 @@ use App\Modules\Communication\Enums\PhotoBatchStatus;
 use App\Modules\Communication\Enums\PhotoOutcome;
 use App\Modules\Communication\Models\PhotoBatch;
 use App\Modules\Core\Actions\SetStaffPhoto;
+use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Rules\UserAccountRules;
 use App\Modules\Core\Support\PhotoNormalizer;
@@ -179,7 +180,9 @@ final class ProcessPhotoBatch implements ShouldQueue
             chmod($temporary, 0600);
             $setStaffPhoto->handle($person, $temporary, $uploader);
         } catch (ValidationException $e) {
-            return $row(PhotoOutcome::FormatoInvalido, collect($e->errors())->flatten()->first());
+            $message = (string) collect($e->errors())->flatten()->first();
+
+            return $row($message === PhotoNotSaved::MESSAGE ? PhotoOutcome::NoGuardada : PhotoOutcome::FormatoInvalido, $message);
         } finally {
             @unlink($temporary);
         }
@@ -222,7 +225,9 @@ final class ProcessPhotoBatch implements ShouldQueue
             chmod($temporary, 0600);
             $setStudentPhoto->handle($student, $temporary, $uploader);
         } catch (ValidationException $e) {
-            return $row(PhotoOutcome::FormatoInvalido, collect($e->errors())->flatten()->first());
+            $message = (string) collect($e->errors())->flatten()->first();
+
+            return $row($message === PhotoNotSaved::MESSAGE ? PhotoOutcome::NoGuardada : PhotoOutcome::FormatoInvalido, $message);
         } finally {
             @unlink($temporary);
         }

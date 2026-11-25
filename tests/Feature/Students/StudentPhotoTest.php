@@ -10,10 +10,13 @@ use App\Modules\Communication\Enums\PhotoOutcome;
 use App\Modules\Communication\Jobs\ProcessPhotoBatch;
 use App\Modules\Communication\Models\PhotoBatch;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Students\Actions\SetStudentPhoto;
+use App\Modules\Students\Enums\CredentialRequestStatus;
 use App\Modules\Students\Events\StudentPhotoChanged;
+use App\Modules\Students\Models\CredentialRequest;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Support\StudentPhotos;
 use App\Modules\Students\Support\StudentPhotoUrl;
@@ -21,6 +24,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | Fotos de los alumnos (CO-06, C1): guardar una foto mueve la anterior a `_anteriores` sin borrarla, el lote en ZIP
@@ -220,4 +224,50 @@ it('CO-06: un número de control sin año legible, aunque exista, queda sin pers
     app()->call([new ProcessPhotoBatch($batch->id), 'handle']);
 
     expect(collect($batch->fresh()->report)->pluck('outcome', 'file')->all())->toBe(['XYZ.jpg' => PhotoOutcome::SinPersona->value]);
+});
+
+it('CO-06: si el disco no deja escribir, no hay bitácora ni evento, la foto vigente sigue y la solicitud no se marca', function (array $failing) {
+    Storage::disk('student_photos')->put('2021/21111182.jpg', 'foto-vieja');
+    $request = CredentialRequest::factory()->create(['student_id' => $this->student->id, 'wants_photo' => true, 'status' => CredentialRequestStatus::Solicitada, 'photo_updated_at' => null]);
+    failingDisk('student_photos', $failing);
+    $before = Activity::query()->count();
+    Event::fake([StudentPhotoChanged::class]);
+
+    expect(fn () => app(SetStudentPhoto::class)->handle($this->student, studentImage(), $this->by))
+        ->toThrow(ValidationException::class, PhotoNotSaved::MESSAGE);
+
+    Event::assertNotDispatched(StudentPhotoChanged::class);
+    expect(Activity::query()->count())->toBe($before)
+        ->and($request->fresh()->photo_updated_at)->toBeNull()
+        ->and(Storage::disk('student_photos')->get('2021/21111182.jpg'))->toBe('foto-vieja')
+        ->and(Storage::disk('student_photos')->allFiles())->toBe(['2021/21111182.jpg']);
+})->with([
+    'put falla' => [['put']],
+    'archivar falla' => [['move']],
+]);
+
+it('CO-06: en un lote, una foto que el disco no deja guardar es «no guardada» y no se aplica', function () {
+    Storage::disk('student_photos')->put('2021/21111182.jpg', 'foto-vieja');
+    failingDisk('student_photos', ['put']);
+
+    $zipPath = tempnam(sys_get_temp_dir(), 'zip');
+    $zip = new ZipArchive;
+    $zip->open($zipPath, ZipArchive::OVERWRITE);
+    $fake = studentImage();
+    $zip->addFromString('21111182.jpg', file_get_contents($fake->getRealPath()));
+    $zip->close();
+    Storage::disk('imports')->put('photo-batches/lote.zip', file_get_contents($zipPath));
+    unlink($zipPath);
+    $batch = PhotoBatch::query()->create([
+        'kind' => PhotoBatchKind::Alumnos, 'status' => PhotoBatchStatus::EnCola, 'file_path' => 'photo-batches/lote.zip',
+        'original_name' => 'lote.zip', 'uploaded_by' => $this->by->id,
+    ]);
+
+    app()->call([new ProcessPhotoBatch($batch->id), 'handle']);
+
+    $row = $batch->fresh()->report[0];
+    expect($row['outcome'])->toBe(PhotoOutcome::NoGuardada->value)
+        ->and($row['message'])->toBe(PhotoNotSaved::MESSAGE)
+        ->and($batch->fresh()->applied)->toBe(0)
+        ->and(PhotoOutcome::NoGuardada->label())->toBe('No se pudo guardar');
 });
