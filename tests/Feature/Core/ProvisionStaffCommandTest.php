@@ -42,7 +42,7 @@ function provisionPhoto(string $dir, string $name, int $w = 600, int $h = 800, i
 function pendingStaff(array $attributes = []): User
 {
     return User::factory()->withRole(Role::Personal, ['org_unit_id' => communicationUnit()->id])
-        ->create(['password' => null, 'password_origin' => null, 'must_change_password' => false] + $attributes);
+        ->create(array_merge(['password' => null, 'password_origin' => null, 'must_change_password' => false], $attributes));
 }
 
 it('CO-11: activa con la contraseña por defecto y cambio obligatorio a quien no tiene contraseña', function () {
