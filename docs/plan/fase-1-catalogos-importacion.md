@@ -85,7 +85,7 @@ Mientras llegan, cada módulo trabaja con factories y un `DemoSeeder` que reprod
 | 1.36 🟨 | Pantalla de acceso: foto en la credencial (personal y alumno) y «recordar a la persona» con «Recordarme» (CO-05; [#844](https://github.com/Erne1357/nexus/issues/844)) | Core, Students | C7, C11; maqueta B «Foto grande» elegida | | PR pendiente |
 | 1.37 🟨 [#859](https://github.com/Erne1357/nexus/pull/859) | Fotos de alumnos: escritura en `StudentPhotos`, pantalla «Fotos de alumnos» con lote ZIP, ruta firmada y pestaña «Credencial» de la ficha (CO-06, CO-10; [#845](https://github.com/Erne1357/nexus/issues/845)) | Students, Communication | C1, C13, C14 | | |
 | 1.38 ⬜ | Solicitudes de credencial: tabla, Actions, plazos, avisos, lado del alumno, bandeja de Comunicación e historial en la ficha (CO-07 a CO-10; [#846](https://github.com/Erne1357/nexus/issues/846)) | Students, Communication | C2 a C6, C14; maqueta por elegir | | |
-| 1.39 ⬜ | Comando `core:provision-staff` para activar las cuentas reales desde un archivo del servidor, con su runbook, y correrlo en la demo 8095 (CO-11; [#847](https://github.com/Erne1357/nexus/issues/847)) | Core | C8, C9 | | |
+| 1.39 🟨 [#850](https://github.com/Erne1357/nexus/pull/850) | Comando `core:provision-staff` para activar las cuentas reales desde un archivo del servidor, con su runbook, y correrlo en la demo 8095 (CO-11; [#847](https://github.com/Erne1357/nexus/issues/847)) | Core | C8, C9 | | |
 
 ## Pruebas de la fase
 
