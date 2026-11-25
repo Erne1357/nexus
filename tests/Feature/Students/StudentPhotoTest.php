@@ -129,3 +129,41 @@ it('CO-10: un coordinador de otra carrera no ve la foto del alumno', function ()
 
     $this->actingAs($other)->get($url)->assertForbidden();
 });
+
+it('CO-06: un archivo con formato inválido no tapa a la foto del mismo número de control', function () {
+    $fake = studentImage();
+    $zipPath = tempnam(sys_get_temp_dir(), 'nxz');
+    $zip = new ZipArchive;
+    $zip->open($zipPath, ZipArchive::OVERWRITE);
+    $zip->addFromString('21111182.txt', 'no soy foto');
+    $zip->addFromString('21111182.jpg', file_get_contents($fake->getRealPath()));
+    $zip->close();
+    Storage::disk('imports')->put('photo-batches/lote2.zip', file_get_contents($zipPath));
+    unlink($zipPath);
+
+    $batch = PhotoBatch::query()->create([
+        'kind' => PhotoBatchKind::Alumnos, 'status' => PhotoBatchStatus::EnCola, 'file_path' => 'photo-batches/lote2.zip',
+        'original_name' => 'lote2.zip', 'uploaded_by' => $this->by->id,
+    ]);
+
+    app()->call([new ProcessPhotoBatch($batch->id), 'handle']);
+
+    expect(collect($batch->fresh()->report)->pluck('outcome', 'file')->all())->toBe([
+        '21111182.txt' => PhotoOutcome::FormatoInvalido->value,
+        '21111182.jpg' => PhotoOutcome::Aplicada->value,
+    ]);
+});
+
+it('CO-06: un ZIP de alumnos con más de 2000 archivos se rechaza', function () {
+    $zip = new ZipArchive;
+    $path = tempnam(sys_get_temp_dir(), 'nxz');
+    $zip->open($path, ZipArchive::OVERWRITE);
+    for ($i = 0; $i <= App\Modules\Communication\Actions\StorePhotoBatch::MAX_ENTRIES; $i++) {
+        $zip->addFromString("a{$i}.jpg", 'x');
+    }
+    $zip->close();
+
+    expect(fn () => app(App\Modules\Communication\Actions\StorePhotoBatch::class)->handle(PhotoBatchKind::Alumnos, UploadedFile::fake()->createWithContent('g.zip', file_get_contents($path)), $this->by))
+        ->toThrow(Illuminate\Validation\ValidationException::class);
+    unlink($path);
+});

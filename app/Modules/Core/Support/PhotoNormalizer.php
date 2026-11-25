@@ -25,6 +25,11 @@ final class PhotoNormalizer
 
     public const int MAX_BYTES = 10 * 1024 * 1024;
 
+    /** Tope de la imagen decodificada: un PNG chico puede declarar miles de millones de píxeles (bomba de descompresión). */
+    public const int MAX_SIDE = 8000;
+
+    public const int MAX_PIXELS = 40_000_000;
+
     /** @var list<string> */
     private const array MIMES = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -36,16 +41,60 @@ final class PhotoNormalizer
     public function normalize(string $sourcePath): array
     {
         $bytes = $this->read($sourcePath);
+        $size = @getimagesizefromstring($bytes);
+
+        if ($size === false) {
+            throw new InvalidPhoto('No se pudo leer la imagen. Solo jpg, png o webp.');
+        }
+
+        if ($size[0] > self::MAX_SIDE || $size[1] > self::MAX_SIDE || $size[0] * $size[1] > self::MAX_PIXELS) {
+            throw new InvalidPhoto('La imagen tiene dimensiones demasiado grandes (máximo 8000 px por lado y 40 millones de píxeles).');
+        }
+
         $source = @imagecreatefromstring($bytes);
 
         if (! $source instanceof GdImage) {
             throw new InvalidPhoto('No se pudo leer la imagen. Solo jpg, png o webp.');
         }
 
+        $source = $this->upright($source, $bytes);
+
         $normal = $this->fit($source, self::WIDTH, self::HEIGHT);
         $thumb = $this->fit($normal, self::THUMB_WIDTH, self::THUMB_HEIGHT);
 
         return ['normal' => $this->jpeg($normal), 'thumb' => $this->jpeg($thumb)];
+    }
+
+    /**
+     * Endereza una foto de teléfono según la etiqueta EXIF de orientación de un JPEG (1 a 8); sin etiqueta o sin la
+     * extensión `exif`, la deja como viene.
+     */
+    private function upright(GdImage $image, string $bytes): GdImage
+    {
+        if (! function_exists('exif_read_data') || ! str_starts_with($bytes, "\xFF\xD8")) {
+            return $image;
+        }
+
+        $exif = @exif_read_data('data://image/jpeg;base64,'.base64_encode($bytes));
+        $orientation = is_array($exif) ? (int) ($exif['Orientation'] ?? 1) : 1;
+
+        $rotate = fn (GdImage $source, int $degrees): GdImage => imagerotate($source, $degrees, (int) imagecolorallocate($source, 255, 255, 255)) ?: $source;
+        $flip = function (GdImage $source, int $mode): GdImage {
+            imageflip($source, $mode);
+
+            return $source;
+        };
+
+        return match ($orientation) {
+            2 => $flip($image, IMG_FLIP_HORIZONTAL),
+            3 => $rotate($image, 180),
+            4 => $flip($image, IMG_FLIP_VERTICAL),
+            5 => $flip($rotate($image, -90), IMG_FLIP_HORIZONTAL),
+            6 => $rotate($image, -90),
+            7 => $flip($rotate($image, 90), IMG_FLIP_HORIZONTAL),
+            8 => $rotate($image, 90),
+            default => $image,
+        };
     }
 
     private function read(string $path): string

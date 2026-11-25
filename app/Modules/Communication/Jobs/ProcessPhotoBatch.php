@@ -83,7 +83,7 @@ final class ProcessPhotoBatch implements ShouldQueue
      */
     private function applyStaff(PhotoBatch $batch, SetStaffPhoto $setStaffPhoto, UserAccountRules $accounts): array
     {
-        return $this->applyEach($batch, fn (ZipArchive $zip, int $index, string $file, string $key, callable $row, User $uploader): array => $this->applyOne($zip, $index, $file, $key, $setStaffPhoto, $accounts, $uploader, $row));
+        return $this->applyEach($batch, fn (ZipArchive $zip, int $index, string $file, string $key, callable $row, User $uploader, callable $claim): array => $this->applyOne($zip, $index, $file, $key, $claim, $setStaffPhoto, $accounts, $uploader, $row));
     }
 
     /**
@@ -91,13 +91,13 @@ final class ProcessPhotoBatch implements ShouldQueue
      */
     private function applyStudents(PhotoBatch $batch, SetStudentPhoto $setStudentPhoto): array
     {
-        return $this->applyEach($batch, fn (ZipArchive $zip, int $index, string $file, string $key, callable $row, User $uploader): array => $this->applyOneStudent($zip, $index, $file, $key, $setStudentPhoto, $uploader, $row));
+        return $this->applyEach($batch, fn (ZipArchive $zip, int $index, string $file, string $key, callable $row, User $uploader, callable $claim): array => $this->applyOneStudent($zip, $index, $file, $key, $claim, $setStudentPhoto, $uploader, $row));
     }
 
     /**
      * Recorre los archivos del ZIP (la clave repetida no se aplica dos veces) y arma el reporte con lo que devuelve `$apply`.
      *
-     * @param  callable(ZipArchive, int, string, string, callable, User): array{file: string, key: string, outcome: string, message: ?string}  $apply
+     * @param  callable(ZipArchive, int, string, string, callable, User, callable): array{file: string, key: string, outcome: string, message: ?string}  $apply
      * @return list<array{file: string, key: string, outcome: string, message: ?string}>
      */
     private function applyEach(PhotoBatch $batch, callable $apply): array
@@ -120,12 +120,15 @@ final class ProcessPhotoBatch implements ShouldQueue
             $row = fn (PhotoOutcome $outcome, ?string $message = null): array => ['file' => $file, 'key' => $key, 'outcome' => $outcome->value, 'message' => $message];
             $folded = mb_strtolower($key);
 
-            if (isset($seen[$folded])) {
-                $report[] = $row(PhotoOutcome::Repetida, 'Otro archivo del lote ya traía esta clave.');
-            } else {
-                $seen[$folded] = true;
-                $report[] = $apply($zip, $index, $file, $key, $row, $uploader);
-            }
+            // Una clave solo cuenta como vista cuando su archivo pasó el formato: «ana.txt» no tapa a «ana.jpg».
+            $claim = function () use (&$seen, $folded): bool {
+                if (isset($seen[$folded])) {
+                    return false;
+                }
+
+                return $seen[$folded] = true;
+            };
+            $report[] = $apply($zip, $index, $file, $key, $row, $uploader, $claim);
 
             if (($position + 1) % self::SAVE_EVERY === 0) {
                 $batch->update(['processed' => $position + 1, 'report' => $report]);
@@ -138,10 +141,11 @@ final class ProcessPhotoBatch implements ShouldQueue
     }
 
     /**
+     * @param  callable(): bool  $claim  marca la clave como vista; false si otro archivo del lote ya la traía
      * @param  callable(PhotoOutcome, ?string=): array{file: string, key: string, outcome: string, message: ?string}  $row
      * @return array{file: string, key: string, outcome: string, message: ?string}
      */
-    private function applyOne(ZipArchive $zip, int $index, string $file, string $key, SetStaffPhoto $setStaffPhoto, UserAccountRules $accounts, User $uploader, callable $row): array
+    private function applyOne(ZipArchive $zip, int $index, string $file, string $key, callable $claim, SetStaffPhoto $setStaffPhoto, UserAccountRules $accounts, User $uploader, callable $row): array
     {
         $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         $size = (int) ($zip->statIndex($index)['size'] ?? 0);
@@ -152,6 +156,10 @@ final class ProcessPhotoBatch implements ShouldQueue
 
         if (! in_array($extension, StaffPhotos::EXTENSIONS, true)) {
             return $row(PhotoOutcome::FormatoInvalido, 'Solo jpg, png o webp.');
+        }
+
+        if (! $claim()) {
+            return $row(PhotoOutcome::Repetida, 'Otro archivo del lote ya traía este usuario.');
         }
 
         $person = User::query()->whereRaw('lower(username) = ?', [mb_strtolower($key)])->first();
@@ -180,10 +188,11 @@ final class ProcessPhotoBatch implements ShouldQueue
     }
 
     /**
+     * @param  callable(): bool  $claim  marca la clave como vista; false si otro archivo del lote ya la traía
      * @param  callable(PhotoOutcome, ?string=): array{file: string, key: string, outcome: string, message: ?string}  $row
      * @return array{file: string, key: string, outcome: string, message: ?string}
      */
-    private function applyOneStudent(ZipArchive $zip, int $index, string $file, string $key, SetStudentPhoto $setStudentPhoto, User $uploader, callable $row): array
+    private function applyOneStudent(ZipArchive $zip, int $index, string $file, string $key, callable $claim, SetStudentPhoto $setStudentPhoto, User $uploader, callable $row): array
     {
         $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         $size = (int) ($zip->statIndex($index)['size'] ?? 0);
@@ -194,6 +203,10 @@ final class ProcessPhotoBatch implements ShouldQueue
 
         if (! in_array($extension, StudentPhotos::EXTENSIONS, true)) {
             return $row(PhotoOutcome::FormatoInvalido, 'Solo jpg, png o webp.');
+        }
+
+        if (! $claim()) {
+            return $row(PhotoOutcome::Repetida, 'Otro archivo del lote ya traía este número de control.');
         }
 
         $student = StudentPhotos::yearFolder($key) === null ? null : Student::query()->whereRaw('lower(control_number) = ?', [mb_strtolower($key)])->first();

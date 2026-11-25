@@ -25,6 +25,8 @@ final class StorePhotoBatch
 {
     public const int MAX_BYTES = 19 * 1024 * 1024;
 
+    public const int MAX_ENTRIES = 2000;
+
     /**
      * @throws ValidationException si el archivo no es un ZIP legible o pesa de más
      */
@@ -70,6 +72,11 @@ final class StorePhotoBatch
             throw ValidationException::withMessages(['zip' => 'No se pudo leer el ZIP.']);
         }
 
+        $entries = $archive->numFiles;
         $archive->close();
+
+        if ($entries > self::MAX_ENTRIES) {
+            throw ValidationException::withMessages(['zip' => 'El ZIP trae más de 2000 archivos; divídelo en lotes más chicos.']);
+        }
     }
 }

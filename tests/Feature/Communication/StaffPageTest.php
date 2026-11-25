@@ -133,6 +133,19 @@ it('CO-02: el personal de área no ve la pantalla', function () {
         ->and(communicationMenuOf($hrHead))->toBe([]);
 });
 
+it('CO-02: lo que AppointRole rechaza sale bajo la persona: nombrar dos veces a la misma persona', function () {
+    RoleAssignment::factory()->create(['user_id' => $this->pablo->id, 'role' => Role::Personal, 'org_unit_id' => $this->unit->id, 'valid_from' => today()->subMonth()->toDateString()]);
+
+    $page = Livewire::actingAs($this->head)->test('communication::pages.staff')
+        ->call('openAppoint')
+        ->call('choosePerson', $this->pablo->id)
+        ->call('appoint')
+        ->assertHasErrors(['personId']);
+
+    expect(RoleAssignment::query()->where('user_id', $this->pablo->id)->count())->toBe(1)
+        ->and(domOf($page)->querySelector('[data-testid="staff-person-error"]'))->not->toBeNull();
+});
+
 it('un alumno no aparece en la búsqueda', function () {
     $student = User::factory()->withRole(Role::Alumno)->create(['name' => 'Pablo Alumno', 'username' => '21110001']);
     $inactive = User::factory()->create(['name' => 'Pablo Baja', 'is_active' => false]);
