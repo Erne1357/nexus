@@ -35,6 +35,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Vite;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
@@ -508,4 +509,37 @@ function validateGeneralCatalogs(string $termId, string $departmentId, array $ex
             $review->update(['status' => ReviewStatus::Validated, 'validated_by' => User::factory()->create()->id, 'validated_at' => now()]);
         }
     }
+}
+
+/**
+ * Los bytes de una imagen ficticia (fotos de lotes en ZIP; la usan las pruebas de Communication).
+ */
+function batchImage(string $format = 'jpeg'): string
+{
+    $image = imagecreatetruecolor(300, 400);
+    imagefill($image, 0, 0, imagecolorallocate($image, 20, 120, 200));
+    ob_start();
+    $format === 'png' ? imagepng($image) : imagejpeg($image);
+
+    return (string) ob_get_clean();
+}
+
+/**
+ * Un ZIP con esos archivos (nombre dentro del ZIP => bytes).
+ *
+ * @param  array<string, string>  $files
+ */
+function zipOf(array $files): UploadedFile
+{
+    $path = tempnam(sys_get_temp_dir(), 'zip');
+    $zip = new ZipArchive;
+    $zip->open($path, ZipArchive::OVERWRITE);
+
+    foreach ($files as $name => $bytes) {
+        $zip->addFromString($name, $bytes);
+    }
+
+    $zip->close();
+
+    return UploadedFile::fake()->createWithContent('lote.zip', (string) file_get_contents($path));
 }
