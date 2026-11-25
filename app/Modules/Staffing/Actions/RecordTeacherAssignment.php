@@ -14,8 +14,9 @@ use Illuminate\Validation\ValidationException;
  * La única escritura de una asignación docente de Staffing (ADR-0020; diseño 1.33, 6.14): cierra la asignación vigente
  * del grupo (`replaced_at`), cambia `groups.teacher_id` con SetGroupTeacher, crea la fila de `group_teacher_assignments`
  * con el lugar en el ranking y el motivo, y deja la bitácora `teacher_assigned`. No valida reglas ni sabe de puestos:
- * la llaman AssignTeacher (el jefe o el JPD, con HC-16) y PickSelectionGroup (el docente en su turno), cada una con sus
- * reglas. Va dentro de la transacción de quien la llama, con la carga y el grupo ya bloqueados (LoadEditability).
+ * la llaman AssignTeacher (el jefe o el JPD, con HC-16), PickSelectionGroup (el docente en su turno) y RecordPriorChoice
+ * (SEL-16: carga de datos de la relación de materias, el docente ya traía el grupo escrito y no hay ranking que
+ * respetar, así que no exige HC-16), cada una con sus reglas. Va dentro de la transacción de quien la llama, con la carga y el grupo ya bloqueados (LoadEditability).
  */
 final class RecordTeacherAssignment
 {

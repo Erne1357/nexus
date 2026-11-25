@@ -1,24 +1,25 @@
 {{--
-    «Mis datos» del alumno (AC-15), con tres pestañas (`?tab=`). «Mis datos»: sus datos escolares como los ficha del alumno (nombre, número de control, estatus y
+    «Mis datos» del alumno (AC-15), con cuatro pestañas (`?tab=`). «Mis datos»: sus datos escolares como los ficha del alumno (nombre, número de control, estatus y
     la línea de carrera, plan, campus y semestre) y, debajo, su acceso: usuario, correo institucional, de dónde sale su
     contraseña y el enlace para cambiarla.
-    «Perfil»: su retícula y su kárdex, solo lectura (students::reticula y students::kardex, las mismas de la ficha del personal, sin
-    resaltado ni barra de selección). «Credencial»: su credencial de alumno con la plantilla del ITCJ, su foto y el QR verificable (AC-20, tarea 1.27).
+    «Retícula» y «Kárdex» (1.42): cada una en su pestaña, solo lectura (students::reticula y students::kardex, las mismas de la ficha
+    del personal, sin resaltado ni barra de selección), con las cifras arriba de ambas (S5). `?tab=perfil` (enlaces viejos) abre «Retícula».
+    «Credencial»: su credencial de alumno con la plantilla del ITCJ, su foto y el QR verificable (AC-20, tarea 1.27).
 --}}
 <div class="space-y-5">
-    <x-header title="Mis datos" subtitle="Tus datos escolares, tu perfil académico y tu credencial." separator />
+    <x-header title="Mis datos" subtitle="Tus datos escolares, tu retícula, tu kárdex y tu credencial." separator />
 
     <div role="tablist" class="tabs tabs-border">
-        @foreach (['datos' => 'Mis datos', 'perfil' => 'Perfil', 'credencial' => 'Credencial'] as $key => $label)
-            <button type="button" role="tab" @class(['tab', 'tab-active font-bold' => $tab === $key]) aria-selected="{{ $tab === $key ? 'true' : 'false' }}" wire:click="$set('tab', '{{ $key }}')" data-testid="tab-{{ $key }}">{{ $label }}</button>
+        @foreach (['datos' => 'Mis datos', 'reticula' => 'Retícula', 'kardex' => 'Kárdex', 'credencial' => 'Credencial'] as $key => $label)
+            <button type="button" role="tab" @class(['tab', 'tab-active font-bold' => $tab === $key]) aria-selected="{{ $tab === $key ? 'true' : 'false' }}" wire:click="$set('tab', '{{ $key }}')" id="tab-{{ $key }}" aria-controls="panel-{{ $key }}" data-testid="tab-{{ $key }}">{{ $label }}</button>
         @endforeach
     </div>
 
-    @if ($tab === 'perfil')
+    @if (in_array($tab, ['reticula', 'kardex'], true))
         @if ($record === null)
             <x-alert title="Todavía no encontramos tus datos escolares." description="Si eres alumno, acude a Servicios Escolares." icon="o-information-circle" class="alert-info" data-testid="my-record-empty" />
         @else
-            <section class="space-y-5" data-testid="my-profile">
+            <section class="space-y-5" role="tabpanel" id="panel-{{ $tab }}" aria-labelledby="tab-{{ $tab }}" data-testid="{{ $tab === 'kardex' ? 'my-kardex' : 'my-reticula' }}">
                 <div class="grid grid-cols-3 overflow-hidden rounded-box border border-base-300 bg-base-100">
                     @foreach ([
                         ['Créditos aprobados', $record->creditsApproved, $record->totalCredits],
@@ -32,11 +33,11 @@
                     @endforeach
                 </div>
 
-                <h2 class="text-lg font-bold leading-tight">Retícula</h2>
-                <x-students::reticula :record="$record" :interactive="false" audience="alumno" />
-
-                <h2 class="text-lg font-bold leading-tight">Kárdex</h2>
-                <x-students::kardex :record="$record" audience="alumno" />
+                @if ($tab === 'kardex')
+                    <x-students::kardex :record="$record" audience="alumno" />
+                @else
+                    <x-students::reticula :record="$record" :interactive="false" audience="alumno" />
+                @endif
             </section>
         @endif
     @elseif ($tab === 'credencial')

@@ -88,7 +88,7 @@ describe('admin', function () {
 
         expect(count($cards))->toBe(3)
             ->and(textOf($cards[0]))->toContain('ACF-0901 Cálculo Diferencial Activa')
-            ->and(textOf($cards[0]))->toContain('SIS · 3-2-5 · Básica · En 2 planes');
+            ->and(textOf($cards[0]))->toContain('SIS · 3-2-5 · Básica · Espacio sin marcar · En 2 planes');
     });
 
     it('busca por clave o nombre y filtra por departamento, tipo y estado', function () {
@@ -267,7 +267,7 @@ describe('admin', function () {
 describe('otros roles e invitados', function () {
     $roles = [
         'subdirección' => [Role::Subdireccion, []],
-        'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
+        // El jefe de departamento sí entra, solo al control del tipo de espacio de su departamento (SEL-17).
         'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
         'docente' => [Role::Docente, []],
     ];

@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\ImportLoadProjection;
 use App\Modules\Scheduling\Models\Group;
 use OpenSpout\Common\Entity\Row;
@@ -185,13 +186,15 @@ it('con --dry-run calcula el mismo reporte y no escribe nada', function () {
 it('deja el resumen en la bitácora y el comando imprime el reporte', function () {
     $path = projectionFile([[$this->block, 1, 'PROGRAMACIÓN', 'AID-2501', 5, 'C', 30, '9 - 10']]);
 
-    $this->artisan('academic-load:import-projection', ['file' => $path, '--term' => '20271', '--campus' => 'C1'])
+    $user = User::factory()->create();
+
+    $this->artisan('academic-load:import-projection', ['file' => $path, '--term' => '20271', '--campus' => 'C1', '--user' => $user->username])
         ->expectsOutputToContain('Grupos creados: 1')
         ->assertSuccessful();
 
     expect(Activity::query()->where('event', 'load_projection_imported')->sole()->properties['created'])->toBe(1);
 
-    $this->artisan('academic-load:import-projection', ['file' => $path, '--campus' => 'XX'])->assertFailed();
+    $this->artisan('academic-load:import-projection', ['file' => $path, '--campus' => 'XX', '--user' => $user->username])->assertFailed();
 });
 
 it('crea los dos grupos en paralelo de la misma materia a la misma hora, y una segunda corrida no los duplica', function () {

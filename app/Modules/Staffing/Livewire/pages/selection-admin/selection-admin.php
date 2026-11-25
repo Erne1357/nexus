@@ -532,7 +532,8 @@ new #[Title('Orden de selección')] class extends Component
             'ownRooms' => $this->rooms($selection)->where('department_id', $selection->department_id)->get(),
             'freeRooms' => $this->rooms($selection)->whereNull('department_id')->get(),
             'entries' => $entries,
-            'slots' => $this->slotPreview($entries, $selection),
+            'priorHours' => $groups->hoursByTeacher($selection, $entries->whereNotNull('prior_choice_at')->pluck('teacher_id')->filter()->values()->all()),
+            'slotPreview' => $this->slotPreview($entries, $selection),
         ];
     }
 
@@ -605,9 +606,17 @@ new #[Title('Orden de selección')] class extends Component
             1 => $selection->loads()->exists() ? [] : ['Deja al menos una carga incluida.'],
             2 => $this->csvBlockers($selection),
             3 => ($n = $this->unreviewed($selection)) > 0 ? ["Faltan {$n} ".($n === 1 ? 'materia' : 'materias').' por revisar.'] : [],
-            5 => $selection->starts_at === null ? ['Elige cuándo empieza.'] : ($selection->starts_at->isFuture() ? [] : ['La fecha de inicio debe estar en el futuro.']),
+            5 => $this->allPriorChoice($selection) ? [] : ($selection->starts_at === null ? ['Elige cuándo empieza.'] : ($selection->starts_at->isFuture() ? [] : ['La fecha de inicio debe estar en el futuro.'])),
             default => [],
         };
+    }
+
+    /**
+     * SEL-16: si todos los de la cola son elección previa no hay turnos y no se pide fecha de inicio (como PublishSelection).
+     */
+    private function allPriorChoice(Selection $selection): bool
+    {
+        return $selection->entries()->exists() && ! $selection->entries()->whereNull('prior_choice_at')->exists();
     }
 
     /**
@@ -615,7 +624,7 @@ new #[Title('Orden de selección')] class extends Component
      */
     private function csvBlockers(Selection $selection): array
     {
-        if (! $selection->entries()->exists()) {
+        if (! $selection->entries()->where('source', SelectionEntrySource::Csv)->exists()) {
             return ['Sube el CSV de criterios.'];
         }
 

@@ -15,6 +15,8 @@ final class ActivityEvents
     private const array LABELS = [
         'created' => 'Alta',
         'selection_created' => 'Selección creada',
+        'prior_choice_recorded' => 'Elección previa registrada',
+        'prior_choice_removed' => 'Elección previa quitada',
         'selection_csv_imported' => 'CSV de la selección importado',
         'selection_entry_resolved' => 'Renglón resuelto',
         'selection_entry_discarded' => 'Renglón descartado',
