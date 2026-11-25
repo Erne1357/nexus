@@ -1,11 +1,13 @@
 <?php
 
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherHourAllowance;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Actions\RecordPriorChoice;
 use App\Modules\Staffing\Actions\Selection\AdvanceSelections;
+use App\Modules\Staffing\Actions\Selection\CancelSelection;
 use App\Modules\Staffing\Actions\Selection\FinishMyLoad;
 use App\Modules\Staffing\Actions\Selection\PickSelectionGroup;
 use App\Modules\Staffing\Actions\Selection\PublishSelection;
@@ -14,9 +16,15 @@ use App\Modules\Staffing\Actions\Selection\ReleaseSelectionGroup;
 use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
+use App\Modules\Staffing\Jobs\InviteSelectionTeachersJob;
+use App\Modules\Staffing\Models\Selection;
+use App\Modules\Staffing\Notifications\SelectionCancelled;
+use App\Modules\Staffing\Notifications\SelectionTurnPublished;
+use App\Modules\Staffing\Queries\SelectionGroupsQuery;
 use App\Modules\Staffing\Queries\SelectionOrderQuery;
 use App\Modules\Staffing\Queries\SelectionTurnQuery;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\Staffing\SelectionWorld;
@@ -32,9 +40,22 @@ function priorWorld(SelectionStatus $status = SelectionStatus::Draft): Selection
     return SelectionWorld::create($status);
 }
 
+/**
+ * Registra la elección previa. Con la selección ya publicada o viva la Action la rechaza (SEL-16: solo en borrador), así que
+ * para armar el escenario de una selección viva se registra como si siguiera en borrador y se restituye su estado.
+ */
 function markPrior(SelectionWorld $world, Teacher $teacher, array $groups = []): void
 {
+    $status = $world->selection->fresh()->status;
+
+    if ($status !== SelectionStatus::Draft) {
+        Selection::query()->whereKey($world->selection->getKey())->update(['status' => SelectionStatus::Draft]);
+    }
+
     app(RecordPriorChoice::class)->handle($world->term, $world->selection->modality, $teacher, array_map(fn ($group): array => ['group' => $group], $groups), $world->admin);
+
+    Selection::query()->whereKey($world->selection->getKey())->update(['status' => $status]);
+    $world->selection->refresh();
 }
 
 it('SEL-16: la marca saca al docente de la fila: sin lugar, sin turno y con el estado de elección previa', function () {
@@ -140,6 +161,7 @@ it('SEL-16: el reloj no lo mueve a pendiente de ronda extra ni a sin resolver', 
 
 it('SEL-16: al publicar su renglón queda cerrado con las horas de sus grupos y su HC-08 justificado como en SEL-12', function () {
     Notification::fake();
+    Bus::fake([InviteSelectionTeachersJob::class]);
     $world = priorWorld();
     $world->selection->update(['starts_at' => CarbonImmutable::now()->addDays(3)->setTime(9, 0), 'window_starts' => '09:00', 'window_ends' => '15:00', 'weekdays' => [1, 2, 3, 4, 5], 'slot_minutes' => 30]);
     $fuera = $world->teacher(base: 20, name: 'Docente Fuera');
@@ -158,6 +180,60 @@ it('SEL-16: al publicar su renglón queda cerrado con las horas de sus grupos y 
         ->hours->toBe(5)
         ->reason->toContain('Elección previa')
         ->and(TeacherHourAllowance::query()->where('teacher_id', $dentro->id)->sole()->hours)->toBe(5);
+
+    // Ninguno tiene turno: ni aviso de turno, y la invitación de acceso sí sale.
+    Notification::assertNotSentTo([$fuera->user, $dentro->user], SelectionTurnPublished::class);
+    Bus::assertDispatched(InviteSelectionTeachersJob::class);
+});
+
+it('SEL-16: si todos los de la cola son elección previa, la selección no tiene turnos: se publica ya terminada, sin pedir hora de inicio', function () {
+    Notification::fake();
+    $world = priorWorld();
+    $world->selection->update(['starts_at' => null]);
+    $previo = $world->teacher(name: 'Docente Previo');
+    markPrior($world, $previo, [$world->group('A', [[1, '09:00', '10:00']])]);
+
+    $published = app(PublishSelection::class)->handle($world->selection->fresh(), $world->admin);
+
+    expect($published)
+        ->status->toBe(SelectionStatus::Finished)
+        ->published_at->not->toBeNull()
+        ->finished_at->not->toBeNull()
+        ->and($world->entryOf($previo))->closed_at->not->toBeNull()
+        ->and($world->load->fresh()->status)->toBe(LoadStatus::Staffing)
+        ->and(app(SelectionGroupsQuery::class)->liveSelectionFor($world->load->fresh()))->toBeNull()
+        ->and(app(SelectionGroupsQuery::class)->finishedSelectionFor($world->load->fresh())?->getKey())->toBe($world->selection->getKey());
+    Notification::assertNotSentTo($previo->user, SelectionTurnPublished::class);
+});
+
+it('SEL-16: con alguien que sí tiene turno la selección queda publicada y solo él recibe el aviso de turno', function () {
+    Notification::fake();
+    Bus::fake([InviteSelectionTeachersJob::class]);
+    $world = priorWorld();
+    $world->selection->update(['starts_at' => CarbonImmutable::now()->addDays(3)->setTime(9, 0), 'window_starts' => '09:00', 'window_ends' => '15:00', 'weekdays' => [1, 2, 3, 4, 5], 'slot_minutes' => 30]);
+    $previo = $world->teacher(name: 'Docente Previo');
+    $espera = $world->teacher(name: 'Docente Espera', position: 2);
+    markPrior($world, $previo, [$world->group('A', [[1, '09:00', '10:00']])]);
+
+    $published = app(PublishSelection::class)->handle($world->selection->fresh(), $world->admin);
+
+    expect($published->status)->toBe(SelectionStatus::Published);
+    Notification::assertSentTo($espera->user, SelectionTurnPublished::class);
+    Notification::assertNotSentTo($previo->user, SelectionTurnPublished::class);
+    Bus::assertDispatched(InviteSelectionTeachersJob::class);
+});
+
+it('SEL-16: al cancelar una selección publicada los de elección previa no reciben el aviso', function () {
+    Notification::fake();
+    $world = priorWorld(SelectionStatus::Published);
+    $world->selection->update(['starts_at' => CarbonImmutable::now()->addDays(3)]);
+    $previo = $world->teacher(name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::Done, 'prior_choice_at' => now(), 'position' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
+    $espera = $world->teacher(name: 'Docente Espera', position: 1, slotStartsAt: CarbonImmutable::now()->addDays(3));
+
+    app(CancelSelection::class)->handle($world->selection->fresh(), $world->admin);
+
+    Notification::assertSentTo($espera->user, SelectionCancelled::class);
+    Notification::assertNotSentTo($previo->user, SelectionCancelled::class);
 });
 
 it('SEL-16: durante la selección viva el jefe le asigna otro grupo con «Asignación docente»', function () {

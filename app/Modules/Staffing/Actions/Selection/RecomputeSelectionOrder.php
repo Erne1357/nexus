@@ -5,6 +5,7 @@ namespace App\Modules\Staffing\Actions\Selection;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
+use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\PriorChoice;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Rules\SelectionOrder;
@@ -58,15 +59,39 @@ final class RecomputeSelectionOrder
         }
     }
 
+    /**
+     * Los docentes con elección previa que aplica a esta selección (SEL-16): la marca es del periodo y la modalidad y
+     * sus departamentos incluyen alguno de las cargas de la selección (una marca sin departamentos, de antes de
+     * guardarlos, aplica siempre). Un docente adscrito a dos departamentos conserva su turno en la selección del otro.
+     *
+     * @return list<string>
+     */
+    private function priorTeachers(Selection $selection): array
+    {
+        $departments = $selection->loads()->pluck('academic_loads.department_id')->all();
+
+        return PriorChoice::query()
+            ->where('term_id', $selection->term_id)
+            ->where('modality_id', $selection->modality_id)
+            ->get(['teacher_id', 'department_ids'])
+            ->filter(fn (PriorChoice $mark): bool => $mark->department_ids === null || array_intersect($mark->department_ids, $departments) !== [])
+            ->pluck('teacher_id')
+            ->all();
+    }
+
     public function handle(Selection $selection): void
     {
         $this->appendMissing($selection);
 
-        $prior = PriorChoice::query()
-            ->where('term_id', $selection->term_id)
-            ->where('modality_id', $selection->modality_id)
-            ->pluck('teacher_id')
-            ->all();
+        $prior = $this->priorTeachers($selection);
+
+        // Solo en borrador: una marca que ya no aplica (se quitó, RemovePriorChoice) devuelve al docente a la fila.
+        if ($selection->status === SelectionStatus::Draft) {
+            $selection->entries()->whereNotNull('prior_choice_at')->whereNotIn('teacher_id', $prior)->update([
+                'prior_choice_at' => null,
+                'status' => SelectionEntryStatus::Waiting,
+            ]);
+        }
 
         $selection->entries()->whereIn('teacher_id', $prior)->whereNull('prior_choice_at')->update(['prior_choice_at' => now()]);
         $selection->entries()->whereIn('teacher_id', $prior)->update([

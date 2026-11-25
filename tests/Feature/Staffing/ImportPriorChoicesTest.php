@@ -13,6 +13,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Actions\ImportLoadProjection;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Actions\ImportPriorChoices;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\PriorChoice;
@@ -131,7 +132,7 @@ it('un docente ambiguo, uno sin coincidencia y un grupo que no existe son error 
     $report = ($this->run)([
         priorLine('GOMEZ BETO', 'AID-2501', 'C', '9 - 10'),
         priorLine('NADIE AQUI', 'AID-2501', 'D', '10 - 11'),
-        priorLine('LUNA ANA', 'XYZ-9999', 'Z', '12 - 13', 'SALON', 4),
+        priorLine('LUNA ANA', 'ZZZ-0000', 'Z', '12 - 13', 'SALON', 4),
         priorLine('LUNA ANA', 'XYZ-9999', 'D', '10 - 11', 'SALON', 4),
     ]);
 
@@ -140,7 +141,7 @@ it('un docente ambiguo, uno sin coincidencia y un grupo que no existe son error 
     expect($report['recorded'])->toBe(0)
         ->and($messages[3])->toContain('más de un docente')
         ->and($messages[4])->toContain('NADIE AQUI')
-        ->and($messages[5])->toContain('No hay un grupo Z')
+        ->and($messages[5])->toContain('ZZZ-0000')
         ->and($messages->has(6))->toBeFalse()
         ->and(PriorChoice::query()->count())->toBe(0)
         ->and(Group::query()->whereNotNull('teacher_id')->count())->toBe(0);
@@ -215,4 +216,110 @@ it('decisión del 25 de noviembre de 2026: SALA DE COMPUTO y AULA y LABORATORIO 
         ->and($aula->fresh()->required_space)->toBe(RequiredSpace::Aula)
         ->and($redes->fresh()->required_space)->toBe(RequiredSpace::Laboratorio)
         ->and($this->redes->fresh()->required_space)->toBe(RequiredSpace::SalaComputo);
+});
+
+it('SEL-16: todo o nada por docente: un renglón válido y otro con materia desconocida del mismo docente no registran nada', function () {
+    $report = ($this->run)([
+        priorLine('LUNA ANA', 'AID-2501', 'C', '9 - 10'),
+        priorLine('LUNA ANA', 'ZZZ-0000', 'D', '10 - 11'),
+    ]);
+
+    expect($report)->toMatchArray(['rows_with_teacher' => 2, 'teachers' => 1, 'recorded' => 0, 'groups_assigned' => 0])
+        ->and($report['errors'])->toHaveCount(1)
+        ->and($report['warnings'])->toContain('LUNA ANA: no se registró su elección previa porque algún renglón (3, 4) tiene error.')
+        ->and(PriorChoice::query()->count())->toBe(0)
+        ->and(Group::query()->whereNotNull('teacher_id')->count())->toBe(0);
+});
+
+it('SEL-16: el docente del renglón es el nombre, aunque se escriba distinto: «LUNA ANA» y «ANA LUNA» son el mismo y el error de uno frena a ambos', function () {
+    $report = ($this->run)([
+        priorLine('LUNA ANA', 'AID-2501', 'C', '9 - 10'),
+        priorLine('Ana Luna', 'ZZZ-0000', 'D', '10 - 11'),
+    ]);
+
+    expect($report['teachers'])->toBe(1)->and($report['recorded'])->toBe(0)->and(PriorChoice::query()->count())->toBe(0);
+});
+
+it('D3: con [GL sin maestro, GL de Luna] Luna recibe el segundo grupo sin horario fijo, no el primero', function () {
+    $lines = [
+        priorLine('', 'XYZ-9999', 'GL', '#N/D', 'LABORATORIO', 1),
+        priorLine('LUNA ANA', 'XYZ-9999', 'GL', '#N/D', 'LABORATORIO', 1),
+    ];
+
+    $report = ($this->run)($lines);
+    [$primero, $segundo] = Group::query()->where('subject_id', $this->redes->id)->orderBy('created_at')->orderBy('id')->get()->all();
+
+    expect($report['errors'])->toBe([])
+        ->and($primero->teacher_id)->toBeNull()
+        ->and($segundo->teacher_id)->toBe($this->luna->id);
+
+    // Se programa el grupo de Luna y se vuelve a correr solo la elección previa: no se le asigna un grupo extra.
+    GroupSession::factory()->for($segundo)->on(1, '09:00', '10:00')->create();
+    $again = app(ImportPriorChoices::class)->handle(priorRelation($lines), $this->term, $this->campus, $this->pres, $this->actor);
+
+    expect(Group::query()->where('teacher_id', $this->luna->id)->pluck('id')->all())->toBe([$segundo->id])
+        ->and($again['groups_assigned'])->toBe(0)
+        ->and(Group::query()->where('subject_id', $this->redes->id)->whereNull('teacher_id')->count())->toBe(1);
+});
+
+it('D3: repetir la corrida no duplica ni pierde los grupos sin horario fijo de Luna (primero prefiere los que ya son suyos)', function () {
+    $lines = [
+        priorLine('LUNA ANA', 'XYZ-9999', 'GL', '#N/D', 'LABORATORIO', 1),
+        priorLine('LUNA ANA', 'XYZ-9999', 'GL', '#N/D', 'LABORATORIO', 1),
+    ];
+    $path = priorRelation($lines);
+    app(ImportLoadProjection::class)->handle($path, $this->term, $this->campus, $this->pres, false, $this->actor);
+
+    $first = app(ImportPriorChoices::class)->handle($path, $this->term, $this->campus, $this->pres, $this->actor);
+    $second = app(ImportPriorChoices::class)->handle($path, $this->term, $this->campus, $this->pres, $this->actor);
+
+    expect($first)->toMatchArray(['recorded' => 1, 'groups_assigned' => 2, 'errors' => []])
+        ->and($second)->toMatchArray(['recorded' => 1, 'groups_assigned' => 0, 'errors' => []])
+        ->and(Group::query()->where('teacher_id', $this->luna->id)->count())->toBe(2);
+});
+
+it('1.40: el grupo con horario se busca por la llave de la carga (materia, plan, semestre y hora de inicio), no por la letra del archivo', function () {
+    // La letra «Z» no coincide con la hora (9:00 es «C»), pero el grupo existe y se empata por la hora.
+    $report = ($this->run)([
+        priorLine('LUNA ANA', 'AID-2501', 'Z', '9 - 10'),
+        priorLine('', 'AID-2501', 'D', '10 - 11'),
+    ]);
+
+    $nueve = Group::query()->where('subject_id', $this->prog->id)->get()->first(fn (Group $group): bool => $group->sessions()->min('starts_at') === '09:00:00');
+    $diez = Group::query()->where('subject_id', $this->prog->id)->whereKeyNot($nueve->id)->sole();
+
+    expect($report['errors'])->toBe([])
+        ->and($nueve->teacher_id)->toBe($this->luna->id)
+        ->and($diez->teacher_id)->toBeNull();
+});
+
+it('1.40: dos grupos de la misma materia, plan, semestre y hora son ambiguos y el renglón es un error', function () {
+    $report = ($this->run)([
+        priorLine('LUNA ANA', 'AID-2501', 'C', '9 - 10'),
+        priorLine('', 'AID-2501', 'C', '9 - 10'),
+    ]);
+
+    expect($report['recorded'])->toBe(0)
+        ->and(collect($report['errors'])->pluck('message')->join(' '))->toContain('resuélvelo a mano')
+        ->and(Group::query()->whereNotNull('teacher_id')->count())->toBe(0);
+});
+
+it('--dry-run va en una sola transacción: el mismo grupo en dos docentes reporta el choque y no escribe ni deja bitácora', function () {
+    $gomez = Teacher::factory()->adscribedTo($this->department)->create(['name' => 'Gomez Beto']);
+    // Un solo grupo (la carga se arma con un renglón sin maestro) y dos renglones de docentes distintos que lo piden.
+    app(ImportLoadProjection::class)->handle(priorRelation([priorLine('', 'AID-2501', 'C', '9 - 10')]), $this->term, $this->campus, $this->pres, false, $this->actor);
+    $path = priorRelation([
+        priorLine('LUNA ANA', 'AID-2501', 'C', '9 - 10'),
+        priorLine('GOMEZ BETO', 'AID-2501', 'C', '9 - 10'),
+    ]);
+    $logs = Activity::query()->count();
+
+    $report = app(ImportPriorChoices::class)->handle($path, $this->term, $this->campus, $this->pres, $this->actor, dryRun: true);
+
+    expect($report['recorded'])->toBe(1)
+        ->and(collect($report['errors'])->pluck('message')->join(' '))->toContain('otro docente')
+        ->and(Activity::query()->count())->toBe($logs)
+        ->and(PriorChoice::query()->count())->toBe(0)
+        ->and(Group::query()->whereNotNull('teacher_id')->count())->toBe(0)
+        ->and($gomez->fresh()->id)->toBe($gomez->id);
 });

@@ -2,13 +2,17 @@
 
 namespace App\Modules\Staffing\Actions;
 
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
+use App\Modules\Staffing\Actions\Selection\Concerns\LocksDraftSelections;
+use App\Modules\Staffing\Actions\Selection\RecomputeSelectionOrder;
 use App\Modules\Staffing\Models\PriorChoice;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -27,15 +31,32 @@ use Illuminate\Validation\ValidationException;
  * asignación o ajustes y el motivo de HC-16. Aquí la carga puede seguir en borrador (D4: los maestros la ven cuando el
  * admin publique la orden). HC-08 y HC-09 no vetan: las horas quedan justificadas al publicar la orden (SEL-16).
  * No toca salones: los pone el importador de Scheduling (1.40).
+ *
+ * Carga del grupo: la misma de 1.40 (borrador, propuesta, asignación, ajustes o re-análisis; `LoadEditability::lockLoad`
+ * la toma FOR SHARE antes de bloquear el grupo); un grupo sin carga o con la carga en otro estado se rechaza.
+ *
+ * Ciclo de la selección: lo primero es el candado consultivo (`staffing_selection:{id}`, en orden de id) de cada
+ * selección no cancelada del periodo y la modalidad cuyas cargas incluyen un departamento de los grupos. Si alguna no
+ * es un borrador se rechaza todo (con la selección publicada o viva los turnos ya se avisaron). Si son borradores,
+ * al final se recalcula su cola (RecomputeSelectionOrder) para que la vista previa del orden ya los muestre.
+ * La marca guarda los departamentos de sus grupos: solo aplica en las selecciones de esos departamentos (supuesto por
+ * confirmar, decisión del coordinador).
  */
 final class RecordPriorChoice
 {
+    use LocksDraftSelections;
+
     public const string REASON = 'Elección previa a la orden de selección';
 
     public function __construct(
         private readonly RecordTeacherAssignment $record,
         private readonly ScheduleValidator $validator,
+        private readonly LoadEditability $editability,
+        private readonly RecomputeSelectionOrder $recompute,
     ) {}
+
+    /** Los estados de la carga en que se registra una elección previa (los mismos que acepta la importación de 1.40). */
+    private const array LOAD_STATES = [LoadStatus::Draft, LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Reanalysis];
 
     /**
      * @param  list<array{group: Group}>  $groups
@@ -45,6 +66,8 @@ final class RecordPriorChoice
     public function handle(Term $term, Modality $modality, Teacher $teacher, array $groups, User $actor): PriorChoice
     {
         return DB::transaction(function () use ($term, $modality, $teacher, $groups, $actor): PriorChoice {
+            $selections = $this->lockDraftSelections($term, $modality, collect($groups)->map(fn (array $item): string => $item['group']->department_id)->unique()->values()->all());
+
             $locked = Teacher::query()->lockForUpdate()->findOrFail($teacher->getKey());
 
             if (! $locked->is_active || $locked->trashed()) {
@@ -52,9 +75,18 @@ final class RecordPriorChoice
             }
 
             $assigned = [];
+            $departments = [];
 
             foreach ($groups as $item) {
                 $group = $item['group'];
+                $load = $this->editability->lockLoad($group);
+
+                if ($load === null || ! in_array($load->status, self::LOAD_STATES, true)) {
+                    throw ValidationException::withMessages(['group' => $load === null
+                        ? "El grupo {$group->code} no tiene carga de su departamento en este periodo y modalidad."
+                        : "La carga del grupo {$group->code} {$load->status->predicate()}: no se registra una elección previa."]);
+                }
+
                 $group->setRawAttributes($group->newQuery()->lockForUpdate()->findOrFail($group->getKey())->getAttributes(), sync: true);
 
                 if ($group->term_id !== $term->getKey() || $group->modality_id !== $modality->getKey()) {
@@ -64,6 +96,8 @@ final class RecordPriorChoice
                 if ($group->status === GroupStatus::Cancelled) {
                     throw ValidationException::withMessages(['group' => "El grupo {$group->code} está cancelado."]);
                 }
+
+                $departments[] = $group->department_id;
 
                 if ($group->teacher_id === $locked->getKey()) {
                     continue;
@@ -89,6 +123,15 @@ final class RecordPriorChoice
             $mark = PriorChoice::query()->firstOrNew(['term_id' => $term->getKey(), 'modality_id' => $modality->getKey(), 'teacher_id' => $locked->getKey()]);
             $created = ! $mark->exists;
 
+            $merged = array_values(array_unique([...($mark->department_ids ?? []), ...$departments]));
+            sort($merged);
+
+            if ($created) {
+                $mark->fill(['department_ids' => $merged]);
+            } elseif ($mark->department_ids !== $merged) {
+                $mark->update(['department_ids' => $merged]);
+            }
+
             if ($created) {
                 $mark->fill(['recorded_by' => $actor->getKey(), 'recorded_at' => now()])->save();
 
@@ -98,6 +141,10 @@ final class RecordPriorChoice
                     ->event('prior_choice_recorded')
                     ->withProperties(['teacher_id' => $locked->getKey(), 'term_id' => $term->getKey(), 'modality_id' => $modality->getKey(), 'groups' => $assigned])
                     ->log("Marcó a {$locked->name} con elección previa en {$term->name} (".count($assigned).' grupos nuevos)');
+            }
+
+            foreach ($selections as $selection) {
+                $this->recompute->handle($selection);
             }
 
             return $mark;

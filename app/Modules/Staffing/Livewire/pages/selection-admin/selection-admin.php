@@ -532,29 +532,9 @@ new #[Title('Orden de selección')] class extends Component
             'ownRooms' => $this->rooms($selection)->where('department_id', $selection->department_id)->get(),
             'freeRooms' => $this->rooms($selection)->whereNull('department_id')->get(),
             'entries' => $entries,
-            'priorHours' => $this->priorHours($selection, $entries),
+            'priorHours' => $groups->hoursByTeacher($selection, $entries->whereNotNull('prior_choice_at')->pluck('teacher_id')->filter()->values()->all()),
             'slots' => $this->slotPreview($entries, $selection),
         ];
-    }
-
-    /**
-     * SEL-16: las horas de los grupos de cada docente con elección previa (para la vista previa del orden, sin consultas
-     * en Blade).
-     *
-     * @param  Collection<int, SelectionEntry>  $entries
-     * @return Collection<string, int|string>
-     */
-    private function priorHours(Selection $selection, $entries)
-    {
-        $ids = $entries->whereNotNull('prior_choice_at')->pluck('teacher_id')->filter()->all();
-
-        return $ids === [] ? collect() : app(SelectionGroupsQuery::class)->of($selection)
-            ->whereIn('groups.teacher_id', $ids)
-            ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->groupBy('groups.teacher_id')
-            ->selectRaw('groups.teacher_id, sum(subjects.theory_hours + subjects.practice_hours) as hours')
-            ->toBase()
-            ->pluck('hours', 'teacher_id');
     }
 
     /**

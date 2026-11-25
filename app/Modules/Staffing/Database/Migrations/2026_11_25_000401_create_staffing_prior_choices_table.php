@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Marca de «Elección previa» (SEL-16, tarea 1.41): el docente ya trae sus grupos escritos en la relación de materias y
  * no recibe turno en la orden de selección de su periodo y modalidad. Una por docente, periodo y modalidad.
+ * `department_ids` son los departamentos de sus grupos: la marca solo aplica en las selecciones de esos departamentos.
  */
 return new class extends Migration
 {
@@ -20,6 +21,7 @@ return new class extends Migration
             $table->foreignUuid('teacher_id')->constrained();
             $table->foreignUuid('recorded_by')->constrained('users');
             $table->timestampTz('recorded_at');
+            $table->jsonb('department_ids')->nullable();
             $table->text('note')->nullable();
             $table->timestampsTz();
 

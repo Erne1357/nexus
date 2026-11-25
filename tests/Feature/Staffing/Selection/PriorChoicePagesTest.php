@@ -5,6 +5,7 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Staffing\Actions\RecordPriorChoice;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
+use App\Modules\Staffing\Queries\SelectionMonitorQuery;
 use Carbon\CarbonImmutable;
 use Livewire\Livewire;
 use Tests\Support\Staffing\SelectionWorld;
@@ -20,7 +21,12 @@ beforeEach(function () {
     $this->previo = $this->world->teacher(name: 'Docente Previo', entry: ['status' => SelectionEntryStatus::Done, 'prior_choice_at' => now(), 'position' => 0, 'slot_starts_at' => null, 'slot_ends_at' => null]);
     $this->espera = $this->world->teacher(name: 'Docente Espera', position: 1, slotStartsAt: CarbonImmutable::now()->addDay());
     RoleAssignment::factory()->for($this->espera->user)->create(['role' => Role::Docente]);
+    // La Action solo registra con la selección en borrador (SEL-16): se registra así y se publica el escenario como estaba.
+    $espera = $this->world->entryOf($this->espera)->only(['position', 'slot_index', 'slot_starts_at', 'slot_ends_at']);
+    $this->world->selection->update(['status' => SelectionStatus::Draft]);
     app(RecordPriorChoice::class)->handle($this->world->term, $this->world->selection->modality, $this->previo, [['group' => $this->world->group('A', [[1, '09:00', '10:00']])]], $this->world->admin);
+    $this->world->selection->update(['status' => SelectionStatus::Published]);
+    $this->world->entryOf($this->espera)->update($espera);
 });
 
 it('SEL-16: el drawer de la orden los muestra aparte, arriba, con sus horas y sin turno', function () {
@@ -42,6 +48,15 @@ it('SEL-16: el monitor del admin los lista aparte y no los cuenta como turnos', 
         ->assertSeeHtml('data-testid="monitor-prior"')
         ->assertSee('Docente Previo')
         ->assertSee('Elección previa');
+
+    // No cuentan como turno: el avance es 0 de 1 (solo «Docente Espera» tiene turno) y «lugar X de N» no los incluye.
+    $monitor = app(SelectionMonitorQuery::class)->for($this->world->selection->fresh(), CarbonImmutable::now());
+
+    expect($monitor)->total->toBe(1)->done->toBe(0)->and($monitor['prior'])->toHaveCount(1)->and($monitor['rows'])->toHaveCount(1);
+
+    $html = preg_replace('/\s+/u', ' ', strip_tags(Livewire::actingAs($this->espera->user)->test('staffing::pages.offer')->set('showOrder', true)->html()));
+
+    expect($html)->toContain('lugar 1 de 1')->not->toContain('de 2');
 });
 
 it('SEL-16: la vista previa del paso 6 los muestra bajo «Elección previa»', function () {

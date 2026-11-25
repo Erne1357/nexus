@@ -30,4 +30,20 @@ final readonly class LoadRelationRow
     {
         return $this->letter !== 'GL' && $this->hourRange !== null;
     }
+
+    /**
+     * El minuto de inicio del rango («9 - 10» = 540, «9:30 - 10:30» = 570), o null si no hay horario fijo o no se lee.
+     * Es el mismo criterio con que ImportLoadProjection arma la hora de inicio de las sesiones del grupo.
+     */
+    public function startMinute(): ?int
+    {
+        if (! $this->hasFixedSchedule() || preg_match('/^(\d{1,2})(?::(\d{2}))?\s*-\s*(\d{1,2})(?::(\d{2}))?$/', (string) $this->hourRange, $m) !== 1) {
+            return null;
+        }
+
+        $start = (int) $m[1] * 60 + (int) ($m[2] ?? 0);
+        $end = (int) $m[3] * 60 + (int) ($m[4] ?? 0);
+
+        return $end > $start && $end <= 24 * 60 ? $start : null;
+    }
 }

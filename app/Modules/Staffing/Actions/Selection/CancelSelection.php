@@ -17,7 +17,8 @@ use Illuminate\Validation\ValidationException;
  * la publicación ya pasó a asignación se quedan como están: el jefe sigue asignando a mano. No se borra nada.
  *
  * Si ya estaba publicada, los docentes de la cola ya tenían su turno: a cada uno con cuenta le llega
- * SelectionCancelled (campana y correo, después del commit), dirigido al puesto con que elige. Un borrador no avisa a
+ * SelectionCancelled (campana y correo, después del commit), dirigido al puesto con que elige. Los de elección previa
+ * (SEL-16) no tenían turno y no reciben el aviso. Un borrador no avisa a
  * nadie. La bitácora (`selection_cancelled`) guarda de qué estado se canceló y a cuántos se avisó.
  *
  * Toma primero el candado de la selección (pg_advisory_xact_lock sobre `staffing_selection:{id}`), el mismo que usan
@@ -47,7 +48,7 @@ final class CancelSelection
 
             $from = $selection->status;
             $recipients = $from === SelectionStatus::Published
-                ? $selection->entries()->with('teacher.user')->get()->map(fn ($entry): ?User => $entry->teacher?->user)->filter()->unique('id')->values()
+                ? $selection->entries()->with('teacher.user')->whereNull('prior_choice_at')->get()->map(fn ($entry): ?User => $entry->teacher?->user)->filter()->unique('id')->values()
                 : collect();
 
             $selection->update(['status' => SelectionStatus::Cancelled, 'cancelled_at' => now()]);

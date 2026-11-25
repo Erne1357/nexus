@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * «Elección previa» (SEL-16, tarea 1.41): el docente ya escribió sus grupos en la relación de materias, así que no
  * recibe turno en la orden de selección de ese periodo y modalidad. Se escribe solo con RecordPriorChoice.
  */
-#[Fillable(['term_id', 'modality_id', 'teacher_id', 'recorded_by', 'recorded_at', 'note'])]
+#[Fillable(['term_id', 'modality_id', 'teacher_id', 'recorded_by', 'recorded_at', 'department_ids', 'note'])]
 class PriorChoice extends Model
 {
     use HasUuids;
@@ -29,6 +29,7 @@ class PriorChoice extends Model
     {
         return [
             'recorded_at' => 'immutable_datetime',
+            'department_ids' => 'array',
             'created_at' => 'immutable_datetime',
             'updated_at' => 'immutable_datetime',
         ];

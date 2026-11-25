@@ -38,13 +38,7 @@ final class SelectionOrderQuery
         $inTurn = $this->turns->entriesInTurn($selection, $now ?? CarbonImmutable::now())->keyBy('id')->all();
         $perSlot = $entries->reject(fn (SelectionEntry $entry): bool => $entry->isPriorChoice())->countBy('slot_index');
         $priorIds = $entries->filter(fn (SelectionEntry $entry): bool => $entry->isPriorChoice())->pluck('teacher_id')->filter()->all();
-        $hours = $priorIds === [] ? collect() : $this->groups->of($selection)
-            ->whereIn('groups.teacher_id', $priorIds)
-            ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->groupBy('groups.teacher_id')
-            ->selectRaw('groups.teacher_id, sum(subjects.theory_hours + subjects.practice_hours) as hours')
-            ->toBase()
-            ->pluck('hours', 'teacher_id');
+        $hours = $this->groups->hoursByTeacher($selection, $priorIds);
 
         return $entries->map(function (SelectionEntry $entry) use ($inTurn, $perSlot, $hours): array {
             $prior = $entry->isPriorChoice();
@@ -75,7 +69,7 @@ final class SelectionOrderQuery
                 'tie' => ! $prior && ($perSlot[$entry->slot_index] ?? 0) > 1,
                 'in_turn' => isset($inTurn[$entry->getKey()]),
                 'prior' => $prior,
-                'hours' => $prior ? (int) ($entry->closed_hours ?? $hours[$entry->teacher_id] ?? 0) : null,
+                'hours' => $prior ? (int) ($hours[$entry->teacher_id] ?? 0) : null,
             ];
         })->values()->all();
     }

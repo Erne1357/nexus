@@ -38,7 +38,8 @@ use Throwable;
  * SEL-16: los renglones de elección previa (`prior_choice_at`, ya `done`) quedan cerrados al publicar, con `closed_at` y las horas de
  * sus grupos en las cargas incluidas (`closed_hours`); se autoriza el total de HC-08 en el periodo con la
  * justificación «Elección previa», igual que SEL-12 al terminar la carga. No reciben aviso de
- * turno (no tienen) pero sí la invitación de acceso.
+ * turno (no tienen) pero sí la invitación de acceso. Si todos los de la cola son elección previa, la selección no
+ * tiene turnos: se publica ya terminada (`finished_at`), sin pedir hora de inicio.
  */
 final class PublishSelection
 {
@@ -69,7 +70,11 @@ final class PublishSelection
             // última programación entra al final. Si algo de abajo rechaza publicar, la transacción lo deshace.
             $this->recompute->handle($selection);
 
-            $this->guard($selection);
+            // SEL-16: si todos los de la cola son elección previa no hay turnos que correr: no se pide hora de inicio y la
+            // selección termina de una vez, con sus renglones cerrados.
+            $withoutTurns = ! $selection->entries()->whereNull('prior_choice_at')->exists();
+
+            $this->guard($selection, requireStart: ! $withoutTurns);
 
             $loads = $selection->loads()->get();
 
@@ -79,14 +84,18 @@ final class PublishSelection
 
             $this->closePriorChoices($selection, $actor);
 
-            $selection->update(['status' => SelectionStatus::Published, 'published_at' => now()]);
+            $selection->update($withoutTurns
+                ? ['status' => SelectionStatus::Finished, 'published_at' => now(), 'finished_at' => now()]
+                : ['status' => SelectionStatus::Published, 'published_at' => now()]);
 
             activity()
                 ->performedOn($selection)
                 ->causedBy($actor)
                 ->event('selection_published')
                 ->withProperties(['loads' => $loads->pluck('id')->all(), 'entries' => $selection->entries()->count()])
-                ->log('Publicó la selección y abrió '.$loads->count().' cargas a la asignación');
+                ->log($withoutTurns
+                    ? 'Publicó la selección, sin turnos porque todos tienen elección previa (SEL-16): terminó y abrió '.$loads->count().' cargas a la asignación'
+                    : 'Publicó la selección y abrió '.$loads->count().' cargas a la asignación');
 
             return $selection;
         });
@@ -124,13 +133,7 @@ final class PublishSelection
         }
 
         $term = Term::query()->findOrFail($selection->term_id);
-        $hours = $this->groups->of($selection)
-            ->whereIn('groups.teacher_id', $entries->pluck('teacher_id')->all())
-            ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->groupBy('groups.teacher_id')
-            ->selectRaw('groups.teacher_id, sum(subjects.theory_hours + subjects.practice_hours) as hours')
-            ->toBase()
-            ->pluck('hours', 'teacher_id');
+        $hours = $this->groups->hoursByTeacher($selection, $entries->pluck('teacher_id')->all());
         $appended = $entries->where('source', SelectionEntrySource::Appended)->pluck('teacher_id')->all();
         $nexusBase = $appended === [] ? [] : $this->baseHours->forTerm($term, $appended);
 
@@ -155,7 +158,7 @@ final class PublishSelection
     /**
      * @throws ValidationException
      */
-    private function guard(Selection $selection): void
+    private function guard(Selection $selection, bool $requireStart = true): void
     {
         if ($selection->status !== SelectionStatus::Draft) {
             throw ValidationException::withMessages(['status' => "La selección está {$selection->status->label()}: solo se publica un borrador."]);
@@ -163,7 +166,7 @@ final class PublishSelection
 
         $reasons = [];
 
-        if ($selection->starts_at === null || ! $selection->starts_at->isFuture()) {
+        if ($requireStart && ($selection->starts_at === null || ! $selection->starts_at->isFuture())) {
             $reasons[] = 'La fecha de inicio debe estar en el futuro.';
         }
 
