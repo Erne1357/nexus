@@ -9,7 +9,6 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\GrantHourAllowance;
-use App\Modules\Faculty\Queries\TeacherBaseHoursQuery;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
@@ -17,8 +16,10 @@ use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Jobs\InviteSelectionTeachersJob;
 use App\Modules\Staffing\Models\Selection;
+use App\Modules\Staffing\Models\SelectionEntry;
+use App\Modules\Staffing\Notifications\PriorChoiceHoursPending;
 use App\Modules\Staffing\Notifications\SelectionTurnPublished;
-use App\Modules\Staffing\Queries\SelectionGroupsQuery;
+use App\Modules\Staffing\Queries\PriorChoiceHoursQuery;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -46,10 +47,9 @@ final class PublishSelection
     public function __construct(
         private readonly OpenLoadForSelection $openLoad,
         private readonly RecomputeSelectionOrder $recompute,
-        private readonly SelectionGroupsQuery $groups,
-        private readonly TeacherBaseHoursQuery $baseHours,
         private readonly GrantHourAllowance $grantHours,
         private readonly ScheduleValidator $validator,
+        private readonly PriorChoiceHoursQuery $priorHours,
     ) {}
 
     /**
@@ -57,7 +57,10 @@ final class PublishSelection
      */
     public function handle(Selection $selection, User $actor): Selection
     {
-        $published = DB::transaction(function () use ($selection, $actor): Selection {
+        /** @var Collection<int, array{entry: SelectionEntry, hours: int, base: int}> $pendingConfirmation SEL-16: elección previa arriba de su banda, a quien se avisa */
+        $pendingConfirmation = collect();
+
+        $published = DB::transaction(function () use ($selection, $actor, &$pendingConfirmation): Selection {
             DB::select('select pg_advisory_xact_lock(hashtext(?))', ["staffing_selection:{$selection->getKey()}"]);
 
             $selection->setRawAttributes(Selection::query()->lockForUpdate()->findOrFail($selection->getKey())->getAttributes(), sync: true);
@@ -82,7 +85,7 @@ final class PublishSelection
                 $this->openLoad->handle($load, $actor);
             }
 
-            $this->closePriorChoices($selection, $actor);
+            $pendingConfirmation = $this->closePriorChoices($selection, $actor);
 
             $selection->update($withoutTurns
                 ? ['status' => SelectionStatus::Finished, 'published_at' => now(), 'finished_at' => now()]
@@ -105,6 +108,19 @@ final class PublishSelection
 
         $department = (string) $published->department()->value('name');
 
+        // SEL-16 (1.45): un aviso único a quien debe confirmar sus horas de más (llamada del coordinador, supuesto por confirmar).
+        foreach ($pendingConfirmation as ['entry' => $entry, 'hours' => $hours, 'base' => $base]) {
+            if ($entry->teacher?->user === null) {
+                continue;
+            }
+
+            try {
+                $entry->teacher->user->notify(new PriorChoiceHoursPending($published->term_id, $published->modality_id, $department, $hours, $base));
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+
         foreach ($published->entries()->with('teacher.user')->get() as $entry) {
             if ($entry->slot_starts_at === null || $entry->slot_ends_at === null || $entry->teacher?->user === null) {
                 continue;
@@ -122,26 +138,36 @@ final class PublishSelection
 
     /**
      * SEL-16: cierra los renglones de elección previa con las horas de sus grupos y justifica en HC-08 las que queden
-     * (SEL-12).
+     * (SEL-12), salvo a quien quedó arriba de la banda de su base sin confirmar: ese queda cerrado pero con HC-08 como
+     * choque hasta que confirme con la casilla (ConfirmPriorChoiceHours, ampliación de SEL-16 del 25 de noviembre de 2026).
+     *
+     * @return Collection<int, array{entry: SelectionEntry, hours: int, base: int}> los renglones que deben confirmar
      */
-    private function closePriorChoices(Selection $selection, User $actor): void
+    private function closePriorChoices(Selection $selection, User $actor): Collection
     {
-        $entries = $selection->entries()->with('teacher')->whereNotNull('prior_choice_at')->get();
+        $entries = $selection->entries()->with('teacher.user')->whereNotNull('prior_choice_at')->get();
 
         if ($entries->isEmpty()) {
-            return;
+            return collect();
         }
 
         $term = Term::query()->findOrFail($selection->term_id);
-        $hours = $this->groups->hoursByTeacher($selection, $entries->pluck('teacher_id')->all());
-        $appended = $entries->where('source', SelectionEntrySource::Appended)->pluck('teacher_id')->all();
-        $nexusBase = $appended === [] ? [] : $this->baseHours->forTerm($term, $appended);
+        $measured = $this->priorHours->forSelection($selection, $entries, $term);
+        $pending = collect();
 
         foreach ($entries as $entry) {
-            $taken = (int) ($hours[$entry->teacher_id] ?? 0);
-            $base = $entry->source === SelectionEntrySource::Appended ? ($nexusBase[$entry->teacher_id] ?? 0) : $entry->base_hours;
+            $taken = $measured[$entry->getKey()]['hours'] ?? 0;
+            $base = $measured[$entry->getKey()]['base'] ?? $entry->base_hours;
 
-            $entry->update(['closed_at' => now(), 'closed_hours' => $taken]);
+            $over = ($measured[$entry->getKey()]['band'] ?? null) === 'over';
+            // La foto al publicar: quien queda arriba de la banda debe confirmar, pase lo que pase después con sus grupos.
+            $entry->update(['closed_at' => now(), 'closed_hours' => $taken, 'prior_choice_confirm_required_at' => $over ? now() : null]);
+
+            if ($over) {
+                $pending->push(['entry' => $entry, 'hours' => $taken, 'base' => $base]);
+
+                continue;
+            }
 
             // Igual que SEL-12 al terminar: se autoriza todo lo que HC-08 le cuenta en el periodo.
             $this->validator->forget();
@@ -153,6 +179,8 @@ final class PublishSelection
                 $this->validator->forget();
             }
         }
+
+        return $pending;
     }
 
     /**

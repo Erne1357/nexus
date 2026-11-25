@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\DB;
  * la cola: con acceso, invitado (invitación vigente), pendiente (con su motivo) o sin correo. Una consulta por cada
  * cosa, sin importar la cola.
  *
- * @phpstan-type Row array{entry: SelectionEntry, name: string, hours: int, groups: list<string>, current: bool, access: string}
+ * @phpstan-type Row array{entry: SelectionEntry, name: string, hours: int, groups: list<string>, current: bool, access: string, confirmation: ?string}
  * @phpstan-type Access array{counts: array{access: int, invited: int, pending: int, no_email: int}, missing: list<array{teacher_id: ?string, name: string, state: string, reason: string, resendable: bool}>}
  */
 final class SelectionMonitorQuery
@@ -35,6 +35,7 @@ final class SelectionMonitorQuery
         private readonly SelectionTurnQuery $turns,
         private readonly SelectionGroupsQuery $groups,
         private readonly RoleAssignmentRules $rules,
+        private readonly PriorChoiceHoursQuery $priorHours,
     ) {}
 
     /**
@@ -51,8 +52,9 @@ final class SelectionMonitorQuery
 
         $byTeacher = $groups->whereNotNull('teacher_id')->groupBy('teacher_id');
         $access = $this->accessOf($entries);
+        $measured = $this->priorHours->forSelection($selection, $entries);
 
-        $rows = $entries->map(function (SelectionEntry $entry) use ($byTeacher, $current, $access): array {
+        $rows = $entries->map(function (SelectionEntry $entry) use ($byTeacher, $current, $access, $measured): array {
             $taken = $byTeacher->get($entry->teacher_id, collect());
 
             return [
@@ -62,6 +64,13 @@ final class SelectionMonitorQuery
                 'groups' => $taken->pluck('code')->sort()->values()->all(),
                 'current' => $current?->getKey() === $entry->getKey(),
                 'access' => $access[$entry->teacher_id]['state'] ?? 'pending',
+                // SEL-16 ampliada: «pending» (falta confirmar sus horas de más), «confirmed» o nulo.
+                'confirmation' => match (true) {
+                    ! isset($measured[$entry->getKey()]) => null,
+                    $measured[$entry->getKey()]['confirmed_at'] !== null => 'confirmed',
+                    $measured[$entry->getKey()]['needs_confirmation'] => 'pending',
+                    default => null,
+                },
             ];
         })->values();
         $missing = $rows->filter(fn (array $row): bool => ! in_array($row['access'], ['access', 'invited'], true))
