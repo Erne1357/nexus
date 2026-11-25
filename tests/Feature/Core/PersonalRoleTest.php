@@ -8,6 +8,8 @@ use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\LoginNotice;
+use App\Modules\Core\Models\LoginShortcut;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
@@ -15,6 +17,7 @@ use App\Modules\Core\Queries\RoleTitleQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 
@@ -118,6 +121,26 @@ it('CO-01: el jefe y el personal de Comunicación tienen avisos, atajos y fotos 
     $this->actingAs($hrHead)->get(route('core.login-content'))->assertForbidden();
     $this->actingAs($hrStaff)->get(route('core.login-content'))->assertForbidden();
 });
+
+it('CO-01: la jefa y el personal de Comunicación dan de alta y editan avisos y atajos desde «Avisos y atajos»', function (string $who) {
+    Storage::fake('public');
+    $user = $who === 'jefa' ? communicationHead() : communicationStaff();
+
+    $page = Livewire::actingAs($user)->test('core::pages.login-content')
+        ->call('create')->set('title', "Aviso de la {$who}")->call('save')->assertHasNoErrors()
+        ->set('tab', 'shortcuts')
+        ->call('create')->set('title', "Atajo de la {$who}")->set('url', 'https://www.tecnm.mx')->call('save')->assertHasNoErrors();
+
+    $notice = LoginNotice::query()->where('title', "Aviso de la {$who}")->sole();
+    $shortcut = LoginShortcut::query()->where('title', "Atajo de la {$who}")->sole();
+
+    $page->call('edit', $shortcut->id)->set('title', "Atajo editado de la {$who}")->call('save')->assertHasNoErrors()
+        ->set('tab', 'notices')
+        ->call('edit', $notice->id)->set('title', "Aviso editado de la {$who}")->call('save')->assertHasNoErrors();
+
+    expect($notice->fresh()->title)->toBe("Aviso editado de la {$who}")
+        ->and($shortcut->fresh()->title)->toBe("Atajo editado de la {$who}");
+})->with(['jefa', 'personal']);
 
 it('CO-01: el Inicio de la jefa de Comunicación ya no dice "Tu área todavía no tiene funciones en Nexus."', function () {
     $this->actingAs(communicationHead());

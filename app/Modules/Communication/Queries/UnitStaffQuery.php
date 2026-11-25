@@ -8,6 +8,7 @@ use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Queries\PeopleQuery;
 use App\Modules\Core\Queries\TextSearch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -16,8 +17,8 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 /**
  * Lecturas de «Personal» (CO-02): la unidad de Comunicación y Difusión, sus nombramientos de «Personal de área» vigentes
  * o por empezar y la búsqueda de una persona del personal para nombrarla. Del personal es quien tiene la cuenta activa y
- * no es solo alumno: sin un nombramiento vigente de alumno, o con otro puesto vigente además (la misma regla que la
- * lista de «Personas y puestos», AC-15). Así un alumno no sale en la búsqueda ni se elige con su id.
+ * no es solo alumno (PeopleQuery::staffOnly(), la regla de la lista de «Personas y puestos», AC-15). Así un alumno no
+ * sale en la búsqueda ni se elige con su id.
  */
 final class UnitStaffQuery
 {
@@ -121,10 +122,6 @@ final class UnitStaffQuery
      */
     private function staff(): Builder
     {
-        return User::query()
-            ->where('is_active', true)
-            ->where(fn (Builder $staff) => $staff
-                ->whereDoesntHave('roleAssignments', fn (Builder $assignments) => $assignments->current()->where('role', Role::Alumno))
-                ->orWhereHas('roleAssignments', fn (Builder $assignments) => $assignments->current()->where('role', '<>', Role::Alumno)));
+        return PeopleQuery::staffOnly(User::query()->where('is_active', true));
     }
 }
