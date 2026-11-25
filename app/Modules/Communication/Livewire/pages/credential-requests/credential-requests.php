@@ -166,8 +166,22 @@ new #[Title('Solicitudes de credencial')] class extends Component
         ]);
 
         $request = $this->current();
-        $setStudentPhoto->handle($request->student, $this->photo, auth()->user());
 
+        if (! $request->status->isOpen()) {
+            $this->addError('request', 'La solicitud ya está cerrada: no se le sube foto.');
+
+            return;
+        }
+
+        try {
+            $setStudentPhoto->handle($request->student, $this->photo, auth()->user());
+        } catch (ValidationException $e) {
+            $this->addError('photo', collect($e->errors())->flatten()->first());
+
+            return;
+        }
+
+        $this->resetErrorBag('request');
         $this->reset('photo');
         $this->success('Foto guardada', e($request->student->name));
     }

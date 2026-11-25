@@ -262,3 +262,13 @@ test('CO-S8: subir la foto con SetStudentPhoto marca la solicitud abierta y deja
     app(DeliverCredentialRequest::class)->handle($request->fresh(), $by);
     expect($request->fresh()->status)->toBe(S::Entregada);
 });
+
+it('CO-S9: no se cita en el pasado', function () {
+    Notification::fake();
+    [$student] = studentWithUser();
+    $request = CredentialRequest::factory()->for($student)->create(['wants_reposition' => true, 'status' => S::Solicitada]);
+
+    expect(fn () => app(ScheduleCredentialRequest::class)->handle($request, CarbonImmutable::now()->subDay(), 'Edificio A', communicationStaff()))
+        ->toThrow(ValidationException::class, 'La cita debe ser a partir de hoy.');
+    expect($request->fresh()->status)->toBe(S::Solicitada);
+});

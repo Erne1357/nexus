@@ -108,3 +108,43 @@ it('CO-07: Inicio ofrece la bandeja y las fotos a Comunicación y no a quien no 
     $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->ana->campus_id, 'career_id' => $this->ana->career_id])->create();
     Livewire::actingAs($coordinator)->test('core::pages.home')->assertDontSee('Solicitudes de credencial');
 });
+
+it('CO-S9: la bandeja no deja citar en el pasado', function () {
+    $request = CredentialRequest::factory()->create(['student_id' => $this->ana->id]);
+
+    Livewire::actingAs($this->head)->test('communication::pages.credential-requests')
+        ->call('openRequest', $request->id)
+        ->set('scheduleDate', now('America/Ciudad_Juarez')->subDays(2)->format('Y-m-d'))->set('scheduleTime', '10:00')->set('place', 'Edificio A')
+        ->call('schedule')
+        ->assertHasErrors('request');
+
+    expect($request->fresh()->status)->toBe(Status::Solicitada);
+});
+
+it('CO-08: una transición inválida muestra el mensaje de la Action en el drawer, sin excepción', function () {
+    $request = CredentialRequest::factory()->create(['student_id' => $this->ana->id]);
+    $photoOnly = CredentialRequest::factory()->create(['student_id' => $this->beto->id, 'wants_reposition' => false, 'wants_photo' => true, 'status' => Status::Citada]);
+
+    Livewire::actingAs($this->head)->test('communication::pages.credential-requests')
+        ->call('openRequest', $request->id)->call('deliver')
+        ->assertHasErrors('request')->assertSeeHtml('data-testid="request-error"')
+        ->call('openRequest', $photoOnly->id)->call('markReady')
+        ->assertHasErrors('request')->assertSeeHtml('data-testid="request-error"');
+
+    expect($request->fresh()->status)->toBe(Status::Solicitada)->and($photoOnly->fresh()->status)->toBe(Status::Citada);
+});
+
+it('CO-07: subir foto a una solicitud cerrada se rechaza y una imagen inválida sale en el campo foto', function () {
+    $closed = CredentialRequest::factory()->create(['student_id' => $this->ana->id, 'status' => Status::Rechazada]);
+    $open = CredentialRequest::factory()->create(['student_id' => $this->beto->id]);
+
+    $page = Livewire::actingAs($this->head)->test('communication::pages.credential-requests')
+        ->call('openRequest', $closed->id)
+        ->set('photo', UploadedFile::fake()->image('ana.jpg', 700, 900))->call('savePhoto')
+        ->assertHasErrors('request');
+    expect(Storage::disk('student_photos')->allFiles())->toBe([]);
+
+    $page->call('openRequest', $open->id)
+        ->set('photo', UploadedFile::fake()->createWithContent('falsa.jpg', 'no soy una imagen'))->call('savePhoto')
+        ->assertHasErrors('photo');
+});
