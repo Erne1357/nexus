@@ -127,6 +127,7 @@ final class PositionsQuery
             Role::JefeDepartamento => 'Su departamento; todo el Tec en campus y modalidad',
             Role::JefeProyectoDocente => 'Su departamento y su modalidad; el campus, si lo lleva',
             Role::Coordinador => 'Su carrera y su modalidad; el campus, si lo lleva',
+            Role::Personal => 'Su unidad; todo el Tec en campus y modalidad',
             Role::Docente, Role::Alumno => 'Sin alcance: solo permisos personales',
         };
     }

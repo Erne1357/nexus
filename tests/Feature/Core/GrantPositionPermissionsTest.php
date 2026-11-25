@@ -41,15 +41,15 @@ function batchLooseOf(Role $role): array
 it('CF-01: da varios permisos sueltos en una sola transacción, con una entrada de bitácora por cada uno', function () {
     DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => CorePermission::TermView->value]);
 
-    app(GrantPositionPermissions::class)->handle(Role::Coordinador, [CorePermission::SettingView, CorePermission::TermView, CorePermission::LoginNoticeView]);
+    app(GrantPositionPermissions::class)->handle(Role::Coordinador, [CorePermission::SettingView, CorePermission::TermView, CorePermission::CampusViewInactive]);
 
-    expect(batchLooseOf(Role::Coordinador))->toBe(['core.login_notice.view', 'core.setting.view', 'core.term.view'])
+    expect(batchLooseOf(Role::Coordinador))->toBe(['core.campus.view_inactive', 'core.setting.view', 'core.term.view'])
         ->and(app(GrantTable::class)->grants(Role::Coordinador, CorePermission::SettingView))->toBeTrue()
         ->and(Activity::query()->orderBy('id')->pluck('description')->all())->toBe([
-            'Dio el permiso «Ver los avisos de la pantalla de acceso» al puesto Coordinador de carrera',
+            'Dio el permiso «Ver campus inactivos» al puesto Coordinador de carrera',
             'Dio el permiso «Ver los parámetros» al puesto Coordinador de carrera',
         ])
-        ->and(Activity::query()->latest('id')->first()->attribute_changes->toArray()['attributes']['permissions'])->toBe(['core.login_notice.view', 'core.setting.view', 'core.term.view']);
+        ->and(Activity::query()->latest('id')->first()->attribute_changes->toArray()['attributes']['permissions'])->toBe(['core.campus.view_inactive', 'core.setting.view', 'core.term.view']);
 });
 
 it('CF-03 y CF-04: si alguno no se puede dar, no da ninguno y dice todos los motivos', function () {

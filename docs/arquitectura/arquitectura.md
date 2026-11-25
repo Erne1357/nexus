@@ -168,6 +168,7 @@ La migración repetible del SII (`imports:migrate-sii`, tarea 1.16) pasa la expo
 | `Facilities` | Edificios, salones, bloqueos, salones por defecto | R1 |
 | `Faculty` | Docentes, plazas, disponibilidad, horas externas, historial, perfil, evaluaciones | R1 |
 | `Students` | Alumnos, kardex, avance reticular | R1 |
+| `Communication` | Pantallas del Departamento de Comunicación y Difusión (su personal, avisos y atajos, fotos, solicitudes de credencial) y su área del menú; los datos viven en Core y Students (CO-01) | R1 |
 | `Imports` | Importador por archivos: plantillas, mapeos, staging, validación, aplicación | R1 |
 | `CatalogValidation` | Revisión y validación de catálogos por jefes de departamento cada periodo | R1 |
 | `AcademicLoad` | Orquestación del flujo: propuestas, estados, acuerdos, solicitudes de cambio, cierre, aprobación, publicación, snapshots, re-análisis | R1 (base), R2 (re-análisis e impacto) |

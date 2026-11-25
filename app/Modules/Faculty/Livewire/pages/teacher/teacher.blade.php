@@ -15,6 +15,14 @@
     <x-core::back-link :validation="$this->validationReturnUrl()" :href="route('faculty.teachers')" label="Docentes" />
 
     <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div class="flex min-w-0 items-start gap-4">
+            {{-- CO-04: la foto del docente (URL firmada de 2 horas); sin foto, sus iniciales. --}}
+            @if ($record->user !== null && ($photo = \App\Modules\Core\Support\StaffPhotoUrl::for($record->user, mini: true)) !== null)
+                <img src="{{ $photo }}" alt="" data-testid="teacher-photo" class="h-14 w-14 shrink-0 rounded-full bg-base-300 object-cover object-top" />
+            @else
+                <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-base-300 text-lg font-semibold" aria-hidden="true">{{ \Illuminate\Support\Str::of($record->teacher->name)->explode(' ')->filter()->take(2)->map(fn (string $word): string => mb_strtoupper(mb_substr($word, 0, 1)))->implode('') }}</span>
+            @endif
+
         <div class="min-w-0">
             <h1 class="flex flex-wrap items-center gap-3 text-[1.625rem] font-bold leading-tight md:text-3xl">
                 {{ $record->teacher->name }}
@@ -30,6 +38,7 @@
                 <span>Grado <span class="font-medium text-base-content">{{ $record->teacher->degree?->label() ?? '—' }}</span></span>
                 <span>Ingreso <span class="font-medium text-base-content">{{ $record->teacher->hired_on?->format('d/m/Y') ?? '—' }}</span></span>
             </p>
+        </div>
         </div>
 
         <div class="flex gap-2 max-md:w-full">

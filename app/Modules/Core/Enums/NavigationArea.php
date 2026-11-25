@@ -9,6 +9,9 @@ namespace App\Modules\Core\Enums;
  *
  * Carga académica reúne todo lo de la carga, del semestre y del docente (tarea 1.24.6): el admin la puede ocultar
  * entera a los demás (MN-05, AcademicLoadVisibility).
+ *
+ * Comunicación y Difusión (CO-01, tarea 1.34) reúne las pantallas de ese departamento: su personal, los avisos y los
+ * atajos del acceso y, después, las fotos y las solicitudes de credencial.
  */
 enum NavigationArea: string
 {
@@ -16,6 +19,7 @@ enum NavigationArea: string
     case Academico = 'academico';
     case CargaAcademica = 'carga_academica';
     case ServiciosEscolares = 'servicios_escolares';
+    case Comunicacion = 'comunicacion';
     case RecursosHumanos = 'recursos_humanos';
     case RecursosFinancieros = 'recursos_financieros';
     case Administracion = 'administracion';
@@ -30,6 +34,7 @@ enum NavigationArea: string
             self::Academico => 'Académico',
             self::CargaAcademica => 'Carga académica',
             self::ServiciosEscolares => 'Servicios escolares',
+            self::Comunicacion => 'Comunicación y Difusión',
             self::RecursosHumanos => 'Recursos humanos',
             self::RecursosFinancieros => 'Recursos financieros',
             self::Administracion => 'Administración',
@@ -46,6 +51,7 @@ enum NavigationArea: string
             self::Academico => 'o-academic-cap',
             self::CargaAcademica => 'o-table-cells',
             self::ServiciosEscolares => 'o-user-group',
+            self::Comunicacion => 'o-megaphone',
             self::RecursosHumanos => 'o-identification',
             self::RecursosFinancieros => 'o-banknotes',
             self::Administracion => 'o-cog-6-tooth',

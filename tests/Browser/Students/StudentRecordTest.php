@@ -73,7 +73,7 @@ it('al tocar una materia resalta su cadena y la barra de selección dice qué pi
         ->assertScript($onChain('ACF-0901'), true);
 
     // Tocar la pestaña en que ya está vuelve a pintar la página, pero no pierde el resaltado.
-    $page->click('[role=tab]:not([data-testid=tab-kardex])')
+    $page->click('[role=tab]:not([data-testid^=tab-])')
         ->assertScript($focused, true);
 
     // Con el menú abierto, Esc cierra el menú y no quita el resaltado: Esc cierra solo la capa de arriba.

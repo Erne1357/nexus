@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Credentials\CredentialPhotos;
 use App\Modules\Core\Queries\CredentialQuery;
 use App\Modules\Core\Queries\PageTrailQuery;
 use Livewire\Attributes\Locked;
@@ -40,9 +41,9 @@ new class extends Component
     }
 
     /**
-     * @return array{areaLabel: ?string, pageTitle: ?string, name: string, username: string, initials: string, roleLabel: ?string, summary: string}
+     * @return array{areaLabel: ?string, pageTitle: ?string, name: string, username: string, initials: string, photo: ?string, roleLabel: ?string, summary: string}
      */
-    public function with(Actor $context, PageTrailQuery $trails, CredentialQuery $credentials): array
+    public function with(Actor $context, PageTrailQuery $trails, CredentialQuery $credentials, CredentialPhotos $photos): array
     {
         $credential = $credentials->of($context);
         $trail = $trails->of($this->route, $this->title, $context);
@@ -53,6 +54,8 @@ new class extends Component
             'name' => $credential['name'],
             'username' => $credential['username'],
             'initials' => $credential['initials'],
+            // CO-04: la foto propia (la del personal, firmada, o la del alumno por su ruta propia); sin foto, las iniciales.
+            'photo' => ($user = $context->user()) === null ? null : $photos->urlFor($user, withSources: $context->activeRole()?->isStaff() === false),
             'roleLabel' => $credential['role'],
             'summary' => $credential['summary'],
         ];

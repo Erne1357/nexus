@@ -84,8 +84,9 @@ describe('AZ-02: lo que cada puesto ejerce', function () {
         ]);
     });
 
-    it('AZ-S16: el jefe de un departamento académico conserva todo lo de su puesto salvo academic.placement.validate y los archivos para el SII, que no ejerce', function () {
-        $granted = array_values(array_diff(app(PermissionRegistry::class)->matrix()[Role::JefeDepartamento->value], ['academic.placement.validate', 'academic_load.load.export_sii']));
+    it('AZ-S16: el jefe de un departamento académico conserva todo lo de su puesto salvo academic.placement.validate, los archivos para el SII y lo de Comunicación y Difusión (CO-01), que no ejerce', function () {
+        $communication = ['core.login_notice.manage', 'core.login_notice.view', 'core.login_shortcut.manage', 'core.login_shortcut.view', 'core.staff_photo.manage', 'core.unit_staff.appoint', 'students.credential_request.manage', 'students.photo.manage'];
+        $granted = array_values(array_diff(app(PermissionRegistry::class)->matrix()[Role::JefeDepartamento->value], ['academic.placement.validate', 'academic_load.load.export_sii', ...$communication]));
 
         expect(effectivePermissions($this->academicHead))->toBe($granted);
     });

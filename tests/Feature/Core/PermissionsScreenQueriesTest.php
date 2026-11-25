@@ -57,6 +57,7 @@ it('dice a quién cubre cada puesto', function () {
         'Su departamento; todo el Tec en campus y modalidad',
         'Su departamento y su modalidad; el campus, si lo lleva',
         'Su carrera y su modalidad; el campus, si lo lleva',
+        'Su unidad; todo el Tec en campus y modalidad',
         'Sin alcance: solo permisos personales',
         'Sin alcance: solo permisos personales',
     ]);
@@ -122,9 +123,9 @@ it('CF-S2: la tabla de roles busca por nombre sin acentos y filtra por tipo', fu
 
     expect(array_column($sets->forTable('CATALOGOS', ''), 'name'))->toBe(['Consulta de catálogos'])
         ->and(array_column($sets->forTable('', 'own'), 'name'))->toBe(['Consulta de catálogos', 'Parámetros'])
-        ->and(count($sets->forTable('', 'factory')))->toBe(7)
-        ->and(count($sets->forTable('', '')))->toBe(9)
-        ->and(count($sets->forTable('', 'otro')))->toBe(9);
+        ->and(count($sets->forTable('', 'factory')))->toBe(8)
+        ->and(count($sets->forTable('', '')))->toBe(10)
+        ->and(count($sets->forTable('', 'otro')))->toBe(10);
 });
 
 it('CF-03 y CF-04: dice por qué un rol no se le da a un puesto, con todos los motivos', function () {

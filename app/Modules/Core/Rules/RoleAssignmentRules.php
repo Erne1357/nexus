@@ -36,6 +36,8 @@ use Illuminate\Validation\ValidationException;
  * - D19 y R-V2-4 (confirmados el 5 y el 19 de noviembre de 2026): el jefe de departamento va sobre un departamento
  *   académico, sobre el Departamento de Servicios Escolares (OrgTree::SCHOOL_SERVICES), que valida las materias de la
  *   migración del SII, o sobre cualquier otro departamento, división u oficina, de los que solo lleva el título.
+ * - CO-01 (C10, confirmado el 24 de noviembre de 2026): el personal de área va sobre un departamento que no es
+ *   académico, una división o una oficina, como el jefe de una unidad no académica, varios por unidad.
  * - AZ-S11: todos los puestos salvo el de docente se nombran en «Personas y puestos»; el docente lo da la ficha del
  *   docente (`managedElsewhere()`).
  * - AZ-S12 (confirmado el 3 de noviembre de 2026): el admin puede terminar su propio puesto de Administración si
@@ -97,7 +99,7 @@ final class RoleAssignmentRules
                 $errors['unit'] = match ($role) {
                     Role::Directivo => 'Elige la Dirección o la subdirección.',
                     Role::Subdireccion => 'Elige la subdirección.',
-                    Role::JefeDepartamento => 'Elige la unidad.',
+                    Role::JefeDepartamento, Role::Personal => 'Elige la unidad.',
                     default => 'Elige el departamento académico.',
                 };
             } elseif (! in_array($unit->kind, $role->unitKinds(), true)) {
@@ -105,6 +107,9 @@ final class RoleAssignmentRules
                     Role::Directivo => "{$unit->name} no es la Dirección ni una subdirección.",
                     Role::Subdireccion => "{$unit->name} no es una subdirección.",
                     Role::JefeDepartamento => "{$unit->name} no es un departamento, una división ni una oficina.",
+                    Role::Personal => $unit->kind === OrgUnitKind::DepartamentoAcademico
+                        ? "{$unit->name} es un departamento académico: el personal de área va sobre una unidad que no lo es."
+                        : "{$unit->name} no es un departamento, una división ni una oficina.",
                     default => "{$unit->name} no es un departamento académico.",
                 };
             } elseif (! $this->allowsUnit($role, $unit)) {

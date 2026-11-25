@@ -210,7 +210,8 @@ describe('columnas de alcance por puesto (role_assignments_scope_complete)', fun
 
     it('Role::scopeColumns() sigue siendo lo que congeló la migración del CHECK (si cambia, va otra migración)', function () {
         // Cada puesto, con exactamente sus columnas, pasa; con una menos, no (arriba). Aquí, las columnas que pide el
-        // enum contra las que congeló la última migración del CHECK (2026_11_19_000001, AZ-03).
+        // enum contra las que congeló la última migración del CHECK (2026_11_19_000001, AZ-03) y la del CHECK del personal
+        // de área (2026_11_24_000001, CO-01).
         expect(collect(Role::cases())->mapWithKeys(fn (Role $role): array => [$role->value => $role->scopeColumns()])->all())->toBe([
             'admin' => [],
             'subdireccion' => ['org_unit_id'],
@@ -218,6 +219,7 @@ describe('columnas de alcance por puesto (role_assignments_scope_complete)', fun
             'jefe_departamento' => ['org_unit_id'],
             'jefe_proyecto_docente' => ['modality_id', 'org_unit_id'],
             'coordinador' => ['modality_id', 'career_id'],
+            'personal' => ['org_unit_id'],
             'docente' => [],
             'alumno' => [],
         ]);

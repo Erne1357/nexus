@@ -52,10 +52,18 @@
 
                             <div class="flex flex-1 flex-col gap-[18px] px-[22px] pt-5 pb-6">
                                 {{-- La ficha: vacía hasta que la persona entra --}}
-                                <div x-ref="card" aria-hidden="true" class="grid grid-cols-[70px_minmax(0,1fr)] items-start gap-4">
-                                    <div x-ref="photo" class="relative grid aspect-[4/5] place-items-center overflow-hidden rounded-lg border border-base-300 bg-base-200">
+                                <div
+                                    x-ref="card"
+                                    x-bind:aria-hidden="remembered ? 'false' : 'true'"
+                                    aria-hidden="true"
+                                    data-testid="login-person"
+                                    x-bind:class="remembered ? 'grid-cols-[112px_minmax(0,1fr)] items-center' : 'grid-cols-[70px_minmax(0,1fr)] items-start'"
+                                    class="grid grid-cols-[70px_minmax(0,1fr)] items-start gap-4"
+                                >
+                                    <div x-ref="photo" x-bind:class="remembered ? 'aspect-[3/4]' : 'aspect-[4/5]'" class="relative grid aspect-[4/5] place-items-center overflow-hidden rounded-lg border border-base-300 bg-base-200">
+                                        <img x-show="credential.photo" x-cloak x-bind:src="credential.photo || null" alt="" data-testid="login-photo" class="absolute inset-0 size-full object-cover object-top" />
                                         <span data-ghost x-bind:class="revealed && 'opacity-0'" class="absolute inset-[16%_9%_10%] bg-secondary mask-(--hare) mask-contain mask-center mask-no-repeat"></span>
-                                        <span data-value x-text="credential.initials" x-bind:class="revealed ? 'opacity-100' : 'opacity-0'" class="relative text-[26px] font-bold tracking-[-0.02em] text-primary"></span>
+                                        <span data-value x-show="!credential.photo" x-text="credential.initials" x-bind:class="revealed ? 'opacity-100' : 'opacity-0'" class="relative text-[26px] font-bold tracking-[-0.02em] text-primary"></span>
                                     </div>
                                     <dl class="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] gap-x-3.5 gap-y-[7px]">
                                         @foreach ([
@@ -64,7 +72,7 @@
                                             ['label' => 'Usuario', 'key' => 'username', 'ghost' => 'w-[70%]', 'wide' => false, 'value' => 'font-mono', 'ref' => null],
                                             ['label' => 'Periodo', 'key' => 'term', 'ghost' => 'w-[72%]', 'wide' => false, 'value' => '', 'ref' => null],
                                         ] as $field)
-                                            <div @class(['min-w-0', 'col-span-2' => $field['wide']])>
+                                            <div @class(['min-w-0', 'col-span-2' => $field['wide']]) @if ($field['key'] === 'term') x-show="!remembered" @endif>
                                                 <dt class="text-[11.5px] font-medium tracking-[.09em] text-neutral uppercase">{{ $field['label'] }}</dt>
                                                 <dd class="relative mt-px min-h-[1.5em] text-[15px]">
                                                     <span data-ghost x-bind:class="revealed && 'opacity-0'" class="{{ $field['ghost'] }} absolute top-1/2 left-0 -mt-[.3em] h-[.6em] rounded-[2px] bg-secondary"></span>
@@ -93,6 +101,8 @@
                                         <span id="login-error" x-text="error"></span>
                                     </div>
 
+                                    {{-- Con la persona recordada el usuario ya va en su ficha: el campo se esconde pero se manda --}}
+                                    <div x-show="!remembered" x-bind:aria-hidden="remembered ? 'true' : 'false'">
                                     <x-input
                                         label="Usuario"
                                         name="username"
@@ -105,6 +115,7 @@
                                         autofocus
                                         required
                                     />
+                                    </div>
 
                                     <x-password
                                         label="Contraseña"
@@ -121,10 +132,13 @@
                                         <x-checkbox label="Recordarme" name="remember" value="1" :checked="(bool) old('remember')" />
                                     </div>
 
-                                    <x-button type="submit" class="btn-accent mt-2.5 h-[50px] text-[16.5px]" x-bind:aria-busy="busy ? 'true' : 'false'">
-                                        <span x-show="busy" x-cloak class="loading loading-spinner loading-sm"></span>
-                                        <span x-text="busy ? 'Entrando…' : 'Entrar'">Entrar</span>
-                                    </x-button>
+                                    <div class="mt-2.5 flex items-center gap-3.5">
+                                        <x-button type="submit" class="btn-accent h-[50px] flex-1 text-[16.5px]" x-bind:aria-busy="busy ? 'true' : 'false'">
+                                            <span x-show="busy" x-cloak class="loading loading-spinner loading-sm"></span>
+                                            <span x-text="busy ? 'Entrando…' : 'Entrar'">Entrar</span>
+                                        </x-button>
+                                        <button type="button" x-show="remembered" x-cloak x-on:click="forget" class="link shrink-0 text-[14.5px] underline-offset-3">¿No eres tú?</button>
+                                    </div>
                                 </form>
                             </div>
                         </article>
@@ -198,7 +212,7 @@
                         <span data-arrival="search-icon" class="invisible hidden size-11 flex-none max-md:grid"></span>
                         <span data-arrival="bell" class="invisible block size-11 flex-none text-band-content/70"></span>
                         <span class="flex h-[46px] max-w-full min-w-0 items-center gap-2.5 rounded-full border border-band-content/20 ps-1.5 pe-3 text-start max-md:h-11 max-md:px-[5px]">
-                            <span data-arrival="avatar" class="grid size-[34px] flex-none place-items-center rounded-full bg-secondary text-[13px] font-bold text-secondary-content"></span>
+                            <span data-arrival="avatar" class="grid size-[34px] flex-none place-items-center overflow-hidden rounded-full bg-secondary text-[13px] font-bold text-secondary-content"></span>
                             <span class="flex min-w-0 flex-col leading-tight max-md:sr-only">
                                 <span data-arrival="name" class="truncate font-bold"></span>
                                 <span data-arrival="summary" class="text-[12.5px] whitespace-nowrap text-band-muted max-desktop:hidden"></span>

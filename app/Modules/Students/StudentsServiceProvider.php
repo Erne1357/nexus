@@ -6,6 +6,7 @@ use App\Modules\Academic\Events\CurriculumChanged;
 use App\Modules\Academic\Events\PlanCareerChanging;
 use App\Modules\Academic\Events\SubjectDeactivating;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Credentials\CredentialPhotos;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
 use App\Modules\Core\Demo\DemoStep;
@@ -13,16 +14,24 @@ use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Exceptions\InvalidPhoto;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Support\PhotoNormalizer;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use App\Modules\Students\Enums\StudentsPermission;
 use App\Modules\Students\Enums\StudentStatus;
+use App\Modules\Students\Events\StudentPhotoChanged;
 use App\Modules\Students\Listeners\BlockPlanCareerChangeWithStudents;
 use App\Modules\Students\Listeners\BlockSubjectDeactivationWhileNeeded;
 use App\Modules\Students\Listeners\RecomputeProgressOnCurriculumChange;
+use App\Modules\Students\Listeners\TouchPhotoRequestsOnPhotoChange;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
+use App\Modules\Students\Rules\CredentialRequestSettings;
+use App\Modules\Students\Support\StudentPhotos;
+use App\Modules\Students\Support\StudentPhotoUrl;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
@@ -44,6 +53,31 @@ final class StudentsServiceProvider extends ModuleServiceProvider
         Event::listen(SubjectDeactivating::class, BlockSubjectDeactivationWhileNeeded::class);
         Event::listen(PlanCareerChanging::class, BlockPlanCareerChangeWithStudents::class);
         Event::listen(CurriculumChanged::class, RecomputeProgressOnCurriculumChange::class);
+        Event::listen(StudentPhotoChanged::class, TouchPhotoRequestsOnPhotoChange::class);
+
+        // CO-05: la miniatura del alumno para la credencial del login (Core no conoce a Students). Es la foto de su número
+        // de control, recortada con GD a la miniatura de 150×200; sin foto o con un archivo ilegible, null.
+        $this->app->make(CredentialPhotos::class)->extend(static function (User $user): ?string {
+            $control = Student::query()->where('user_id', $user->getKey())->value('control_number');
+            $photo = $control === null ? null : app(StudentPhotos::class)->read($control);
+
+            if ($photo === null) {
+                return null;
+            }
+
+            try {
+                return 'data:image/jpeg;base64,'.base64_encode(app(PhotoNormalizer::class)->normalizeBytes($photo['bytes'])['thumb']);
+            } catch (InvalidPhoto) {
+                return null;
+            }
+        });
+
+        // CO-04: la foto propia del alumno en la banda (su ruta propia, sin id); sin foto, null y salen las iniciales.
+        $this->app->make(CredentialPhotos::class)->extendUrl(static function (User $user): ?string {
+            $student = Student::query()->where('user_id', $user->getKey())->first();
+
+            return $student === null ? null : StudentPhotoUrl::own($student);
+        });
 
         // AC-20: la verificación pública del QR de la credencial. 30 por minuto por dirección y código, y 300 por dirección:
         // detrás del NAT del campus muchos teléfonos comparten dirección.
@@ -70,17 +104,27 @@ final class StudentsServiceProvider extends ModuleServiceProvider
 
     /**
      * Consultan alumnos la Subdirección, el directivo (AZ-03), los jefes y los coordinadores; el alumno, solo sus datos
-     * (AC-15).
+     * (AC-15). Las fotos de los alumnos (CO-06) son de la jefa y el personal de Comunicación y Difusión; solo les valen sobre
+     * esa unidad (StudentsPermission::appliesTo()).
      */
     public function grants(): array
     {
         return [
-            Role::Alumno->value => [StudentsPermission::MyRecordView],
+            Role::Alumno->value => [StudentsPermission::MyRecordView, StudentsPermission::CredentialRequestCreate],
             Role::Directivo->value => [StudentsPermission::StudentView],
             Role::Subdireccion->value => [StudentsPermission::StudentView],
-            Role::JefeDepartamento->value => [StudentsPermission::StudentView],
+            Role::JefeDepartamento->value => [StudentsPermission::StudentView, StudentsPermission::CredentialRequestManage, StudentsPermission::PhotoManage],
+            Role::Personal->value => [StudentsPermission::CredentialRequestManage, StudentsPermission::PhotoManage],
             Role::Coordinador->value => [StudentsPermission::StudentView],
         ];
+    }
+
+    /**
+     * Los plazos de las solicitudes de credencial (CO-07), que Comunicación y Difusión fija.
+     */
+    public function settings(): array
+    {
+        return CredentialRequestSettings::definitions();
     }
 
     /**
@@ -88,7 +132,7 @@ final class StudentsServiceProvider extends ModuleServiceProvider
      */
     public function adminDenies(): array
     {
-        return [StudentsPermission::MyRecordView];
+        return [StudentsPermission::MyRecordView, StudentsPermission::CredentialRequestCreate];
     }
 
     /**

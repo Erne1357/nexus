@@ -3,6 +3,7 @@
 use App\Modules\Academic\AcademicServiceProvider;
 use App\Modules\AcademicLoad\AcademicLoadServiceProvider;
 use App\Modules\CatalogValidation\CatalogValidationServiceProvider;
+use App\Modules\Communication\CommunicationServiceProvider;
 use App\Modules\Core\CoreServiceProvider;
 use App\Modules\Core\Providers\FortifyServiceProvider;
 use App\Modules\Demand\DemandServiceProvider;
@@ -25,6 +26,7 @@ return [
     FacilitiesServiceProvider::class,
     FacultyServiceProvider::class,
     StudentsServiceProvider::class,
+    CommunicationServiceProvider::class, // a la derecha de Students; nadie depende de él
     ImportsServiceProvider::class,
     CatalogValidationServiceProvider::class,
     DemandServiceProvider::class,

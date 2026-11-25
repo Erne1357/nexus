@@ -35,6 +35,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Vite;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
@@ -442,6 +443,49 @@ function schoolServicesHead(array $attributes = []): User
 }
 
 /**
+ * La unidad del Departamento de Comunicación y Difusión (OrgTree::COMMUNICATION), colgada de la Subdirección de
+ * Planeación y Vinculación como en el organigrama oficial (AZ-S1): la crea la primera vez. Sus permisos son los de
+ * CO-01.
+ */
+function communicationUnit(): OrgUnit
+{
+    $tree = app(OrgTree::class);
+
+    if (($id = $tree->idOf(OrgTree::COMMUNICATION)) !== null) {
+        return OrgUnit::query()->findOrFail($id);
+    }
+
+    $planning = OrgUnit::query()->where('code', 'SUB-PLANEACION')->first()
+        ?? OrgUnit::factory()->create(['code' => 'SUB-PLANEACION', 'name' => 'Subdirección de Planeación y Vinculación', 'kind' => OrgUnitKind::Subdireccion, 'parent_id' => $tree->idOf(OrgTree::ROOT)]);
+    $unit = OrgUnit::factory()->create(['code' => OrgTree::COMMUNICATION, 'name' => 'Departamento de Comunicación y Difusión', 'kind' => OrgUnitKind::Departamento, 'parent_id' => $planning->id]);
+
+    app()->forgetScopedInstances();
+
+    return $unit;
+}
+
+/**
+ * La jefa del Departamento de Comunicación y Difusión (CO-01). Crea la unidad si falta.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function communicationHead(array $attributes = []): User
+{
+    return User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => communicationUnit()->id])->create($attributes);
+}
+
+/**
+ * Una persona del personal de Comunicación y Difusión: el puesto «Personal de área» sobre su unidad (CO-01, CO-02).
+ * Crea la unidad si falta.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function communicationStaff(array $attributes = []): User
+{
+    return User::factory()->withRole(Role::Personal, ['org_unit_id' => communicationUnit()->id])->create($attributes);
+}
+
+/**
  * Deja validadas en el periodo las revisiones generales (sin salones) que exige HC-14 a la carga de `$departmentId`: su
  * revisión de docentes y las de Servicios Escolares (materias, planes y carreras, una sola del Tec; CV15). Las crea si
  * faltan y, si ya existían, las valida; las de Servicios Escolares sirven a todos los departamentos. `$except` deja fuera
@@ -465,4 +509,54 @@ function validateGeneralCatalogs(string $termId, string $departmentId, array $ex
             $review->update(['status' => ReviewStatus::Validated, 'validated_by' => User::factory()->create()->id, 'validated_at' => now()]);
         }
     }
+}
+
+/**
+ * Los bytes de una imagen ficticia (fotos de lotes en ZIP; la usan las pruebas de Communication).
+ */
+function batchImage(string $format = 'jpeg'): string
+{
+    $image = imagecreatetruecolor(300, 400);
+    imagefill($image, 0, 0, imagecolorallocate($image, 20, 120, 200));
+    ob_start();
+    $format === 'png' ? imagepng($image) : imagejpeg($image);
+
+    return (string) ob_get_clean();
+}
+
+/**
+ * Un ZIP con esos archivos (nombre dentro del ZIP => bytes).
+ *
+ * @param  array<string, string>  $files
+ */
+function zipOf(array $files): UploadedFile
+{
+    $path = tempnam(sys_get_temp_dir(), 'zip');
+    $zip = new ZipArchive;
+    $zip->open($path, ZipArchive::OVERWRITE);
+
+    foreach ($files as $name => $bytes) {
+        $zip->addFromString($name, $bytes);
+    }
+
+    $zip->close();
+
+    return UploadedFile::fake()->createWithContent('lote.zip', (string) file_get_contents($path));
+}
+
+/**
+ * Envuelve el disco falso `$name` (ya creado con Storage::fake) en uno que devuelve false (sin lanzar, como `'throw' => false`) en los métodos dados:
+ * simula un directorio sin permiso de escritura o un disco lleno. Lo demás pasa al disco falso de verdad.
+ *
+ * @param  list<string>  $methods
+ */
+function failingDisk(string $name, array $methods): void
+{
+    $disk = Mockery::mock(Storage::disk($name))->makePartial();
+
+    foreach ($methods as $method) {
+        $disk->shouldReceive($method)->andReturn(false);
+    }
+
+    Storage::set($name, $disk);
 }

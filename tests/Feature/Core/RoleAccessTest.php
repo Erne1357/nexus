@@ -58,7 +58,7 @@ describe('el parámetro', function () {
     it('AC-21: lista cada puesto menos el admin y al personal sin puesto, todos encendidos por omisión', function () {
         $definition = app(SettingRegistry::class)->get(RoleAccess::SETTING);
 
-        expect(array_keys($definition->fields))->toBe(['subdireccion', 'directivo', 'jefe_departamento', 'jefe_proyecto_docente', 'coordinador', 'docente', 'alumno', 'sin_puesto'])
+        expect(array_keys($definition->fields))->toBe(['subdireccion', 'directivo', 'jefe_departamento', 'jefe_proyecto_docente', 'coordinador', 'personal', 'docente', 'alumno', 'sin_puesto'])
             ->and($definition->default)->each->toBeTrue()
             ->and($definition->permission)->toBe(CorePermission::AccessManage)
             ->and($definition->permissionOnly)->toBeTrue();

@@ -13,8 +13,10 @@ use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\RoleAccess;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Console\MigrationPlanCommand;
+use App\Modules\Core\Console\ProvisionStaffCommand;
 use App\Modules\Core\Console\SeedDemo;
 use App\Modules\Core\Console\SyncTermsFromData;
+use App\Modules\Core\Credentials\CredentialPhotos;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoAdminPasswordSeeder;
@@ -136,6 +138,10 @@ final class CoreServiceProvider extends ModuleServiceProvider
         $this->app->scoped(OrgTree::class, fn (Application $app): OrgTree => new OrgTree($app['cache.store']));
         $this->app->scoped(DrawerIds::class);
 
+        // Singleton a propósito: las fuentes de fotos se registran una vez al arrancar (boot) y son closures sin estado;
+        // nada de lo que guarda cambia por petición, así que es seguro con Octane.
+        $this->app->singleton(CredentialPhotos::class);
+
         // `scoped` por lo mismo: memoriza los snapshots de nombramientos de la petición en curso.
         $this->app->scoped(AuthorizationSnapshots::class, fn (Application $app): AuthorizationSnapshots => new AuthorizationSnapshots($app['cache.store']));
 
@@ -196,7 +202,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Blade::component(config('mary.prefix').'drawer', Drawer::class);
 
         if ($this->app->runningInConsole()) {
-            $this->commands([SeedDemo::class, SyncTermsFromData::class, MigrationPlanCommand::class]);
+            $this->commands([SeedDemo::class, SyncTermsFromData::class, MigrationPlanCommand::class, ProvisionStaffCommand::class]);
         }
 
         // `/health` (tarea 1.31) fuera del grupo `web`: sin sesión, cookies ni throttle, para que un Valkey caído dé 503 y no 500.
@@ -320,9 +326,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
             // 1.22-D Bitácora
             new NavigationItem('Bitácora', 'core.activity', 'o-clipboard-document-list', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
                 ability: 'viewAny', arguments: [Activity::class]),
-            // 1.22-E Avisos y atajos del login
+            // 1.22-E Avisos y atajos del login: en Configuración para quien administra los puestos y permisos (el admin,
+            // candado CF-03); los demás que los manejan (Comunicación y Difusión, CO-01) la ven en el área de Comunicación,
+            // que declara el módulo Communication con la condición contraria.
             new NavigationItem('Avisos y atajos', 'core.login-content', 'o-megaphone', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
-                visible: static fn (Actor $context): bool => $context->allowsAny(CorePermission::LoginNoticeView) || $context->allowsAny(CorePermission::LoginShortcutView)),
+                visible: static fn (Actor $context): bool => $context->allowsAny(CorePermission::AuthzView)
+                    && ($context->allowsAny(CorePermission::LoginNoticeView) || $context->allowsAny(CorePermission::LoginShortcutView))),
             // 1.22-F Parámetros
             new NavigationItem('Parámetros', 'core.settings', 'o-adjustments-horizontal', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
                 ability: 'viewAny', arguments: [Setting::class]),
@@ -345,9 +354,25 @@ final class CoreServiceProvider extends ModuleServiceProvider
         return [AcademicLoadVisibility::definition(), RoleAccess::definition()];
     }
 
+    /**
+     * CO-01 (C10 a C12, confirmados el 24 de noviembre de 2026): el jefe de departamento y el personal de área tienen los
+     * avisos, los atajos y las fotos del personal, y solo el jefe nombra al personal de su unidad (CO-02). Todos aplican
+     * solo a Comunicación y Difusión (CorePermission::appliesTo()), así que el jefe o el personal de otra unidad no
+     * reciben nada.
+     */
     public function grants(): array
     {
+        $communication = [
+            CorePermission::LoginNoticeView,
+            CorePermission::LoginNoticeManage,
+            CorePermission::LoginShortcutView,
+            CorePermission::LoginShortcutManage,
+            CorePermission::StaffPhotoManage,
+        ];
+
         return [
+            Role::JefeDepartamento->value => [...$communication, CorePermission::UnitStaffAppoint],
+            Role::Personal->value => $communication,
             Role::Directivo->value => [
                 CorePermission::CampusView,
                 CorePermission::ModalityView,
