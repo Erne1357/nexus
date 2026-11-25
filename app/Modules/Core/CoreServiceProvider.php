@@ -15,6 +15,7 @@ use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Console\MigrationPlanCommand;
 use App\Modules\Core\Console\SeedDemo;
 use App\Modules\Core\Console\SyncTermsFromData;
+use App\Modules\Core\Credentials\CredentialPhotos;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoAdminPasswordSeeder;
@@ -135,6 +136,10 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // `scoped` por lo mismo: guarda en la instancia la huella y el mapa de la petición en curso.
         $this->app->scoped(OrgTree::class, fn (Application $app): OrgTree => new OrgTree($app['cache.store']));
         $this->app->scoped(DrawerIds::class);
+
+        // Singleton a propósito: las fuentes de fotos se registran una vez al arrancar (boot) y son closures sin estado;
+        // nada de lo que guarda cambia por petición, así que es seguro con Octane.
+        $this->app->singleton(CredentialPhotos::class);
 
         // `scoped` por lo mismo: memoriza los snapshots de nombramientos de la petición en curso.
         $this->app->scoped(AuthorizationSnapshots::class, fn (Application $app): AuthorizationSnapshots => new AuthorizationSnapshots($app['cache.store']));

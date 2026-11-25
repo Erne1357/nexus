@@ -6,6 +6,7 @@ use App\Modules\Academic\Events\CurriculumChanged;
 use App\Modules\Academic\Events\PlanCareerChanging;
 use App\Modules\Academic\Events\SubjectDeactivating;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Credentials\CredentialPhotos;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
 use App\Modules\Core\Demo\DemoStep;
@@ -13,8 +14,11 @@ use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Exceptions\InvalidPhoto;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Support\PhotoNormalizer;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use App\Modules\Students\Enums\StudentsPermission;
 use App\Modules\Students\Enums\StudentStatus;
@@ -23,6 +27,7 @@ use App\Modules\Students\Listeners\BlockSubjectDeactivationWhileNeeded;
 use App\Modules\Students\Listeners\RecomputeProgressOnCurriculumChange;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
+use App\Modules\Students\Support\StudentPhotos;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
@@ -44,6 +49,23 @@ final class StudentsServiceProvider extends ModuleServiceProvider
         Event::listen(SubjectDeactivating::class, BlockSubjectDeactivationWhileNeeded::class);
         Event::listen(PlanCareerChanging::class, BlockPlanCareerChangeWithStudents::class);
         Event::listen(CurriculumChanged::class, RecomputeProgressOnCurriculumChange::class);
+
+        // CO-05: la miniatura del alumno para la credencial del login (Core no conoce a Students). Es la foto de su número
+        // de control, recortada con GD a la miniatura de 150×200; sin foto o con un archivo ilegible, null.
+        $this->app->make(CredentialPhotos::class)->extend(static function (User $user): ?string {
+            $control = Student::query()->where('user_id', $user->getKey())->value('control_number');
+            $photo = $control === null ? null : app(StudentPhotos::class)->read($control);
+
+            if ($photo === null) {
+                return null;
+            }
+
+            try {
+                return 'data:image/jpeg;base64,'.base64_encode(app(PhotoNormalizer::class)->normalizeBytes($photo['bytes'])['thumb']);
+            } catch (InvalidPhoto) {
+                return null;
+            }
+        });
 
         // AC-20: la verificación pública del QR de la credencial. 30 por minuto por dirección y código, y 300 por dirección:
         // detrás del NAT del campus muchos teléfonos comparten dirección.

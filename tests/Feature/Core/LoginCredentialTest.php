@@ -34,6 +34,7 @@ it('con JSON entra y responde la ficha de la credencial, la misma de la banda, y
                 'name' => 'Carla Cota Ruiz',
                 'username' => '19110001',
                 'initials' => 'CC',
+                'photo' => null,
                 'role' => 'Coordinador de carrera',
                 'term' => 'Ene-Jun 2027',
                 'loadTerm' => 'Ene-Jun 2027',

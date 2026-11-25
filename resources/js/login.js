@@ -21,6 +21,7 @@
 
 const SEEN_KEY = 'nexus.login.visto';
 const ARRIVAL_KEY = 'nexus.entrada';
+const PERSON_KEY = 'nexus.login.persona';
 const NOTICE_MS = 7000;
 const OPEN = 'cubic-bezier(.3,1.06,.5,1)';
 const SETTLE = 'cubic-bezier(.22,1,.36,1)';
@@ -52,6 +53,23 @@ const storage = {
             // Sin almacenamiento (modo privado): la bienvenida completa se repite, nada más.
         }
     },
+    remove(key, area = 'localStorage') {
+        try {
+            window[area].removeItem(key);
+        } catch {
+            // Sin almacenamiento: no hay nada que olvidar.
+        }
+    },
+};
+
+/** La persona que este equipo recuerda (CO-05), o null si no hay o el valor no sirve. */
+const rememberedPerson = () => {
+    try {
+        const person = JSON.parse(storage.get(PERSON_KEY) ?? 'null');
+        return person && typeof person.username === 'string' && person.username !== '' && typeof person.name === 'string' ? person : null;
+    } catch {
+        return null;
+    }
 };
 
 /** Rectángulo de un elemento en la ventana. */
@@ -93,9 +111,11 @@ document.addEventListener('alpine:init', () => {
         leaving: false,
         error: '',
         revealed: false,
-        credential: { name: '', username: '', initials: '', role: '', term: '', summary: '' },
+        remembered: false,
+        credential: { name: '', username: '', initials: '', role: '', term: '', summary: '', photo: null },
 
         init() {
+            this.restorePerson();
             this.welcome(!storage.get(SEEN_KEY));
             storage.set(SEEN_KEY, '1');
             this.$nextTick(() => this.runProgress());
@@ -111,6 +131,48 @@ document.addEventListener('alpine:init', () => {
                     window.location.reload();
                 }
             });
+        },
+
+        /* ---------- La persona recordada (CO-05) ---------- */
+
+        /** Con una persona recordada la ficha ya viene llena, el usuario va escondido y el foco cae en la contraseña. */
+        restorePerson() {
+            const person = rememberedPerson();
+            if (!person) {
+                return;
+            }
+            this.credential = { name: person.name, username: person.username, initials: person.initials ?? '', role: person.role ?? '', term: '', summary: '', photo: person.photo ?? null };
+            this.remembered = true;
+            this.revealed = true;
+            const form = this.$root.querySelector('form');
+            form.querySelector('[name="username"]').value = person.username;
+            form.querySelector('[name="remember"]').checked = true;
+            this.$nextTick(() => form.querySelector('[name="password"]').focus({ preventScroll: true }));
+        },
+
+        /** «¿No eres tú?»: este equipo olvida a la persona y la credencial vuelve a pedir el usuario. */
+        forget() {
+            storage.remove(PERSON_KEY);
+            this.remembered = false;
+            this.revealed = false;
+            this.credential = { name: '', username: '', initials: '', role: '', term: '', summary: '', photo: null };
+            this.error = '';
+            this.markInvalid(false);
+            const form = this.$root.querySelector('form');
+            const username = form.querySelector('[name="username"]');
+            username.value = '';
+            form.querySelector('[name="password"]').value = '';
+            this.$nextTick(() => username.focus({ preventScroll: true }));
+        },
+
+        /** Tras entrar: con «Recordarme» el equipo guarda a la persona; sin él, la olvida. Nunca antes de la contraseña. */
+        savePerson(credential, remember) {
+            if (!remember) {
+                storage.remove(PERSON_KEY);
+                return;
+            }
+            const { username, name, role, initials, photo } = credential;
+            storage.set(PERSON_KEY, JSON.stringify({ username, name, role, initials, photo: photo ?? null }));
         },
 
         /* ---------- Bienvenida ---------- */
@@ -363,6 +425,7 @@ document.addEventListener('alpine:init', () => {
             const data = response ? await response.json().catch(() => null) : null;
 
             if (response?.ok && data?.redirect) {
+                this.savePerson(data.credential, form.querySelector('[name="remember"]')?.checked ?? false);
                 await this.enter(data);
                 return;
             }
@@ -408,6 +471,10 @@ document.addEventListener('alpine:init', () => {
         /** Entrar 1: los datos aparecen en la ficha como recién impresos y los renglones vacíos se van. */
         async reveal() {
             const card = this.$refs.card;
+            if (this.revealed) {
+                // La persona recordada ya estaba en la ficha: solo se completa lo que faltaba (puesto y periodo).
+                return;
+            }
             if (reducedMotion()) {
                 this.revealed = true;
                 return;
@@ -472,7 +539,16 @@ document.addEventListener('alpine:init', () => {
 
             // La banda de llegada: invisible mientras se mide adónde va cada pieza.
             const band = this.$refs.band.content.firstElementChild.cloneNode(true);
-            band.querySelector('[data-arrival="avatar"]').textContent = this.credential.initials;
+            const avatarSlot = band.querySelector('[data-arrival="avatar"]');
+            if (this.credential.photo) {
+                const image = document.createElement('img');
+                image.src = this.credential.photo;
+                image.alt = '';
+                image.className = 'size-full object-cover object-top';
+                avatarSlot.replaceChildren(image);
+            } else {
+                avatarSlot.textContent = this.credential.initials;
+            }
             band.querySelector('[data-arrival="name"]').textContent = this.credential.name;
             const summary = band.querySelector('[data-arrival="summary"]');
             summary.textContent = this.credential.summary;
