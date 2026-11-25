@@ -21,7 +21,7 @@ use RuntimeException;
 final class ProjectionSheet
 {
     /**
-     * @return list<array{row: int, plan: string, semester: mixed, subject: string, code: string, credits: mixed, group: string, students: mixed, hour: ?string, hourIsError: bool}>
+     * @return list<array{row: int, relation: bool, fixed: bool, room: ?string, plan: string, semester: mixed, subject: string, code: string, credits: mixed, group: string, students: mixed, hour: ?string, hourIsError: bool}>
      *
      * @throws RuntimeException
      */
@@ -64,6 +64,9 @@ final class ProjectionSheet
 
                     $rows[] = [
                         'row' => $number,
+                        'relation' => false,
+                        'fixed' => true,
+                        'room' => null,
                         'plan' => $plan,
                         'semester' => $values[1] ?? null,
                         'subject' => trim($this->text($cells[2] ?? null)),

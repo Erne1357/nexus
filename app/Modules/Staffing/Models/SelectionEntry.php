@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Renglón de un docente en la cola de una selección: sus datos del CSV, su lugar y turno, y cómo cerró (tarea 1.33).
  */
-#[Fillable(['selection_id', 'teacher_id', 'source', 'csv_name', 'csv_line', 'base_hours', 'auto_eval', 'prior_compliance', 'partials_1', 'partials_2', 'seniority_years', 'hired_on', 'plaza_tier', 'failed_criteria', 'tier', 'position', 'slot_index', 'slot_starts_at', 'slot_ends_at', 'extra_slot_starts_at', 'extra_slot_ends_at', 'status', 'closed_at', 'closed_hours', 'out_of_band_acknowledged_at', 'notified_soon_at', 'notified_start_at', 'notified_extra_at'])]
+#[Fillable(['selection_id', 'teacher_id', 'source', 'csv_name', 'csv_line', 'base_hours', 'auto_eval', 'prior_compliance', 'partials_1', 'partials_2', 'seniority_years', 'hired_on', 'plaza_tier', 'failed_criteria', 'tier', 'position', 'slot_index', 'slot_starts_at', 'slot_ends_at', 'extra_slot_starts_at', 'extra_slot_ends_at', 'status', 'closed_at', 'closed_hours', 'out_of_band_acknowledged_at', 'notified_soon_at', 'notified_start_at', 'notified_extra_at', 'prior_choice_at'])]
 #[UseFactory(SelectionEntryFactory::class)]
 class SelectionEntry extends Model
 {
@@ -56,9 +56,19 @@ class SelectionEntry extends Model
             'notified_soon_at' => 'immutable_datetime',
             'notified_start_at' => 'immutable_datetime',
             'notified_extra_at' => 'immutable_datetime',
+            'prior_choice_at' => 'immutable_datetime',
             'created_at' => 'immutable_datetime',
             'updated_at' => 'immutable_datetime',
         ];
+    }
+
+    /**
+     * SEL-16: el docente ya trae sus grupos de la relación de materias (`prior_choice_at`): su renglón está `done`, sin
+     * lugar ni turno.
+     */
+    public function isPriorChoice(): bool
+    {
+        return $this->prior_choice_at !== null;
     }
 
     /**

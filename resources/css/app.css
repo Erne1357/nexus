@@ -45,7 +45,8 @@
 | Colores propios de Nexus que no son de daisyUI (banda, texto sobre la banda, texto secundario sobre
 | gris polvo y las cadenas de seriación de la retícula del alumno). Cada tema los define abajo; aquí se
 | exponen como utilidades: bg-band, text-band-content, text-band-muted, text-secondary-muted y chain-1 a
-| chain-12 (border-chain-N, var(--color-chain-N)).
+| chain-12 (border-chain-N, var(--color-chain-N)), y los estados de esa retícula (bg-standing-<caso>,
+| border-standing-<caso>-border, text-standing-<caso>-content).
 */
 @theme inline {
     --color-band: var(--nexus-band);
@@ -66,6 +67,35 @@
     --color-chain-10: var(--nexus-chain-10);
     --color-chain-11: var(--nexus-chain-11);
     --color-chain-12: var(--nexus-chain-12);
+
+    /* Estados de la retícula del alumno: bg-standing-<caso>, border-standing-<caso>-border y text-standing-<caso>-content. */
+    --color-standing-acreditada: var(--nexus-standing-acreditada);
+    --color-standing-acreditada-border: var(--nexus-standing-acreditada-border);
+    --color-standing-acreditada-content: var(--nexus-standing-acreditada-content);
+    --color-standing-sin-calificar: var(--nexus-standing-sin-calificar);
+    --color-standing-sin-calificar-border: var(--nexus-standing-sin-calificar-border);
+    --color-standing-sin-calificar-content: var(--nexus-standing-sin-calificar-content);
+    --color-standing-cursando: var(--nexus-standing-cursando);
+    --color-standing-cursando-border: var(--nexus-standing-cursando-border);
+    --color-standing-cursando-content: var(--nexus-standing-cursando-content);
+    --color-standing-reprobada-prioridad: var(--nexus-standing-reprobada-prioridad);
+    --color-standing-reprobada-prioridad-border: var(--nexus-standing-reprobada-prioridad-border);
+    --color-standing-reprobada-prioridad-content: var(--nexus-standing-reprobada-prioridad-content);
+    --color-standing-a-curso-especial: var(--nexus-standing-a-curso-especial);
+    --color-standing-a-curso-especial-border: var(--nexus-standing-a-curso-especial-border);
+    --color-standing-a-curso-especial-content: var(--nexus-standing-a-curso-especial-content);
+    --color-standing-curso-especial-reprobado: var(--nexus-standing-curso-especial-reprobado);
+    --color-standing-curso-especial-reprobado-border: var(--nexus-standing-curso-especial-reprobado-border);
+    --color-standing-curso-especial-reprobado-content: var(--nexus-standing-curso-especial-reprobado-content);
+    --color-standing-puede-seleccionarla: var(--nexus-standing-puede-seleccionarla);
+    --color-standing-puede-seleccionarla-border: var(--nexus-standing-puede-seleccionarla-border);
+    --color-standing-puede-seleccionarla-content: var(--nexus-standing-puede-seleccionarla-content);
+    --color-standing-no-permitida: var(--nexus-standing-no-permitida);
+    --color-standing-no-permitida-border: var(--nexus-standing-no-permitida-border);
+    --color-standing-no-permitida-content: var(--nexus-standing-no-permitida-content);
+    --color-standing-seleccionada: var(--nexus-standing-seleccionada);
+    --color-standing-seleccionada-border: var(--nexus-standing-seleccionada-border);
+    --color-standing-seleccionada-content: var(--nexus-standing-seleccionada-content);
 }
 
 /*
@@ -128,6 +158,36 @@
     --nexus-chain-10: #9c4fd1;
     --nexus-chain-11: #2f8f5b;
     --nexus-chain-12: #c24f9b;
+
+    /* Estados de la retícula del alumno (DESIGN.md, "Retícula del alumno"): relleno, borde y texto/icono de cada estado. */
+    --nexus-standing-acreditada: #e9f1ed;
+    --nexus-standing-acreditada-border: #a5c5b9;
+    --nexus-standing-acreditada-content: #1f6f4f;
+    --nexus-standing-sin-calificar: #fdf5cc;
+    --nexus-standing-sin-calificar-border: #a67c00;
+    --nexus-standing-sin-calificar-content: #5e4700;
+    --nexus-standing-cursando: #f1e7f4;
+    --nexus-standing-cursando-border: #6b3a78;
+    --nexus-standing-cursando-content: #4a1f58;
+    --nexus-standing-reprobada-prioridad: #dff3f6;
+    --nexus-standing-reprobada-prioridad-border: #177f91;
+    --nexus-standing-reprobada-prioridad-content: #0a4f5d;
+    --nexus-standing-a-curso-especial: #ffeadb;
+    --nexus-standing-a-curso-especial-border: #c0561a;
+    --nexus-standing-a-curso-especial-content: #7d3604;
+    --nexus-standing-curso-especial-reprobado: #fde6e4;
+    --nexus-standing-curso-especial-reprobado-border: #b42318;
+    --nexus-standing-curso-especial-reprobado-content: #8f1a10;
+    --nexus-standing-puede-seleccionarla: #e5effb;
+    --nexus-standing-puede-seleccionarla-border: #2f6fc9;
+    --nexus-standing-puede-seleccionarla-content: #1b4a8c;
+    --nexus-standing-no-permitida: #f3f4f7;
+    --nexus-standing-no-permitida-border: #8a888b;
+    --nexus-standing-no-permitida-content: #59585a;
+    /* Reservado, sin uso: «Seleccionada solamente» del SII no tiene estado en Nexus hasta la inscripción (R3, S3). */
+    --nexus-standing-seleccionada: #f0eafb;
+    --nexus-standing-seleccionada-border: #7c5cc4;
+    --nexus-standing-seleccionada-content: #4f3590;
 }
 
 @plugin 'daisyui/theme' {
@@ -183,6 +243,36 @@
     --nexus-chain-10: #d29cf5;
     --nexus-chain-11: #7fd6a4;
     --nexus-chain-12: #f29ad0;
+
+    /* Estados de la retícula del alumno (DESIGN.md, "Retícula del alumno"): relleno, borde y texto/icono de cada estado. */
+    --nexus-standing-acreditada: #19323c;
+    --nexus-standing-acreditada-border: #356757;
+    --nexus-standing-acreditada-content: #6fcf8c;
+    --nexus-standing-sin-calificar: #2c2910;
+    --nexus-standing-sin-calificar-border: #d9b93a;
+    --nexus-standing-sin-calificar-content: #f2dd7a;
+    --nexus-standing-cursando: #2a1d38;
+    --nexus-standing-cursando-border: #b58ac9;
+    --nexus-standing-cursando-content: #e3c9f0;
+    --nexus-standing-reprobada-prioridad: #0f3340;
+    --nexus-standing-reprobada-prioridad-border: #4fc0d4;
+    --nexus-standing-reprobada-prioridad-content: #9be3ee;
+    --nexus-standing-a-curso-especial: #38230f;
+    --nexus-standing-a-curso-especial-border: #f0944a;
+    --nexus-standing-a-curso-especial-content: #ffc799;
+    --nexus-standing-curso-especial-reprobado: #3a1a1d;
+    --nexus-standing-curso-especial-reprobado-border: #f48a8a;
+    --nexus-standing-curso-especial-reprobado-content: #ffb4b4;
+    --nexus-standing-puede-seleccionarla: #14294a;
+    --nexus-standing-puede-seleccionarla-border: #6fa3f0;
+    --nexus-standing-puede-seleccionarla-content: #b0cdfa;
+    --nexus-standing-no-permitida: #0a1826;
+    --nexus-standing-no-permitida-border: #6a7a8a;
+    --nexus-standing-no-permitida-content: #9aa6b2;
+    /* Reservado, sin uso: «Seleccionada solamente» del SII no tiene estado en Nexus hasta la inscripción (R3, S3). */
+    --nexus-standing-seleccionada: #26204a;
+    --nexus-standing-seleccionada-border: #a893ee;
+    --nexus-standing-seleccionada-content: #cfc1f8;
 }
 
 /*

@@ -9,6 +9,7 @@ use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\Selection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Collection;
 
 /**
  * Los grupos que entran a una selección (tarea 1.33, diseño 6.12): los no cancelados de sus cargas incluidas
@@ -30,6 +31,32 @@ final class SelectionGroupsQuery
                 ->whereColumn('academic_loads.modality_id', 'groups.modality_id')
                 ->whereColumn('academic_loads.department_id', 'groups.department_id')
                 ->where('staffing_selection_loads.selection_id', $selection->getKey()));
+    }
+
+    /**
+     * Las horas (teoría y práctica de la materia) de los grupos de la selección que tiene cada docente, en vivo, por id
+     * del docente (los que no tienen grupos no aparecen). Una consulta.
+     *
+     * @param  list<string>|null  $teacherIds  solo estos docentes (null: todos los que tienen grupos)
+     * @return Collection<string, int>
+     */
+    public function hoursByTeacher(Selection $selection, ?array $teacherIds = null): Collection
+    {
+        if ($teacherIds === []) {
+            return collect();
+        }
+
+        $query = $this->of($selection)
+            ->whereNotNull('groups.teacher_id')
+            ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
+            ->groupBy('groups.teacher_id')
+            ->selectRaw('groups.teacher_id, sum(subjects.theory_hours + subjects.practice_hours) as hours');
+
+        if ($teacherIds !== null) {
+            $query->whereIn('groups.teacher_id', $teacherIds);
+        }
+
+        return $query->toBase()->pluck('hours', 'teacher_id')->map(fn ($hours): int => (int) $hours);
     }
 
     /**

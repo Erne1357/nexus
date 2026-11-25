@@ -4,6 +4,7 @@ namespace App\Modules\Scheduling\Actions\Sessions;
 
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
@@ -84,13 +85,16 @@ final class AssignSessionRoom
      * grupo de `group_sessions`), así que mover una no cambia el HC-02 de otra, y si otro grupo toma el salón entre
      * tanto, la exclusión de salón de la base lo detiene (SessionRules::overlapTaken()).
      *
+     * Con `$importing` (ImportLoadProjection, R-PRY-1) también edita si la carga del grupo está en borrador: es carga de datos,
+     * no la pantalla de horarios (supuesto por confirmar S6). Las demás guardas y los estados que no se editan siguen igual.
+     *
      * @param  array<string, Room|null>  $rooms  el salón de cada sesión, por id de sesión
      *
      * @throws ValidationException si una sesión ya no es del grupo o una guarda la rechaza
      */
-    public function handleMany(Group $group, array $rooms, User $actor): void
+    public function handleMany(Group $group, array $rooms, User $actor, bool $importing = false): void
     {
-        $this->editability->guard(fn () => DB::transaction(function () use ($group, $rooms, $actor): void {
+        $this->editability->guard(fn () => DB::transaction(function () use ($group, $rooms, $actor, $importing): void {
             $group = $this->lockGroup($group->id);
             $sessions = GroupSession::query()
                 ->where('group_id', $group->id)
@@ -108,7 +112,7 @@ final class AssignSessionRoom
             $changed = false;
 
             foreach ($rooms as $sessionId => $room) {
-                $changed = $this->assign($group, $sessions[$sessionId], $room, $actor) !== null || $changed;
+                $changed = $this->assign($group, $sessions[$sessionId], $room, $actor, $importing) !== null || $changed;
             }
 
             if ($changed) {
@@ -135,11 +139,13 @@ final class AssignSessionRoom
      *
      * @throws ValidationException
      */
-    private function assign(Group $group, GroupSession $session, ?Room $room, User $actor): ?LoanSyncResult
+    private function assign(Group $group, GroupSession $session, ?Room $room, User $actor, bool $importing = false): ?LoanSyncResult
     {
         $old = SessionRules::snapshot($session);
 
-        $this->rules->ensureEditable($group);
+        if (! ($importing && $this->editability->lockLoad($group)?->status === LoadStatus::Draft)) {
+            $this->rules->ensureEditable($group);
+        }
 
         if ($session->room_id === $room?->getKey()) {
             return null;

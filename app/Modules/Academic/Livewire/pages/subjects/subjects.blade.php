@@ -14,24 +14,27 @@
         </x-slot:subtitle>
     </x-header>
 
-    <x-core::catalog-toolbar>
+    <x-core::catalog-toolbar narrow>
         <x-slot:search>
             <x-input
                 wire:model.live.debounce.300ms="search"
-                placeholder="Buscar por clave o nombre"
+                placeholder="Clave o nombre"
                 aria-label="Buscar materias"
                 icon="o-magnifying-glass"
                 clearable
             />
         </x-slot:search>
 
-        <x-select wire:model.live="departmentFilter" aria-label="Departamento" :options="$departments" placeholder="Todos los departamentos" />
-        <x-select wire:model.live="kindFilter" aria-label="Tipo" :options="$kindFilters" placeholder="Todos los tipos" />
-        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activas e inactivas" />
+        <x-select wire:model.live="departmentFilter" aria-label="Departamento" :options="$departments" placeholder="Departamento" />
+        <x-select wire:model.live="kindFilter" aria-label="Tipo" :options="$kindFilters" placeholder="Tipo" />
+        <x-select wire:model.live="spaceFilter" aria-label="Tipo de espacio" :options="$spaceFilters" placeholder="Tipo de espacio" />
+        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
 
-        <x-slot:action>
-            <x-button label="Nueva materia" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
-        </x-slot:action>
+        @if ($fullCatalog)
+            <x-slot:action>
+                <x-button label="Nueva materia" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
+            </x-slot:action>
+        @endif
     </x-core::catalog-toolbar>
 
     <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
@@ -43,6 +46,11 @@
         >
             @scope('cell_code', $subject)
                 <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $subject->is_active])>{{ $subject->code }}</span>
+            @endscope
+
+            @scope('cell_name', $subject)
+                {{ $subject->name }}
+                <span class="block text-xs text-neutral min-[1536px]:hidden">{{ $subject->required_space?->label() ?? 'Espacio sin marcar' }}</span>
             @endscope
 
             @scope('cell_department', $subject)
@@ -63,6 +71,10 @@
 
             @scope('cell_needs_lab', $subject)
                 {{ $subject->needs_lab ? 'Sí' : 'No' }}
+            @endscope
+
+            @scope('cell_required_space', $subject)
+                <x-core::status-badge :tone="$subject->required_space === null ? 'neutral' : 'info'" :label="$subject->required_space?->label() ?? 'Sin marcar'" />
             @endscope
 
             @scope('cell_study_plans_count', $subject)
@@ -95,7 +107,7 @@
                     <div class="text-neutral">
                         <span class="font-mono">{{ $subject->department?->code }}</span> ·
                         <span class="font-mono tabular-nums">{{ $subject->theory_hours }}-{{ $subject->practice_hours }}-{{ $subject->credits }}</span> ·
-                        {{ $subject->kind?->label() ?? 'Sin tipo' }} ·
+                        {{ $subject->kind?->label() ?? 'Sin tipo' }} · {{ $subject->required_space?->label() ?? 'Espacio sin marcar' }} ·
                         {{ trans_choice('{0} En ningún plan|{1} En 1 plan|[2,*] En :count planes', $subject->study_plans_count) }}@if ($subject->needs_lab) · Laboratorio @endif
                     </div>
 
@@ -114,6 +126,28 @@
             </div>
         @endif
     </div>
+
+    <x-drawer wire:model="showSpaceDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="space-drawer-title" data-testid="space-drawer">
+        @if ($spaceSubjectId !== null)
+        <form wire:submit="saveSpace" class="flex min-h-dvh flex-col">
+            <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
+                <div class="min-w-0 flex-1">
+                    <h2 id="space-drawer-title" class="text-xl font-bold leading-tight">Tipo de espacio</h2>
+                    <p class="mt-1 text-sm text-neutral">Dónde se da la materia: de él depende qué salones puede elegir el docente al seleccionar su carga.</p>
+                </div>
+                <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="$wire.showSpaceDrawer = false" aria-label="Cerrar el panel" />
+            </header>
+            <div class="flex-1 space-y-4 px-5 pt-4 pb-8">
+                <x-select label="Tipo de espacio" name="spaceChoice" wire:model="spaceChoice" :options="$spaces" placeholder="Elige el tipo…" />
+                <p class="text-sm text-neutral">Laboratorio es el laboratorio de verdad, como el de redes; la sala de cómputo es lo que en la relación de materias dice «laboratorio». Con laboratorio, la materia también queda como «Requiere laboratorio».</p>
+            </div>
+            <footer class="flex justify-end gap-2 border-t border-base-300 px-5 py-3">
+                <x-button label="Cancelar" @click="$wire.showSpaceDrawer = false" />
+                <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="saveSpace" data-testid="space-save" />
+            </footer>
+        </form>
+        @endif
+    </x-drawer>
 
     <x-modal wire:model="showModal" :title="$editingId === null ? 'Nueva materia' : 'Editar materia'" box-class="max-w-2xl" separator>
         <x-form wire:submit="save" no-separator>
