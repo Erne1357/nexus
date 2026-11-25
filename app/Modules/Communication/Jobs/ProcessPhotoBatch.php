@@ -28,9 +28,9 @@ use ZipArchive;
  * Procesa un lote de fotos en ZIP en la cola (CO-S5): según el tipo del lote, aplica cada archivo a su persona y deja un
  * reporte por archivo. Del personal: el archivo se llama `<usuario>.<ext>` (sin distinguir mayúsculas; las carpetas
  * del ZIP se ignoran, también las de `__MACOSX` y los archivos ocultos) y lo aplica SetStaffPhoto. De alumnos (CO-06): se
- * llama `<número de control>.<ext>` y lo aplica SetStudentPhoto; un número que no existe, o sin año de ingreso legible,
+ * llama `<número de control>.<ext>` y lo aplica SetStudentPhoto; la cuenta del personal debe estar activa (si no, «sin persona»); un número que no existe, o sin año de ingreso legible,
  * es «sin persona». Un solo intento:
- * si el ZIP no se puede abrir o el job muere, failed() deja el lote «fallido». `timeout` queda por debajo del
+ * si el ZIP no se puede abrir o el job muere, failed() deja el lote «fallido». Al terminar, bien o mal, se borra el ZIP (CO-S10). `timeout` queda por debajo del
  * `retry_after` de la conexión (config/queue.php).
  */
 final class ProcessPhotoBatch implements ShouldQueue
@@ -68,15 +68,31 @@ final class ProcessPhotoBatch implements ShouldQueue
             'applied' => count(array_filter($report, fn (array $row): bool => $row['outcome'] === PhotoOutcome::Aplicada->value)),
             'finished_at' => now(),
         ]);
+
+        $this->discardZip($batch);
     }
 
     public function failed(Throwable $exception): void
     {
+        $batch = PhotoBatch::query()->find($this->batchId);
+
+        if ($batch !== null) {
+            $this->discardZip($batch);
+        }
+
         PhotoBatch::query()->whereKey($this->batchId)->update([
             'status' => PhotoBatchStatus::Fallido,
             'error' => mb_substr($exception->getMessage(), 0, 500),
             'finished_at' => now(),
         ]);
+    }
+
+    /**
+     * CO-S10: el ZIP trae fotos de personas y ya no hace falta; se borra al terminar el lote, bien o mal. El reporte se queda.
+     */
+    private function discardZip(PhotoBatch $batch): void
+    {
+        Storage::disk('imports')->delete($batch->file_path);
     }
 
     /**
@@ -173,6 +189,10 @@ final class ProcessPhotoBatch implements ShouldQueue
             return $row(PhotoOutcome::EsAlumno, 'Es alumno: sus fotos no van en este lote.');
         }
 
+        if (! $person->is_active) {
+            return $row(PhotoOutcome::SinPersona, 'La cuenta no está activa.');
+        }
+
         $temporary = sys_get_temp_dir().'/nxph-'.Str::uuid().".{$extension}";
 
         try {
@@ -236,6 +256,20 @@ final class ProcessPhotoBatch implements ShouldQueue
     }
 
     /**
+     * Un nombre del ZIP en UTF-8: el Explorador de Windows guarda los nombres con acentos en CP437 (sin la marca UTF-8), y se leen en bruto
+     * para decidir aquí: si no son UTF-8 válido se leen como CP850, que coincide en las letras del español, y lo que aún quede inválido se limpia, para que el reporte
+     * (JSON) siempre se pueda guardar.
+     */
+    private static function utf8(string $name): string
+    {
+        if (! mb_check_encoding($name, 'UTF-8')) {
+            $name = mb_convert_encoding($name, 'UTF-8', 'CP850');
+        }
+
+        return mb_scrub($name);
+    }
+
+    /**
      * Los archivos del ZIP que cuentan, sin carpetas, sin `__MACOSX` y sin ocultos, con su nombre sin la carpeta.
      *
      * @return list<array{0: int, 1: string}> índice dentro del ZIP y nombre del archivo
@@ -245,7 +279,7 @@ final class ProcessPhotoBatch implements ShouldQueue
         $entries = [];
 
         for ($index = 0; $index < $zip->numFiles; $index++) {
-            $name = (string) $zip->getNameIndex($index);
+            $name = self::utf8((string) $zip->getNameIndex($index, ZipArchive::FL_ENC_RAW));
 
             if (str_ends_with($name, '/') || str_starts_with($name, '__MACOSX/') || str_contains($name, '/__MACOSX/')) {
                 continue;

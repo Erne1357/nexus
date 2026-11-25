@@ -23,7 +23,8 @@ use ZipArchive;
  */
 final class StorePhotoBatch
 {
-    public const int MAX_BYTES = 19 * 1024 * 1024;
+    /** 19 000 KB, como la regla de subida temporal de Livewire (config/livewire.php): una sola cifra en todas partes. */
+    public const int MAX_BYTES = 19_000 * 1024;
 
     public const int MAX_ENTRIES = 2000;
 
