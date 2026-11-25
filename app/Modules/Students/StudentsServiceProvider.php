@@ -23,6 +23,7 @@ use App\Modules\Students\Listeners\BlockSubjectDeactivationWhileNeeded;
 use App\Modules\Students\Listeners\RecomputeProgressOnCurriculumChange;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
+use App\Modules\Students\Rules\CredentialRequestSettings;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
@@ -75,12 +76,21 @@ final class StudentsServiceProvider extends ModuleServiceProvider
     public function grants(): array
     {
         return [
-            Role::Alumno->value => [StudentsPermission::MyRecordView],
+            Role::Alumno->value => [StudentsPermission::MyRecordView, StudentsPermission::CredentialRequestCreate],
             Role::Directivo->value => [StudentsPermission::StudentView],
             Role::Subdireccion->value => [StudentsPermission::StudentView],
-            Role::JefeDepartamento->value => [StudentsPermission::StudentView],
+            Role::JefeDepartamento->value => [StudentsPermission::StudentView, StudentsPermission::CredentialRequestManage],
+            Role::Personal->value => [StudentsPermission::CredentialRequestManage],
             Role::Coordinador->value => [StudentsPermission::StudentView],
         ];
+    }
+
+    /**
+     * Los plazos de las solicitudes de credencial (CO-07), que Comunicación y Difusión fija.
+     */
+    public function settings(): array
+    {
+        return CredentialRequestSettings::definitions();
     }
 
     /**
@@ -88,7 +98,7 @@ final class StudentsServiceProvider extends ModuleServiceProvider
      */
     public function adminDenies(): array
     {
-        return [StudentsPermission::MyRecordView];
+        return [StudentsPermission::MyRecordView, StudentsPermission::CredentialRequestCreate];
     }
 
     /**

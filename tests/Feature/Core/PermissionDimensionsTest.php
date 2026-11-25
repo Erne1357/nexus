@@ -89,6 +89,7 @@ function dimensionTables(): array
         'faculty.teacher_user' => 'users',
         'imports.batch' => 'import_batches',
         'students.student' => 'students',
+        'students.credential_request' => 'credential_requests',
         'catalog_validation.review' => 'catalog_reviews',
         'catalog_validation.progress' => 'catalog_reviews',
         'academic_load.load' => 'academic_loads',
