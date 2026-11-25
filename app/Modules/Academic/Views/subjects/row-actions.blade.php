@@ -6,7 +6,8 @@
     el data-testid. No hay «Borrar»: una materia no se borra, se desactiva, y si todavía la necesitan
     alumnos, desactivarla se rechaza con un toast que dice cuántos. «Tipo de espacio» (SEL-17) lo ve solo quien puede
     cambiarlo en esa materia (el jefe de su departamento y el admin): quien ve el catálogo lo tiene en «Acciones»; quien solo
-    puede eso (sin `viewCatalog`) lo tiene como único botón visible y no ve «Editar» ni «Acciones».
+    puede eso (sin `viewCatalog`) lo tiene como único botón visible y no ve «Editar» ni «Acciones»; en la tabla su texto
+    aparece desde 1536 px (como la columna «Espacio») y debajo queda solo el icono con su título, para no encimarse con «Estado».
 --}}
 <div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
     @cannot('viewCatalog', \App\Modules\Academic\Models\Subject::class)
@@ -16,10 +17,11 @@
                 wire:click="editSpace('{{ $subject->id }}')"
                 aria-label="Tipo de espacio de {{ $subject->code }}"
                 :data-testid="$inTable ? 'space-'.$subject->code : null"
+                title="Tipo de espacio"
                 class="btn-ghost btn-sm"
                 spinner="editSpace('{{ $subject->id }}')"
             >
-                <span @class(['max-[1200px]:hidden' => $inTable])>Tipo de espacio</span>
+                <span @class(['max-[1535px]:hidden' => $inTable])>Tipo de espacio</span>
             </x-button>
         @endcan
     @endcannot
