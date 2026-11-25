@@ -11,7 +11,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
 /**
  * Permisos del módulo Academic: catálogos de departamentos, carreras, materias y planes de estudio. La clave es
  * `academic.<recurso>.<accion>`. Todos son solo del admin, salvo `academic.placement.validate`: validar las materias
- * de la migración del SII que esperan semestre (D19). Se concede al jefe de departamento, declara la unidad y aplica
+ * de la migración del SII que esperan semestre (D19), y `academic.subject.set_space`: cambiar el tipo de espacio que pide una
+ * materia de su departamento (SEL-16; el jefe y el admin). Se concede al jefe de departamento, declara la unidad y aplica
  * solo a Servicios Escolares (AZ-02, AZ-S16): solo lo ejerce el jefe nombrado sobre esa unidad, y StudyPlanPolicy lo pregunta
  * sobre ella.
  */
@@ -30,6 +31,7 @@ enum AcademicPermission: string implements Permission
     case SubjectView = 'academic.subject.view';
     case SubjectCreate = 'academic.subject.create';
     case SubjectUpdate = 'academic.subject.update';
+    case SubjectSpaceSet = 'academic.subject.set_space';
     case StudyPlanView = 'academic.study_plan.view';
     case StudyPlanCreate = 'academic.study_plan.create';
     case StudyPlanUpdate = 'academic.study_plan.update';
@@ -50,6 +52,7 @@ enum AcademicPermission: string implements Permission
             self::SubjectView => 'Ver materias',
             self::SubjectCreate => 'Dar de alta materias',
             self::SubjectUpdate => 'Editar materias',
+            self::SubjectSpaceSet => 'Cambiar el tipo de espacio que pide una materia',
             self::StudyPlanView => 'Ver planes de estudio',
             self::StudyPlanCreate => 'Dar de alta planes de estudio',
             self::StudyPlanUpdate => 'Editar planes de estudio',
@@ -60,7 +63,7 @@ enum AcademicPermission: string implements Permission
 
     public function dimensions(): array
     {
-        return $this === self::PlacementValidate ? [Dimension::Unit] : [];
+        return in_array($this, [self::PlacementValidate, self::SubjectSpaceSet], true) ? [Dimension::Unit] : [];
     }
 
     public function isPersonal(): bool

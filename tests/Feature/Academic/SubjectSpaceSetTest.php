@@ -1,0 +1,93 @@
+<?php
+
+use App\Modules\Academic\Enums\RequiredSpace;
+use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\User;
+use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
+
+/*
+| SEL-16: el tipo de espacio de una materia lo cambian el jefe de su departamento y el admin, desde el catálogo de
+| Materias (`academic.subject.set_space`, alcance: el departamento de la materia).
+*/
+
+beforeEach(function () {
+    $this->sis = Department::factory()->create(['code' => 'SIS']);
+    $this->ele = Department::factory()->create(['code' => 'ELE']);
+    $this->redes = Subject::factory()->create(['code' => 'SCA-1001', 'department_id' => $this->sis->id, 'required_space' => null, 'needs_lab' => false]);
+    $this->circuitos = Subject::factory()->create(['code' => 'AEF-1002', 'department_id' => $this->ele->id, 'required_space' => null]);
+
+    $this->jefeSis = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
+    $this->jefeEle = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create();
+});
+
+it('SEL-16: el jefe cambia el tipo de espacio de una materia de su departamento y queda en la bitácora', function () {
+    actingAsRole($this->jefeSis, Role::JefeDepartamento);
+
+    Livewire::test('academic::pages.subjects')
+        ->call('editSpace', $this->redes->id)
+        ->set('spaceChoice', RequiredSpace::Laboratorio->value)
+        ->call('saveSpace')
+        ->assertHasNoErrors();
+
+    expect($this->redes->fresh())->required_space->toBe(RequiredSpace::Laboratorio)->needs_lab->toBeTrue()
+        ->and(Activity::query()->where('subject_id', $this->redes->id)->where('causer_id', $this->jefeSis->id)->exists())->toBeTrue();
+});
+
+it('SEL-16: el jefe ve solo las materias de su departamento y su control, sin alta ni edición', function () {
+    actingAsRole($this->jefeSis, Role::JefeDepartamento);
+
+    Livewire::test('academic::pages.subjects')
+        ->assertOk()
+        ->assertSee('SCA-1001')
+        ->assertDontSee('AEF-1002')
+        ->assertSee('Tipo de espacio')
+        ->assertDontSeeHtml('wire:click="create"')
+        ->assertDontSee('Editar SCA-1001');
+});
+
+it('SEL-16: el jefe de otro departamento no ve las materias ni puede llamar la acción', function () {
+    actingAsRole($this->jefeEle, Role::JefeDepartamento);
+
+    Livewire::test('academic::pages.subjects')->assertDontSee('SCA-1001');
+    Livewire::test('academic::pages.subjects')->call('editSpace', $this->redes->id)->assertForbidden();
+
+    expect($this->redes->fresh()->required_space)->toBeNull();
+});
+
+it('SEL-16: el jefe no edita, da de alta ni desactiva los demás datos de la materia', function (string $method, array $arguments) {
+    actingAsRole($this->jefeSis, Role::JefeDepartamento);
+
+    Livewire::test('academic::pages.subjects')->call($method, ...$arguments)->assertForbidden();
+})->with([
+    'editar' => fn () => ['edit', [$this->redes->id]],
+    'crear' => ['create', []],
+    'desactivar' => fn () => ['toggleActive', [$this->redes->id]],
+]);
+
+it('SEL-16: el jefe de proyecto docente y el docente no ven el catálogo ni cambian el tipo', function (Role $role) {
+    $user = User::factory()->withRole($role, ['department_id' => $this->sis->id])->create();
+    actingAsRole($user, $role);
+
+    expect($user->can('viewAny', Subject::class))->toBeFalse()
+        ->and($user->can('setSpace', $this->redes))->toBeFalse();
+    $this->get(route('academic.subjects'))->assertForbidden();
+})->with([Role::JefeProyectoDocente, Role::Docente]);
+
+it('SEL-16: el admin cambia el tipo de cualquier materia y filtra por tipo de espacio, incluido «Sin marcar»', function () {
+    $admin = User::factory()->admin()->create();
+    actingAsRole($admin, Role::Admin);
+
+    Livewire::test('academic::pages.subjects')
+        ->call('editSpace', $this->circuitos->id)
+        ->set('spaceChoice', RequiredSpace::SalaComputo->value)
+        ->call('saveSpace')
+        ->set('spaceFilter', 'none')
+        ->assertSee('SCA-1001')->assertDontSee('AEF-1002')
+        ->set('spaceFilter', RequiredSpace::SalaComputo->value)
+        ->assertSee('AEF-1002')->assertDontSee('SCA-1001');
+
+    expect($this->circuitos->fresh()->required_space)->toBe(RequiredSpace::SalaComputo);
+});

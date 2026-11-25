@@ -58,7 +58,7 @@ final class AcademicServiceProvider extends ModuleServiceProvider
                 AcademicPermission::SubjectView,
                 AcademicPermission::StudyPlanView,
             ],
-            Role::JefeDepartamento->value => [AcademicPermission::PlacementValidate],
+            Role::JefeDepartamento->value => [AcademicPermission::PlacementValidate, AcademicPermission::SubjectSpaceSet],
         ];
     }
 

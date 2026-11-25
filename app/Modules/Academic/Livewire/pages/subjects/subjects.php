@@ -1,12 +1,16 @@
 <?php
 
 use App\Modules\Academic\Actions\CreateSubject;
+use App\Modules\Academic\Actions\SetSubjectRequiredSpace;
 use App\Modules\Academic\Actions\UpdateSubject;
+use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\Academic\Queries\SubjectQuery;
 use App\Modules\Core\Livewire\Concerns\ReturnsToValidation;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -25,6 +29,10 @@ use Mary\Traits\Toast;
  * petición puede llegar con una página que abrió otra sesión), valida la forma de los datos y llama a
  * CreateSubject o UpdateSubject, que hacen cumplir las reglas. Desactivar una materia que todavía
  * necesitan alumnos lo veta Students: el motivo sale en un toast de error.
+ *
+ * El tipo de espacio que pide la materia (SEL-16) lo cambian el admin y el jefe del departamento de la materia, con
+ * SetSubjectRequiredSpace y `setSpace` de la policy. El jefe, que no ve el catálogo completo, llega a esta pantalla solo
+ * con las materias de su departamento y ese control: sin alta, sin edición y sin desactivar.
  *
  * Los campos del formulario se llaman como las columnas, así los errores de las Actions caen en su
  * campo.
@@ -49,7 +57,20 @@ new #[Title('Materias')] class extends Component
     #[Session]
     public string $status = '';
 
+    /** Valor de RequiredSpace o SubjectQuery::WITHOUT_SPACE; '' son todos. */
+    #[Session]
+    public string $spaceFilter = '';
+
     public bool $showModal = false;
+
+    /** La materia cuyo tipo de espacio se cambia en el drawer; null con el drawer cerrado. */
+    #[Locked]
+    public ?string $spaceSubjectId = null;
+
+    public bool $showSpaceDrawer = false;
+
+    /** Valor de RequiredSpace elegido en el drawer. */
+    public string $spaceChoice = '';
 
     /** La materia que se edita; null es un alta. El navegador no lo puede cambiar. */
     #[Locked]
@@ -82,7 +103,17 @@ new #[Title('Materias')] class extends Component
      */
     public function with(SubjectQuery $subjects, DepartmentQuery $departmentQuery): array
     {
+        $fullCatalog = Gate::allows('viewCatalog', Subject::class);
         $departments = $departmentQuery->options();
+        $onlyDepartments = null;
+
+        if (! $fullCatalog) {
+            $departments = array_values(array_filter($departments, fn (array $department): bool => Gate::allows('setSpaceIn', [Subject::class, $department['id']])));
+            $onlyDepartments = array_column($departments, 'id');
+        }
+
+        $spaces = array_map(fn (RequiredSpace $space): array => ['id' => $space->value, 'name' => $space->label()], RequiredSpace::cases());
+        $spaceFilters = [...$spaces, ['id' => SubjectQuery::WITHOUT_SPACE, 'name' => 'Sin marcar']];
         $kinds = array_map(fn (SubjectKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], SubjectKind::cases());
         $kindFilters = [...$kinds, ['id' => SubjectQuery::WITHOUT_KIND, 'name' => 'Sin tipo']];
         $this->forgetFiltersOutside($departments, $kindFilters);
@@ -97,7 +128,12 @@ new #[Title('Materias')] class extends Component
                     'inactive' => false,
                     default => null,
                 },
+                space: $this->spaceFilter === '' ? null : $this->spaceFilter,
+                onlyDepartments: $onlyDepartments,
             ),
+            'fullCatalog' => $fullCatalog,
+            'spaces' => $spaces,
+            'spaceFilters' => $spaceFilters,
             'departments' => $departments,
             'kinds' => $kinds,
             'kindFilters' => $kindFilters,
@@ -110,6 +146,7 @@ new #[Title('Materias')] class extends Component
                 ['key' => 'hours', 'label' => 'HT-HP-Créditos', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'kind', 'label' => 'Tipo', 'class' => 'max-[1535px]:hidden'],
                 ['key' => 'needs_lab', 'label' => 'Laboratorio', 'class' => 'max-[1535px]:hidden'],
+                ['key' => 'required_space', 'label' => 'Tipo de espacio', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'study_plans_count', 'label' => 'Planes', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'is_active', 'label' => 'Estado'],
             ],
@@ -120,7 +157,7 @@ new #[Title('Materias')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'departmentFilter', 'kindFilter', 'status'], true)) {
+        if (in_array($property, ['search', 'departmentFilter', 'kindFilter', 'spaceFilter', 'status'], true)) {
             $this->resetPage();
         }
     }
@@ -150,6 +187,35 @@ new #[Title('Materias')] class extends Component
         $this->kind = $subject->kind?->value ?? '';
         $this->needs_lab = $subject->needs_lab;
         $this->showModal = true;
+    }
+
+    /**
+     * Abre el drawer del tipo de espacio de la materia, con el que tiene hoy (aula si todavía no se marca).
+     */
+    public function editSpace(string $id, SubjectQuery $subjects): void
+    {
+        $subject = $subjects->findOrFail($id);
+        $this->authorize('setSpace', $subject);
+
+        $this->spaceSubjectId = $subject->id;
+        $this->spaceChoice = ($subject->required_space ?? RequiredSpace::Aula)->value;
+        $this->resetValidation();
+        $this->showSpaceDrawer = true;
+    }
+
+    public function saveSpace(SetSubjectRequiredSpace $setSpace, SubjectQuery $subjects): void
+    {
+        abort_if($this->spaceSubjectId === null, 404);
+
+        $subject = $subjects->findOrFail($this->spaceSubjectId);
+        $this->authorize('setSpace', $subject);
+
+        $data = $this->validate(['spaceChoice' => ['required', Rule::enum(RequiredSpace::class)]], attributes: ['spaceChoice' => 'tipo de espacio']);
+
+        $subject = $setSpace->handle($subject, RequiredSpace::from($data['spaceChoice']), Auth::user());
+
+        $this->showSpaceDrawer = false;
+        $this->success('Tipo de espacio guardado', $this->describe($subject));
     }
 
     public function save(CreateSubject $createSubject, UpdateSubject $updateSubject, SubjectQuery $subjects): void
