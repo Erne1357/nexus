@@ -19,6 +19,9 @@ beforeEach(function () {
     $this->redes = Subject::factory()->create(['code' => 'SCA-1001', 'department_id' => $this->sis->id, 'required_space' => null, 'needs_lab' => false]);
     $this->circuitos = Subject::factory()->create(['code' => 'AEF-1002', 'department_id' => $this->ele->id, 'required_space' => null]);
 
+    placeInActivePlan($this->redes);
+    placeInActivePlan($this->circuitos);
+
     $this->jefeSis = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
     $this->jefeEle = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create();
 });

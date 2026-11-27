@@ -6,6 +6,8 @@ use App\Modules\Academic\Authorization\AcademicScopeLabels;
 use App\Modules\Academic\Console\ExcludeTeacherHoursCommand;
 use App\Modules\Academic\Console\MarkCurrentSpecialtiesCommand;
 use App\Modules\Academic\Console\PositionMailboxesFromDepartmentsCommand;
+use App\Modules\Academic\Contracts\ActiveStudyPlans;
+use App\Modules\Academic\Contracts\AllStudyPlansActive;
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\Academic\Enums\AcademicPermission;
@@ -40,6 +42,9 @@ final class AcademicServiceProvider extends ModuleServiceProvider
 
         // Los códigos de carrera para el resumen de puestos de la credencial (reemplaza el de Core).
         $this->app->bind(ScopeLabels::class, AcademicScopeLabels::class);
+
+        // SEL-19: sin Students todas las retículas cuentan; Students lo reemplaza en su register().
+        $this->app->bindIf(ActiveStudyPlans::class, AllStudyPlansActive::class);
     }
 
     public function boot(): void
