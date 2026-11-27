@@ -172,6 +172,7 @@ class StudentsTemplate extends ImportTemplate
      */
     public function apply(array $row, ImportContext $context): Model
     {
+        $this->clearStaleSpecialty($row);
         $student = parent::apply($row, $context);
 
         if ($row['status'] !== null && StudentStatus::tryFrom($row['status']) === null && $student->getAttribute('status') !== null) {
@@ -179,6 +180,27 @@ class StudentsTemplate extends ImportTemplate
         }
 
         return $student;
+    }
+
+    /**
+     * Si el alumno ya existe y cambia de plan, su especialidad asignada era del plan anterior y la llave compuesta
+     * (plan, especialidad) no la admitiría: se limpia antes de guardar (1.69). `attributes()` pone la del plan nuevo si
+     * el archivo la trae y el plan la tiene; si no, queda nula. Sin cambio de plan no se toca.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function clearStaleSpecialty(array $row): void
+    {
+        $plan = $this->plan($row['study_plan']);
+
+        if ($plan === null) {
+            return;
+        }
+
+        Student::query()->where('control_number', $row['control_number'])
+            ->where('study_plan_id', '<>', $plan->id)
+            ->whereNotNull('specialty_id')
+            ->update(['specialty_id' => null]);
     }
 
     public function afterApply(ImportContext $context): void

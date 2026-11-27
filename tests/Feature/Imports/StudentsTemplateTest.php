@@ -225,3 +225,26 @@ it('una especialidad que el plan no tiene deja un aviso y el alumno sin ella; un
         ->and($this->template->apply($row, $this->context)->specialty_id)->toBe($specialty->id)
         ->and($student->specialty_id)->toBe($specialty->id);
 });
+
+it('si el alumno cambia de plan, su especialidad vieja se limpia y la fila se guarda (1.69)', function () {
+    $old = Specialty::factory()->for($this->plan)->create(['code' => 'LARU']);
+    $student = $this->template->apply(studentRow(['specialty' => 'LARU']), $this->context);
+    $newPlan = StudyPlan::factory()->for($this->career)->create(['code' => 'ISIC-2020-300']);
+
+    $moved = $this->template->apply(studentRow(['study_plan' => 'ISIC-2020-300']), $this->context);
+
+    expect($student->specialty_id)->toBe($old->id)
+        ->and($moved->fresh()->study_plan_id)->toBe($newPlan->id)
+        ->and($moved->fresh()->specialty_id)->toBeNull();
+});
+
+it('si el alumno cambia de plan y el archivo trae una especialidad del plan nuevo, la guarda (1.69)', function () {
+    Specialty::factory()->for($this->plan)->create(['code' => 'LARU']);
+    $this->template->apply(studentRow(['specialty' => 'LARU']), $this->context);
+    $newPlan = StudyPlan::factory()->for($this->career)->create(['code' => 'ISIC-2020-300']);
+    $fresh = Specialty::factory()->for($newPlan)->create(['code' => 'NUEVA']);
+
+    $moved = $this->template->apply(studentRow(['study_plan' => 'ISIC-2020-300', 'specialty' => 'NUEVA']), $this->context);
+
+    expect($moved->fresh()->specialty_id)->toBe($fresh->id);
+});
