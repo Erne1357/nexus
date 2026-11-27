@@ -1,0 +1,125 @@
+<?php
+
+use App\Modules\Core\Models\User;
+use App\Modules\Core\Observability\CanonicalLog;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
+
+/*
+| Fase 2b: toda petición lleva un X-Request-Id y deja una sola línea `request.done` con una lista blanca de claves,
+| sin datos personales. Las sondas (/health, /up) no escriben línea ni abren sesión.
+*/
+
+function captureLog(): ArrayObject
+{
+    $calls = new ArrayObject;
+    Log::spy()->shouldReceive('log')->andReturnUsing(function (string $level, string $message, array $context = []) use ($calls): void {
+        $calls[] = compact('level', 'message', 'context');
+    });
+
+    return $calls;
+}
+
+function doneLines(ArrayObject $calls): array
+{
+    return array_values(array_filter($calls->getArrayCopy(), fn (array $c): bool => $c['message'] === 'request.done'));
+}
+
+it('respeta el X-Request-Id que pone Caddy', function () {
+    $calls = captureLog();
+    $id = '0193f0c2-aaaa-7000-8000-000000000002';
+
+    $this->get('/login', ['X-Request-Id' => $id])->assertHeader('X-Request-Id', $id);
+
+    expect(doneLines($calls)[0]['context']['request_id'])->toBe($id);
+});
+
+it('genera uno nuevo si no viene o no es válido', function (string $sent) {
+    $calls = captureLog();
+    $headers = $sent === '' ? [] : ['X-Request-Id' => $sent];
+
+    $response = $this->get('/login', $headers);
+    $id = $response->headers->get('X-Request-Id');
+
+    expect($id)->toMatch('/^[A-Za-z0-9-]{8,64}$/')->not->toBe($sent);
+    if ($sent !== '') {
+        expect(json_encode(doneLines($calls)))->not->toContain($sent);
+    }
+    expect(doneLines($calls)[0]['context']['request_id'])->toBe($id);
+})->with([
+    'salto de línea' => ["a\nb"],
+    '1 KB' => [str_repeat('x', 1024)],
+    'sin cabecera' => [''],
+]);
+
+it('escribe una línea con solo las claves de la lista blanca', function () {
+    $calls = captureLog();
+
+    $this->get('/login?buscar=Juana');
+
+    $lines = doneLines($calls);
+    expect($lines)->toHaveCount(1)
+        ->and(array_keys($lines[0]['context']))->toBe(CanonicalLog::REQUEST_KEYS)
+        ->and($lines[0]['context']['route'])->toBe('login')
+        ->and(json_encode($lines[0]))->not->toContain('Juana')->not->toContain('buscar');
+});
+
+it('cuenta las consultas de la petición y no las de la anterior', function () {
+    Route::get('/_obs/db', function () {
+        DB::select('select 1');
+        DB::select('select 1');
+
+        return 'ok';
+    });
+    $calls = captureLog();
+
+    $this->get('/_obs/db');
+    $this->get('/_obs/db');
+
+    $lines = doneLines($calls);
+    expect($lines)->toHaveCount(2)
+        ->and($lines[0]['context']['db_queries'])->toBe(2)
+        ->and($lines[1]['context']['db_queries'])->toBe(2);
+});
+
+it('mide el tiempo de las llamadas HTTP salientes', function () {
+    Http::fake();
+    Route::get('/_obs/http', fn () => Http::get('https://solver.test/health')->status());
+    $calls = captureLog();
+
+    $this->get('/_obs/http');
+
+    expect(doneLines($calls)[0]['context']['external_ms'])->toBeGreaterThan(0);
+});
+
+it('pone el usuario y el puesto activo sin consultar la base', function () {
+    $calls = captureLog();
+    $user = User::factory()->admin()->create();
+
+    $this->actingAs($user)->withSession(['core.active_role' => 'coordinador'])->get('/login');
+
+    $context = doneLines($calls)[0]['context'];
+    expect($context['user_id'])->toBe($user->getKey())
+        ->and($context['role'])->toBe('coordinador');
+});
+
+it('no escribe línea ni abre sesión para las sondas', function () {
+    $calls = captureLog();
+
+    $this->get('/health')->assertHeaderMissing('Set-Cookie');
+    $this->get('/up');
+
+    expect(doneLines($calls))->toBeEmpty();
+});
+
+it('registra como error una respuesta 5xx', function () {
+    Route::get('/_obs/boom', fn () => throw new RuntimeException('boom'));
+    $calls = captureLog();
+
+    $this->get('/_obs/boom')->assertStatus(500);
+
+    $line = doneLines($calls)[0];
+    expect($line['level'])->toBe('error')->and($line['context']['status'])->toBe(500);
+});

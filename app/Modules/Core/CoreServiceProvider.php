@@ -81,6 +81,7 @@ use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Notifications\AccessInvitation;
 use App\Modules\Core\Notifications\PersonalMailExceptions;
 use App\Modules\Core\Notifications\PersonMailAddresses;
+use App\Modules\Core\Observability\OperationMetrics;
 use App\Modules\Core\Policies\ActivityPolicy;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\UnitAdscriptions;
@@ -91,9 +92,11 @@ use App\Modules\Core\Support\HomePanels;
 use App\Modules\Core\Support\QueueJobScope;
 use App\Modules\Core\View\Components\Drawer;
 use App\Modules\Core\View\DrawerIds;
+use Closure;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Notifications\Events\NotificationSending;
@@ -103,8 +106,10 @@ use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Livewire\ComponentHookRegistry;
@@ -174,6 +179,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         // `scoped`: si lo que corre es un trabajo del worker de la cola (tarea 1.29); el worker la olvida entre trabajos.
         $this->app->scoped(QueueJobScope::class);
+
+        // `scoped`: contadores de consultas y de llamadas salientes de la petición en curso (la línea `request.done`).
+        $this->app->scoped(OperationMetrics::class);
 
         // `scoped` por lo mismo: lee una vez por petición qué perfiles inician sesión (AC-21).
         $this->app->scoped(RoleAccess::class);
@@ -245,6 +253,29 @@ final class CoreServiceProvider extends ModuleServiceProvider
             // CE-02: barre cada 15 minutos los correos de puesto que esperan y ya tienen buzón (los que esperaban por la carga
             // oculta, MN-05, o por un reintento).
             $schedule->job(new ReleaseHeldPositionMailsJob)->everyFifteenMinutes()->name('release-held-position-mails');
+        });
+
+        // Suma al acumulador cada consulta y cada llamada HTTP saliente. Se resuelve en cada llamada y no se captura: con
+        // Octane el closure vive en el worker y el acumulador es de la petición.
+        DB::listen(fn (QueryExecuted $query) => $this->app->make(OperationMetrics::class)->addQuery($query->time));
+        Http::globalMiddleware(fn (callable $handler): Closure => function ($request, $options) use ($handler) {
+            $metrics = $this->app->make(OperationMetrics::class);
+            $startedAt = hrtime(true);
+            $add = fn () => $metrics->addExternal((hrtime(true) - $startedAt) / 1e6);
+
+            // También cuando falla: un timeout es justo la llamada lenta que hay que contar.
+            return $handler($request, $options)->then(
+                function ($response) use ($add) {
+                    $add();
+
+                    return $response;
+                },
+                function ($reason) use ($add) {
+                    $add();
+
+                    throw $reason;
+                },
+            );
         });
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
