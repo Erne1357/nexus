@@ -77,15 +77,18 @@ final class TeacherWeeklyLoadQuery implements TeacherWeeklyLoad
             'band_from' => $hours['band_from'],
             'band_to' => $hours['band_to'],
             'honorarios_cap' => $hours['honorarios_cap'],
+            // PL-04 (tarea 1.83): sin plaza docente no hay banda; sus horas son de honorarios y trae el estado de las extra.
+            'no_plaza' => $hours['no_plaza'],
+            'extra_label' => $hours['extra_label'],
             // PL-03 y HC-22: con plaza administrativa no hay banda; trae el resumen «Plaza administrativa: 36 h · clases 4 h · 40 de 42 h» y, si pasa el tope de 42 h, su aviso.
             'administrative' => $hours['administrative'],
             'administrative_summary' => $hours['administrative'] === null ? null : TeacherHourLimit::administrativeSummary($administrative),
             'over_band' => $hours['over_band'],
-            'notice' => $hours['administrative'] === null ? TeacherHourLimit::notice([
+            'notice' => $hours['no_plaza'] ? null : ($hours['administrative'] === null ? TeacherHourLimit::notice([
                 'teaching_hours' => $hours['teaching'], 'band_from' => $hours['band_from'], 'band_to' => $hours['band_to'],
                 'honorarios_cap' => $hours['honorarios_cap'], 'assigned_hours' => $hours['assigned'], 'external_hours' => $hours['external'],
                 'over_band' => $hours['over_band'], 'accepted' => $hours['accepted'],
-            ]) : TeacherHourLimit::administrativeNotice($administrative),
+            ]) : TeacherHourLimit::administrativeNotice($administrative)),
         ];
     }
 

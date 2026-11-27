@@ -23,6 +23,7 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Actions\RefreshTeacherTermLoads;
 use App\Modules\Staffing\Jobs\RefreshTeacherLoads;
 use App\Modules\Staffing\Models\TeacherTermLoad;
+use App\Modules\Staffing\Queries\TeacherLoadsBoard;
 use App\Modules\Staffing\Queries\TeacherLoadsBoardQuery;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -406,5 +407,65 @@ describe('horas extra y honorarios (PL-04, tarea 1.81)', function () {
         loadsPage()->call('open', $seed['over']->id)
             ->assertSeeText('Jefatura: sin honorarios · requiere oficio del docente (pendiente)')
             ->assertDontSeeHtml('data-testid="extra-authorize"');
+    });
+});
+
+describe('sin plaza docente = honorarios en pantalla (PL-04, tarea 1.83)', function () {
+    it('PL-04: sin plaza ni CSV el renglón dice que sus horas son de honorarios, con el estado de las extra, y no pinta la banda «0 h (0 a 2)»', function () {
+        $seed = boardSeed();
+        $sin = boardTeacher('Sara Sinplaza', null);
+        teacherLoadsGroup($sin, test()->c2, 3, 'S1');
+        app(RefreshTeacherTermLoads::class)->handle(test()->term);
+
+        $html = loadsPage()->html();
+        $tile = domOf($html)->querySelector('[data-testid=tile][data-teacher="'.$sin->id.'"]');
+
+        expect(textOf($tile))->toContain('Sin plaza docente · sus horas son de honorarios')->not->toContain('0 h (0 a 2)')->not->toContain('frente a grupo')
+            ->and(textOf($tile))->toContain('3 h extra · honorarios por autorizar (jefe de depto)')
+            // Un TC normal sigue con su banda.
+            ->and(textOf(domOf($html)->querySelector('[data-testid=tile][data-teacher="'.$seed['full']->id.'"]')))->toContain('frente a grupo 12 h (10 a 14)');
+    });
+
+    it('PL-04: cuenta en «Honorarios» (encabezado y filtro) junto a la plaza de honorarios y no suma banda a «Restantes»', function () {
+        $seed = boardSeed();
+        $sin = boardTeacher('Sara Sinplaza', null);
+        $nada = boardTeacher('Nadia Sinplaza', null);
+        teacherLoadsGroup($sin, test()->c2, 3, 'S1');
+        app(RefreshTeacherTermLoads::class)->handle(test()->term);
+        $before = collect(app(TeacherLoadsBoardQuery::class)->forDepartment(test()->term, test()->sc)->rows)->reject(fn ($row) => in_array($row->teacherId, [$sin->id, $nada->id], true));
+
+        $board = app(TeacherLoadsBoardQuery::class)->forDepartment(test()->term, test()->sc);
+        $page = loadsPage();
+        $html = $page->html();
+
+        // Hugo (plaza de honorarios) + Sara y Nadia (sin plaza); Sara con horas no queda en «Exceden».
+        expect($board->totals()['honorarios'])->toBe(3)
+            ->and(textOf(domOf($html)->querySelector('[data-testid=state-hon]')))->toContain('3')
+            ->and(textOf(domOf($html)->querySelector('[data-testid=state-over]')))->toContain('1')
+            ->and($board->totals()['remaining'])->toBe((new TeacherLoadsBoard($before->values()->all(), 0))->totals()['remaining']);
+
+        loadsPage(query: ['estado' => 'hon'])->assertSee('Hugo Honorarios')->assertSee('Sara Sinplaza')->assertSee('Nadia Sinplaza')->assertDontSee('Olga Excedida');
+        expect($seed)->not->toBeEmpty();
+    });
+
+    it('PL-04: el drawer de quien no tiene plaza dice que sus horas son de honorarios, sin banda', function () {
+        boardSeed();
+        $sin = boardTeacher('Sara Sinplaza', null);
+        teacherLoadsGroup($sin, test()->c2, 3, 'S1');
+        app(RefreshTeacherTermLoads::class)->handle(test()->term);
+
+        loadsPage()->call('open', $sin->id)
+            ->assertSeeText('Sin plaza docente · sus horas son de honorarios')
+            ->assertSeeText('3 h extra · honorarios por autorizar (jefe de depto)')
+            ->assertDontSeeText('0 h (0 a 2)');
+    });
+
+    it('PL-04: la pantalla sigue con su alcance: el jefe de otro departamento no ve al docente sin plaza', function () {
+        $sin = boardTeacher('Sara Sinplaza', null);
+        teacherLoadsGroup($sin, test()->c2, 3, 'S1');
+        app(RefreshTeacherTermLoads::class)->handle(test()->term);
+        $otro = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => test()->c2->id, 'department_id' => test()->cb->id])->create();
+
+        loadsPage($otro)->assertDontSee('Sara Sinplaza');
     });
 });

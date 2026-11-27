@@ -93,6 +93,24 @@ it('PL-03: con plaza administrativa la ficha dice «Plaza administrativa: 36 h �
         ->assertDontSee('oficio');
 });
 
+it('PL-04: sin plaza docente la ficha dice que sus horas son de honorarios, sin banda; con plaza, su banda (tarea 1.83)', function () {
+    TeacherPosition::query()->where('teacher_id', $this->teacher->id)->delete();
+    loadTabNexusGroup();
+
+    Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertSeeHtml('data-testid="load-band-next"')
+        ->assertSee('Sin plaza docente · sus horas son de honorarios')
+        ->assertSee('4 h extra')
+        ->assertDontSee('(0 a 2)')
+        ->assertDontSee('Dentro de su banda');
+
+    TeacherPosition::factory()->for($this->teacher)->tiempoCompleto()->create();
+
+    Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertSee('Frente a grupo: 22 h (20 a 24)')
+        ->assertDontSee('Sin plaza docente');
+});
+
 it('quien no puede ver la ficha no ve la pestaña Carga', function () {
     $otro = Department::factory()->create(['code' => 'CB']);
     $jefeOtro = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $otro->id])->create();

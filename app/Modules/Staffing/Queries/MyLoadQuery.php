@@ -291,7 +291,7 @@ final class MyLoadQuery
      * (PL-03: con plaza administrativa no hay banda, solo el tope duro de 42 h, HC-22; HC-08, que desde la tarea 1.50 se mide contra las horas frente a grupo: el límite es el tope de su banda o lo que
      * autorizó su casilla, SEL-12). `over_band` y `accepted` dicen si pasa su banda y si su casilla lo cubre.
      *
-     * @return array{extra: int, extra_state: string, extra_label: ?string, base: int, teaching: int, band_from: int, band_to: int, band_limit: int, honorarios_cap: ?int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, administrative: ?int, administrative_cap: ?int, over_band: bool, accepted: bool, sources: list<array{source: string, hours: int}>}
+     * @return array{no_plaza: bool, extra: int, extra_state: string, extra_label: ?string, base: int, teaching: int, band_from: int, band_to: int, band_limit: int, honorarios_cap: ?int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, administrative: ?int, administrative_cap: ?int, over_band: bool, accepted: bool, sources: list<array{source: string, hours: int}>}
      */
     private function hours(Teacher $teacher, Term $term, ScheduleState $state, int $assigned): array
     {
@@ -314,6 +314,7 @@ final class MyLoadQuery
             : ExtraHoursStatus::none();
 
         return [
+            'no_plaza' => $administrative === null && ($limit['no_plaza'] ?? false),
             'extra' => $extra,
             'extra_state' => $extraStatus->state->value,
             'extra_label' => $extraStatus->hasExtra() ? $extraStatus->label() : null,
