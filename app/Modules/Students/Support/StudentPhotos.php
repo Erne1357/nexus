@@ -8,6 +8,7 @@ use App\Modules\Core\Support\PhotoNormalizer;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
+use League\Flysystem\FilesystemException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -94,34 +95,15 @@ final class StudentPhotos
 
         $path = "{$folder}/{$name}.jpg";
         $temporary = "{$folder}/{$name}-nuevo.tmp";
-
-        // Primero la foto nueva con un nombre provisional: si el disco no deja escribir, la vigente ni se toca.
-        if (! $this->disk()->put($temporary, $photos['normal'])) {
-            $this->disk()->delete($temporary);
-
-            throw new PhotoNotSaved($temporary);
-        }
-
-        $stamp = now();
         $moved = [];
-        foreach ($this->existing($folder, $name) as $current) {
-            $extension = pathinfo($current, PATHINFO_EXTENSION);
-            while ($this->disk()->exists($archived = self::ARCHIVE."/{$folder}/{$name}-{$stamp->format('YmdHis')}.{$extension}")) {
-                $stamp = $stamp->addSecond();
-            }
 
-            if (! $this->disk()->move($current, $archived)) {
-                $this->restore($moved, $temporary);
-
-                throw new PhotoNotSaved($archived);
-            }
-            $moved[$archived] = $current;
-        }
-
-        if (! $this->disk()->move($temporary, $path)) {
+        try {
+            $this->write($photos['normal'], $folder, $name, $path, $temporary, $moved);
+        } catch (FilesystemException $e) {
+            // Crear la carpeta, escribir o mover puede lanzar aunque el disco tenga `throw => false`.
             $this->restore($moved, $temporary);
 
-            throw new PhotoNotSaved($path);
+            throw new PhotoNotSaved($e->getMessage(), $e);
         }
 
         return $path;
@@ -202,17 +184,58 @@ final class StudentPhotos
     }
 
     /**
+     * @param  array<string, string>  $moved
+     *
+     * @throws PhotoNotSaved
+     * @throws FilesystemException
+     */
+    private function write(string $bytes, string $folder, string $name, string $path, string $temporary, array &$moved): void
+    {
+        // Primero la foto nueva con un nombre provisional: si el disco no deja escribir, la vigente ni se toca.
+        if (! $this->disk()->put($temporary, $bytes)) {
+            $this->disk()->delete($temporary);
+
+            throw new PhotoNotSaved($temporary);
+        }
+
+        $stamp = now();
+        foreach ($this->existing($folder, $name) as $current) {
+            $extension = pathinfo($current, PATHINFO_EXTENSION);
+            while ($this->disk()->exists($archived = self::ARCHIVE."/{$folder}/{$name}-{$stamp->format('YmdHis')}.{$extension}")) {
+                $stamp = $stamp->addSecond();
+            }
+
+            if (! $this->disk()->move($current, $archived)) {
+                $this->restore($moved, $temporary);
+
+                throw new PhotoNotSaved($archived);
+            }
+            $moved[$archived] = $current;
+        }
+
+        if (! $this->disk()->move($temporary, $path)) {
+            $this->restore($moved, $temporary);
+
+            throw new PhotoNotSaved($path);
+        }
+    }
+
+    /**
      * Deshace un guardado a medias: devuelve las fotos archivadas a su lugar y borra la provisional.
      *
      * @param  array<string, string>  $moved  archivada => original
      */
     private function restore(array $moved, string $temporary): void
     {
-        foreach (array_reverse($moved, true) as $archived => $original) {
-            $this->disk()->move($archived, $original);
-        }
+        try {
+            foreach (array_reverse($moved, true) as $archived => $original) {
+                $this->disk()->move($archived, $original);
+            }
 
-        $this->disk()->delete($temporary);
+            $this->disk()->delete($temporary);
+        } catch (FilesystemException) {
+            // El disco ya falló: se deja lo que se pudo devolver.
+        }
     }
 
     /**

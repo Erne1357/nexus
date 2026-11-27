@@ -57,6 +57,20 @@ it('CO-03: una foto que no es imagen da un error junto al campo', function () {
     expect($this->ana->fresh()->photo_path)->toBeNull();
 });
 
+it('CO-03: si el disco lanza al crear la carpeta, la pantalla avisa en vez de dar 500 y no deja archivos', function () {
+    throwingDisk('staff_photos', ['put']);
+
+    Livewire::actingAs($this->head)->test('communication::pages.staff-photos')
+        ->call('openPhoto', $this->ana->id)
+        ->set('photo', UploadedFile::fake()->image('ana.jpg', 700, 900))
+        ->call('savePhoto')
+        ->assertHasErrors(['photo' => PhotoNotSaved::MESSAGE])
+        ->assertSee(PhotoNotSaved::MESSAGE);
+
+    expect($this->ana->fresh()->photo_path)->toBeNull()
+        ->and(Storage::disk('staff_photos')->allFiles())->toBe([]);
+});
+
 it('CO-03: si el disco no deja escribir, la pantalla avisa y no guarda ni registra nada', function () {
     failingDisk('staff_photos', ['put']);
 

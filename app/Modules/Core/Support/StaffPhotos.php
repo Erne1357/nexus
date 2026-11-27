@@ -7,6 +7,7 @@ use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Models\User;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
+use League\Flysystem\FilesystemException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -45,12 +46,21 @@ final class StaffPhotos
             "{$base}-original.{$extension}" => (string) file_get_contents($sourcePath),
         ];
 
-        foreach ($files as $target => $bytes) {
-            if (! $this->disk()->put($target, $bytes)) {
-                $this->disk()->delete(array_keys($files));
-
-                throw new PhotoNotSaved($target);
+        try {
+            foreach ($files as $target => $bytes) {
+                if (! $this->disk()->put($target, $bytes)) {
+                    throw new PhotoNotSaved($target);
+                }
             }
+        } catch (FilesystemException $e) {
+            // Crear la carpeta, escribir o mover puede lanzar aunque el disco tenga `throw => false`.
+            $this->discard(array_keys($files));
+
+            throw new PhotoNotSaved($e->getMessage(), $e);
+        } catch (PhotoNotSaved $e) {
+            $this->discard(array_keys($files));
+
+            throw $e;
         }
 
         return $path;
@@ -103,6 +113,18 @@ final class StaffPhotos
     private function thumbPath(User $user): ?string
     {
         return $user->photo_path === null ? null : substr($user->photo_path, 0, -4).'-mini.jpg';
+    }
+
+    /**
+     * @param  list<string>  $paths
+     */
+    private function discard(array $paths): void
+    {
+        try {
+            $this->disk()->delete($paths);
+        } catch (FilesystemException) {
+            // El disco ya falló: no hay nada más que limpiar.
+        }
     }
 
     private function disk(): Filesystem

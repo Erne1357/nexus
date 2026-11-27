@@ -257,6 +257,16 @@ it('CO-06: si el disco no deja escribir, no hay bitácora ni evento, la foto vig
     'archivar falla' => [['move']],
 ]);
 
+it('CO-06: si el disco lanza al escribir o archivar, es un error de validación y la foto vigente sigue', function (string $method) {
+    Storage::disk('student_photos')->put('2021/21111182.jpg', 'foto-vieja');
+    throwingDisk('student_photos', [$method]);
+
+    expect(fn () => app(SetStudentPhoto::class)->handle($this->student, studentImage(), $this->by))
+        ->toThrow(ValidationException::class, PhotoNotSaved::MESSAGE);
+
+    expect(Storage::disk('student_photos')->allFiles())->toBe(['2021/21111182.jpg']);
+})->with(['put', 'move']);
+
 it('CO-06: en un lote, una foto que el disco no deja guardar es «no guardada» y no se aplica', function () {
     Storage::disk('student_photos')->put('2021/21111182.jpg', 'foto-vieja');
     failingDisk('student_photos', ['put']);

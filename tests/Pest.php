@@ -40,6 +40,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use League\Flysystem\UnableToCreateDirectory;
 use Livewire\Features\SupportTesting\Testable;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Fixtures\Authorization\FakePermission;
@@ -556,6 +557,23 @@ function failingDisk(string $name, array $methods): void
 
     foreach ($methods as $method) {
         $disk->shouldReceive($method)->andReturn(false);
+    }
+
+    Storage::set($name, $disk);
+}
+
+/**
+ * Un disco que lanza `League\Flysystem\UnableToCreateDirectory` en los métodos dados (el montaje roto de producción,
+ * aunque el disco tenga `throw => false`).
+ *
+ * @param  list<string>  $methods
+ */
+function throwingDisk(string $name, array $methods): void
+{
+    $disk = Mockery::mock(Storage::disk($name))->makePartial();
+
+    foreach ($methods as $method) {
+        $disk->shouldReceive($method)->andThrow(UnableToCreateDirectory::atLocation('fotos-personal/x'));
     }
 
     Storage::set($name, $disk);
