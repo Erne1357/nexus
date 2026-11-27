@@ -164,7 +164,7 @@ final class TeacherOfferQuery
             'campus_name' => $group->campus->name,
             'schedule' => SessionLabels::schedule($group->sessions),
             'rooms' => $group->sessions->map(fn (GroupSession $session): ?string => $session->room?->code)->filter()->unique()->values()->all(),
-            'teacher_name' => $group->teacher?->name,
+            'taken' => $group->teacher_id !== null,
             'is_mine' => $group->teacher_id === $teacher->id,
             'published' => null,
         ];
@@ -191,7 +191,7 @@ final class TeacherOfferQuery
             'campus_name' => $campus?->name ?? ($group->campus['name'] ?? ''),
             'schedule' => SessionLabels::published($group->sessions),
             'rooms' => array_values(array_unique(array_filter(array_map(fn (PublishedSession $session): ?string => $session->room['code'] ?? null, $group->sessions)))),
-            'teacher_name' => $group->teacher['name'] ?? null,
+            'taken' => ($group->teacher['id'] ?? null) !== null,
             'is_mine' => ($group->teacher['id'] ?? null) === $teacher->id,
             'published' => ['version' => $group->version, 'at' => $group->publishedAt],
         ];
