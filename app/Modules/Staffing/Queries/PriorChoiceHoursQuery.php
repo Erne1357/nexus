@@ -40,18 +40,21 @@ final class PriorChoiceHoursQuery
 
         $hours = $this->groups->hoursByTeacher($selection, $entries->pluck('teacher_id')->all());
         $targets = $this->targets->forTerm($this->termWithDates($selection, $term), $entries->pluck('base_hours', 'teacher_id')->map(fn ($csv): int => (int) $csv)->all());
+        $administrative = $this->targets->administrativeForTerm($this->termWithDates($selection, $term), $entries->pluck('teacher_id')->all());
         $result = [];
 
         foreach ($entries as $entry) {
             $taken = (int) ($hours[$entry->teacher_id] ?? 0);
             $base = (int) ($targets[$entry->teacher_id] ?? 0);
-            $band = LoadBand::classify($taken, $base);
+            // PL-03: con plaza administrativa no hay banda ni confirmación por horas de más.
+            $isAdministrative = isset($administrative[$entry->teacher_id]);
+            $band = LoadBand::classify($taken, $base, $isAdministrative);
 
             $result[$entry->getKey()] = [
                 'hours' => $taken,
                 'base' => $base,
                 'band' => $band,
-                'over_by' => max(0, $taken - ($base + LoadBand::MARGIN)),
+                'over_by' => $isAdministrative ? 0 : max(0, $taken - ($base + LoadBand::MARGIN)),
                 'needs_confirmation' => $entry->prior_choice_confirm_required_at !== null && $entry->out_of_band_acknowledged_at === null,
                 'confirmed_at' => $entry->out_of_band_acknowledged_at,
             ];

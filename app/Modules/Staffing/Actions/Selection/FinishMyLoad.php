@@ -29,6 +29,9 @@ use Illuminate\Validation\ValidationException;
  * casilla de responsabilidad: con horas de más termina; con menos pasa a la ronda extra (`pending_extra`), y en la
  * ronda extra termina, porque no hay otra. Terminar acaba su turno: ya no toma ni suelta.
  *
+ * PL-03: quien tiene plaza administrativa (apoyo y asistencia) no lleva banda: termina sin la casilla, con 0 h o con las que
+ * lleve, y no pasa a la ronda extra por «bajo».
+ *
  * SEL-12: cada cierre que termina (`done`) le autoriza en el periodo (GrantHourAllowance) todo lo que HC-08 le cuenta en
  * ese momento: sus grupos de cualquier carga, modalidad o campus más sus horas externas (ScheduleValidator::
  * teacherTermHours). Así lo que cerró, dentro de la banda o con la casilla, queda «aceptado por el docente» en HC-08 aunque su base de
@@ -104,7 +107,9 @@ final class FinishMyLoad
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->sum(DB::raw(SubjectTeacherHours::SQL));
         $base = $this->targets->forTerm($term, [$teacher->getKey() => (int) $entry->base_hours])[$teacher->getKey()] ?? 0;
-        $band = LoadBand::classify($hours, $base);
+        // PL-03: con plaza administrativa no hay banda: termina sin la casilla y nunca va a la ronda extra por «bajo».
+        $administrative = $this->targets->administrativeForTerm($term, [$teacher->getKey()]) !== [];
+        $band = LoadBand::classify($hours, $base, $administrative);
 
         if ($band !== 'within' && ! $acknowledged) {
             throw ValidationException::withMessages(['acknowledged' => self::OUT_OF_BAND]);
@@ -129,7 +134,7 @@ final class FinishMyLoad
             ->performedOn($entry)
             ->causedBy($actor)
             ->event($confirmation ? 'selection_load_confirmed' : 'selection_load_finished')
-            ->withProperties(['selection_id' => $selection->getKey(), 'teacher_id' => $teacher->getKey(), 'hours' => $hours, 'base_hours' => $base, 'band' => $band, 'acknowledged' => $acknowledged, 'status' => $status->value])
+            ->withProperties(['selection_id' => $selection->getKey(), 'teacher_id' => $teacher->getKey(), 'hours' => $hours, 'base_hours' => $base, 'administrative' => $administrative, 'band' => $band, 'acknowledged' => $acknowledged, 'status' => $status->value])
             ->log($confirmation
                 ? "{$teacher->name} confirmó su carga con {$hours} h (frente a grupo: {$base} h) después de la selección"
                 : "{$teacher->name} terminó su carga con {$hours} h (frente a grupo: {$base} h)");

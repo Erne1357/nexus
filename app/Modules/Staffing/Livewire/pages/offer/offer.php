@@ -389,7 +389,7 @@ new #[Title('Oferta del departamento')] class extends Component
             'shown' => array_sum(array_map(fn (array $strip): int => count($strip['visible']), $strips)),
             'assigns' => collect($strips)->flatMap(fn (array $strip): array => $strip['visible'])->contains('can_assign', true),
             'bar' => $this->turnBar($selection, $entry !== null, $turn, $data, $now),
-            'band' => $entry === null ? null : LoadBand::classify($data['my_hours'], $data['base_hours']),
+            'band' => $entry === null ? null : LoadBand::classify($data['my_hours'], $data['base_hours'], $data['administrative_hours'] !== null),
             'prior' => $entry?->isPriorChoice() ? ($priorHours->forSelection($selection, collect([$entry]))[$entry->getKey()] ?? null) : null,
             'order' => $this->showOrder ? $order->forSelection($selection, $now) : [],
         ];

@@ -11,6 +11,8 @@
 @php
     $hours = $data['my_hours'];
     $base = $data['base_hours'];
+    $administrative = $data['administrative_hours'];
+    $cap = $data['administrative_cap'];
     $low = $base - LoadBand::MARGIN;
     $high = $base + LoadBand::MARGIN;
     $out = $band !== null && $band !== 'within';
@@ -19,7 +21,11 @@
 @endphp
 <x-modal wire:model="showFinish" :title="$confirming ? '¿Confirmar tu carga?' : '¿Terminar tu carga?'" box-class="max-w-xl" data-testid="selection-finish-modal">
     <div class="space-y-3">
-        <p>Llevas <b class="font-mono">{{ $hours }}</b> h en {{ count($groups) }} {{ count($groups) === 1 ? 'grupo' : 'grupos' }} · frente a grupo: <b class="font-mono">{{ $base }}</b> h ({{ $low }} a {{ $high }}).</p>
+        @if ($administrative !== null)
+            <p>Llevas <b class="font-mono">{{ $hours }}</b> h en {{ count($groups) }} {{ count($groups) === 1 ? 'grupo' : 'grupos' }} · plaza administrativa: <b class="font-mono">{{ $administrative }}</b> h ({{ $hours + $administrative }} de {{ $cap }} h).</p>
+        @else
+            <p>Llevas <b class="font-mono">{{ $hours }}</b> h en {{ count($groups) }} {{ count($groups) === 1 ? 'grupo' : 'grupos' }} · frente a grupo: <b class="font-mono">{{ $base }}</b> h ({{ $low }} a {{ $high }}).</p>
+        @endif
 
         @if ($groups !== [])
             <ul class="divide-y divide-base-300 overflow-hidden rounded-field border border-base-300">
@@ -46,7 +52,11 @@
                 <x-icon name="o-exclamation-triangle" class="mt-0.5 h-5 w-5" aria-hidden="true" />
                 <div>
                     <p class="font-semibold">{{ $band === 'under' ? 'Te faltan '.($low - $hours).' h para tu margen' : 'Pasas tu margen por '.($hours - $high).' h' }}</p>
-                    <p>Es responsabilidad del docente cubrir sus horas frente a grupo de acuerdo con su plaza.</p>
+                    @if ($band === 'over')
+                        <p data-testid="selection-finish-extra">Te pasas de tus horas de nombramiento: {{ $hours - $high }} h extra quedan a consideración de tu jefe de departamento como honorarios.</p>
+                    @else
+                        <p>Es responsabilidad del docente cubrir sus horas frente a grupo de acuerdo con su plaza.</p>
+                    @endif
                 </div>
             </div>
             <x-checkbox wire:model.live="acknowledged" label="Entiendo que es mi responsabilidad cubrir mis horas frente a grupo de acuerdo con mi plaza." class="checkbox-primary" data-testid="selection-acknowledge" />
@@ -68,7 +78,7 @@
             <div role="note" class="alert alert-success alert-soft items-start text-sm" data-testid="selection-finish-within">
                 <x-icon name="o-check-circle" class="mt-0.5 h-5 w-5" aria-hidden="true" />
                 <div>
-                    <p class="font-semibold">Estás dentro de tu margen</p>
+                    <p class="font-semibold">{{ $administrative !== null ? 'Tu plaza administrativa no lleva margen' : 'Estás dentro de tu margen' }}</p>
                     <p>{{ $confirming ? 'Al confirmar' : 'Al terminar' }}, tus grupos quedan a tu nombre y ya no los cambias en la selección.</p>
                 </div>
             </div>

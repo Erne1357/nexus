@@ -115,7 +115,7 @@
                 <span class="text-[13px] text-neutral">{{ $bar['mine_in'] ? $bar['mine_in'].' · ' : '' }}lugar {{ $bar['position'] }} de {{ $bar['total'] }}</span>
             </div>
         @endif
-        @include('staffing::offer.selection.meter', ['hours' => $data['my_hours'], 'base' => $data['base_hours'], 'compact' => $kind !== 'mine'])
+        @include('staffing::offer.selection.meter', ['hours' => $data['my_hours'], 'base' => $data['base_hours'], 'administrative' => $data['administrative_hours'], 'cap' => $data['administrative_cap'], 'compact' => $kind !== 'mine'])
     @endif
 
     <div class="ms-auto flex items-center gap-2 max-md:ms-0 max-md:w-full">

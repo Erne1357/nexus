@@ -27,7 +27,7 @@
                     <span class="w-6 flex-none text-end font-mono text-neutral">{{ $row['position'] }}</span>
                     <span class="min-w-0 flex-1">
                         <b class="block">{{ $row['name'] }}</b>
-                        <span class="block text-[12.5px] text-neutral">{{ $row['tier_label'] ?? 'Sin datos' }} · lleva <span class="font-mono">{{ $row['hours'] }}</span> de <span class="font-mono">{{ $row['base_hours'] }}</span> h frente a grupo</span>
+                        <span class="block text-[12.5px] text-neutral">{{ $row['tier_label'] ?? 'Sin datos' }} · lleva <span class="font-mono">{{ $row['hours'] }}</span>@if ($row['administrative_hours'] !== null) h · plaza administrativa: <span class="font-mono">{{ $row['administrative_hours'] }}</span> h @else de <span class="font-mono">{{ $row['base_hours'] }}</span> h frente a grupo @endif</span>
                         @if ($row['clash_with'] !== null)
                             <span class="mt-0.5 flex items-center gap-1 text-[12.5px] font-semibold text-error"><x-icon name="o-x-circle" class="h-3.5 w-3.5" aria-hidden="true" />Choca con su {{ $row['clash_with'] }}</span>
                         @endif

@@ -136,7 +136,7 @@ it('CF-S7: el catálogo real de los módulos se arma y cada valor por omisión e
 it('CF-S7: Core (el interruptor de la carga, MN-05, y quién inicia sesión, AC-21), Asignación docente, Horarios, Proyección de demanda, Motor de horarios, Alumnos (plazos de las solicitudes de credencial, CO-07) y Acuerdos entre departamentos (préstamos de salón, 1.53) declaran sus parámetros', function () {
     expect(array_map(fn (SettingDefinition $d): string => $d->key, app(SettingRegistry::class)->all()))->toEqualCanonicalizing([
         'core.academic_load_visible', 'core.academic_load_heads_by_stage', 'core.role_access',
-        'staffing.weights', 'staffing.history_terms', 'staffing.evaluation_terms', 'staffing.extra_hours_tolerance',
+        'staffing.weights', 'staffing.history_terms', 'staffing.evaluation_terms', 'staffing.extra_hours_tolerance', 'staffing.administrative_max_hours', 'staffing.max_hours_with_honorarios',
         'staffing.honorarios_max_hours', 'staffing.min_campus_travel_minutes', 'scheduling.weekly_hours_tolerance',
         'demand.history_terms', 'demand.target_group_size', 'demand.min_group_size', 'demand.highlight_threshold', 'solver.time_limits', 'solver.soft_weights',
         'solver.default_engine', 'students.credential_reposition_days', 'students.credential_photo_days', 'academic_load.room_loans_enabled',

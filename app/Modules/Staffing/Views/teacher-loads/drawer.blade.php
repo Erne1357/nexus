@@ -37,14 +37,16 @@
 
     <div class="flex-1 space-y-6 px-5 py-4">
         <dl class="grid grid-cols-2 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 min-[480px]:grid-cols-4">
-            @foreach ([[$row->teachingHours === null ? 'Base' : 'Frente a grupo', $row->teachingHours ?? $row->baseHours, ''], ['Otra modalidad', $row->externalHours, ''], ['Asignadas', $row->assignedHours, ''], ['Restan', $row->remainingHours, $row->remainingHours < 0 ? 'text-warning' : '']] as [$label, $value, $tone])
+            @foreach ([[$row->isAdministrative() ? 'Plaza administrativa' : ($row->teachingHours === null ? 'Base' : 'Frente a grupo'), $row->isAdministrative() ? $row->administrativeHours : ($row->teachingHours ?? $row->baseHours), ''], ['Otra modalidad', $row->externalHours, ''], ['Asignadas', $row->assignedHours, ''], ['Restan', $row->remainingHours, $row->remainingHours < 0 ? 'text-warning' : '']] as [$label, $value, $tone])
                 <div class="min-w-0 bg-base-100 p-3">
                     <dt class="truncate text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $label }}</dt>
                     <dd class="mt-1 font-mono text-2xl font-semibold leading-none tabular-nums {{ $tone }}" data-testid="drawer-{{ Str::slug($label) }}">{{ $value }}</dd>
                 </div>
             @endforeach
         </dl>
-        @if ($row->bandLabel() !== null)
+        @if ($row->administrativeSummary() !== null)
+            <p class="-mt-3 text-sm text-neutral" data-testid="drawer-band"><span class="font-mono text-base-content">{{ $row->administrativeSummary() }}</span></p>
+        @elseif ($row->bandLabel() !== null)
             <p class="-mt-3 text-sm text-neutral" data-testid="drawer-band">Frente a grupo: <span class="font-mono text-base-content">{{ $row->bandLabel() }}</span> · base de su plaza <span class="font-mono text-base-content">{{ $row->baseHours }} h</span></p>
         @endif
         @if ($row->hourNotice() !== null)
@@ -52,6 +54,29 @@
                 <x-icon :name="$status === 'over' ? 'o-document-text' : 'o-check-circle'" class="h-5 w-5 shrink-0" aria-hidden="true" />
                 <span>{{ $row->hourNotice() }}</span>
             </div>
+        @endif
+
+        @if ($row->extraLabel() !== null)
+            {{-- PL-04 (tarea 1.81): el estado de sus horas extra y, para quien tiene el permiso (jefe de su departamento), decidirlas. --}}
+            @php
+                $extraState = $row->extraHours->state;
+            @endphp
+            <section class="space-y-3 rounded-box border border-base-300 p-4" aria-labelledby="extra-title" data-testid="drawer-extra">
+                <h3 id="extra-title" class="font-semibold">Horas extra · honorarios</h3>
+                <p class="flex items-start gap-2 text-sm" data-testid="drawer-extra-label">
+                    <x-icon :name="$extraState->value === 'authorized' ? 'o-check-circle' : 'o-document-text'" :class="'mt-0.5 h-4 w-4 shrink-0 '.match ($extraState->value) { 'pending' => 'text-warning', 'authorized' => 'text-success', default => 'text-neutral' }" aria-hidden="true" />
+                    <span>{{ $row->extraLabel() }}</span>
+                </p>
+                @if ($row->extraHours->isDecidable() && $canDecide)
+                    <div class="flex flex-wrap gap-2">
+                        <x-button label="Autorizar honorarios" icon="o-check" class="btn-primary btn-sm max-md:min-h-11" wire:click="decideExtra('authorized')" spinner="decideExtra" data-testid="extra-authorize" />
+                        <x-button label="No autorizar" icon="o-x-mark" class="btn-outline btn-sm max-md:min-h-11" wire:click="decideExtra('unauthorized')" spinner="decideExtra" data-testid="extra-unauthorize" />
+                    </div>
+                    <p class="text-xs text-neutral">Sin autorización, el docente firma el oficio de conformidad y no se le pagan esas horas.</p>
+                @elseif ($row->extraHours->isDecidable())
+                    <p class="text-xs text-neutral">Las autoriza el jefe del departamento al que está adscrito el docente.</p>
+                @endif
+            </section>
         @endif
 
         @forelse ($byCampus as $code => $groups)

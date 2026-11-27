@@ -9,6 +9,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
@@ -77,6 +78,19 @@ it('la ficha muestra la carga del siguiente semestre cuando tiene grupos en Nexu
         ->assertSee('De la selección')
         ->assertSeeHtml('data-testid="load-hours-next"')
         ->assertDontSee('Todavía no tiene grupos');
+});
+
+it('PL-03: con plaza administrativa la ficha dice «Plaza administrativa: 36 h · clases 4 h · 40 de 42 h», sin banda ni «Pasa su banda» (confirmado el 27 de noviembre de 2026)', function () {
+    TeacherPosition::query()->where('teacher_id', $this->teacher->id)->delete();
+    TeacherPosition::factory()->for($this->teacher)->create(['kind' => PositionKind::Apoyo, 'base_hours' => 36, 'category' => 'IA08']);
+    loadTabSiiGroup();
+
+    Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertSeeHtml('data-testid="load-band-current"')
+        ->assertSee('Plaza administrativa: 36 h · clases 4 h · 40 de 42 h')
+        ->assertDontSee('Frente a grupo')
+        ->assertDontSee('Pasa su banda')
+        ->assertDontSee('oficio');
 });
 
 it('quien no puede ver la ficha no ve la pestaña Carga', function () {
@@ -166,7 +180,7 @@ it('PL-01 y HC-08: la categoría de la plaza cambia las horas frente a grupo de 
 
     Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
         ->assertSee('Frente a grupo: 24 h (22 a 26)')
-        ->assertSee('Pasa su banda')
+        ->assertSee('Con horas extra')
         ->assertSeeHtml('data-testid="load-notice-next"')
         ->assertSee('Pasa su banda de horas frente a grupo (24 h, de 22 a 26): lleva 30 h.');
 });

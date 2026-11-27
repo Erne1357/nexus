@@ -13,16 +13,16 @@ use App\Modules\Faculty\Enums\QualificationLevel;
 final readonly class RankingRow
 {
     /** Las marcas que bajan al docente al bloque final del ranking, con su nombre en pantalla. */
-    public const array MARKS = ['choque' => 'Choque', 'no_disponible' => 'No disponible'];
+    public const array MARKS = ['choque' => 'Choque', 'no_disponible' => 'No disponible', 'sin_cupo' => 'No le caben'];
 
     /**
      * Los avisos que se muestran discretos junto a la plaza, con su nombre en pantalla: con el grupo pasa su banda de
      * horas frente a grupo (HC-08; además lo pone en el bloque «Pasan su banda», tarea 1.50) y traslado justo (SC-09).
      */
-    public const array NOTICES = ['sin_horas' => 'pasa su banda', 'traslado_justo' => 'traslado justo'];
+    public const array NOTICES = ['sin_horas' => 'con horas extra', 'traslado_justo' => 'traslado justo'];
 
     /**
-     * @param  list<string>  $flags  `sin_horas`, `banda_aceptada`, `choque`, `no_disponible`, `sin_evaluacion`, `traslado_justo`
+     * @param  list<string>  $flags  `sin_horas`, `banda_aceptada`, `choque`, `no_disponible`, `sin_cupo`, `sin_evaluacion`, `traslado_justo`
      */
     public function __construct(
         public int $rank,

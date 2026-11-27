@@ -9,14 +9,20 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Faculty\Enums\PositionKind;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Staffing\Actions\DecideExtraHours;
+use App\Modules\Staffing\Enums\ExtraHoursDecision;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Jobs\RefreshTeacherLoads;
+use App\Modules\Staffing\Models\TeacherExtraHoursDecision;
 use App\Modules\Staffing\Models\TeacherTermLoad;
 use App\Modules\Staffing\Queries\TeacherLoadRow;
 use App\Modules\Staffing\Queries\TeacherLoadsBoard;
 use App\Modules\Staffing\Queries\TeacherLoadsBoardQuery;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -44,7 +50,7 @@ new #[Title('Carga por docente')] class extends Component
     /** Las secciones del tablero, en orden: estado, título, tono y icono. */
     private const array SECTIONS = [
         // HC-08 es aviso desde la tarea 1.50 (advertencia pendiente, no choque): la sección va en warning.
-        TeacherLoadRow::OVER => ['Pasan su banda · oficio pendiente', 'warning', 'o-document-text'],
+        TeacherLoadRow::OVER => ['Con horas extra · honorarios por autorizar', 'warning', 'o-document-text'],
         TeacherLoadRow::NONE => ['Sin carga', 'warning', 'o-clock'],
         TeacherLoadRow::PART => ['Con horas libres', 'info', 'o-arrow-trending-down'],
         TeacherLoadRow::FULL => ['Carga completa', 'success', 'o-check-circle'],
@@ -163,6 +169,32 @@ new #[Title('Carga por docente')] class extends Component
     }
 
     /**
+     * PL-04 (tarea 1.81): el jefe autoriza («authorized») o no («unauthorized») las horas extra del docente del drawer. La policy
+     * se vuelve a preguntar con los departamentos del docente (otro jefe, un docente u otro rol no pueden) y la Action
+     * rechaza al docente sin horas extra o con jefatura.
+     */
+    public function decideExtra(string $decision, DecideExtraHours $action): void
+    {
+        $kind = ExtraHoursDecision::tryFrom($decision);
+        abort_if($kind === null || $this->teacherId === null || $this->termId === null, 403);
+
+        [$term] = $this->authorizeView();
+        $teacher = KeyLookup::findOrFail(Teacher::query(), $this->teacherId);
+
+        $this->authorizeDecide($teacher);
+
+        try {
+            $action->handle($teacher, $term, $kind, Auth::user());
+        } catch (ValidationException $exception) {
+            $this->error('No se pudo registrar', collect($exception->errors())->flatten()->first());
+
+            return;
+        }
+
+        $this->success($kind === ExtraHoursDecision::Authorized ? 'Honorarios autorizados' : 'Horas extra no autorizadas', $kind === ExtraHoursDecision::Authorized ? 'Las horas extra de '.$teacher->name.' quedan como honorarios.' : $teacher->name.' tendrá que firmar el oficio de conformidad (pendiente).');
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function with(TeacherLoadsBoardQuery $query): array
@@ -199,6 +231,7 @@ new #[Title('Carga por docente')] class extends Component
         }
 
         $totals = $board->totals();
+        $selected = $this->teacherId === null ? null : collect($board->rows)->first(fn (TeacherLoadRow $row): bool => $row->teacherId === $this->teacherId);
         // La carga del departamento en la modalidad de la página (M1: una por departamento y modalidad).
         $loads = AcademicLoad::query()->where('term_id', $this->termId)->where('department_id', $this->departmentId)->where('modality_id', $this->modalityId)->get(['status']);
 
@@ -215,7 +248,8 @@ new #[Title('Carga por docente')] class extends Component
             'stateCounts' => $stateCounts,
             'campusTones' => array_flip(array_keys($totals['byCampus'])),
             'plazaOptions' => array_map(fn (PositionKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], PositionKind::cases()),
-            'selected' => $this->teacherId === null ? null : collect($board->rows)->first(fn (TeacherLoadRow $row): bool => $row->teacherId === $this->teacherId),
+            'selected' => $selected,
+            'canDecide' => $selected !== null && $this->mayDecide(KeyLookup::findOrFail(Teacher::query(), $selected->teacherId)),
         ];
     }
 
@@ -289,5 +323,20 @@ new #[Title('Carga por docente')] class extends Component
         Gate::authorize('viewAny', [TeacherTermLoad::class, $department, $modality]);
 
         return [KeyLookup::findOrFail(Term::query(), $this->termId), $department];
+    }
+
+    /**
+     * Si el usuario puede decidir las horas extra del docente (TeacherExtraHoursDecisionPolicy): para mostrar o no los botones.
+     */
+    private function mayDecide(Teacher $teacher): bool
+    {
+        $modality = $this->modalityId === null ? null : KeyLookup::find(Modality::query()->withTrashed(), $this->modalityId);
+
+        return $modality !== null && Gate::allows('decide', [TeacherExtraHoursDecision::class, $teacher, $modality]);
+    }
+
+    private function authorizeDecide(Teacher $teacher): void
+    {
+        abort_unless($this->mayDecide($teacher), 403);
     }
 };

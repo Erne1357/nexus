@@ -45,21 +45,31 @@
                     </p>
                 </div>
                 <div class="text-end" data-testid="load-hours-{{ $key }}">
-                    <span class="font-mono text-2xl font-semibold tabular-nums {{ $over ? 'text-warning' : 'text-success' }}">{{ $week['hours'] }}</span>
+                    <span class="font-mono text-2xl font-semibold tabular-nums {{ $over ? ($week['administrative'] !== null ? 'text-error' : 'text-warning') : 'text-success' }}">{{ $week['hours'] }}</span>
                     <span class="text-neutral">h</span>
                     <p class="text-sm text-neutral" data-testid="load-band-{{ $key }}">
-                        @if ($week['honorarios_cap'] !== null)
+                        @if ($week['administrative'] !== null)
+                            {{-- PL-03 y HC-22: con plaza administrativa no hay banda de ±2, sino el tope duro de 42 h. --}}
+                            {{ $week['administrative_summary'] }}
+                        @elseif ($week['honorarios_cap'] !== null)
                             Tope de honorarios: {{ $week['honorarios_cap'] }} h
                         @else
                             Frente a grupo: {{ $week['teaching'] }} h ({{ $week['band_from'] }} a {{ $week['band_to'] }})
                         @endif
                     </p>
-                    <p class="text-xs font-semibold {{ $over ? 'text-warning' : 'text-success' }}">
-                        <x-icon :name="$over ? 'o-exclamation-triangle' : 'o-check-circle'" class="inline w-3.5 h-3.5" />
-                        {{ $over ? 'Pasa su banda' : 'Dentro de su banda' }}
-                    </p>
+                    @if ($week['administrative'] === null)
+                        <p class="text-xs font-semibold {{ $over ? 'text-warning' : 'text-success' }}">
+                            <x-icon :name="$over ? 'o-exclamation-triangle' : 'o-check-circle'" class="inline w-3.5 h-3.5" />
+                            {{ $over ? 'Con horas extra' : 'Dentro de su banda' }}
+                        </p>
+                    @elseif ($over)
+                        <p class="text-xs font-semibold text-error">
+                            <x-icon name="o-exclamation-triangle" class="inline w-3.5 h-3.5" />
+                            Pasa el tope de su plaza
+                        </p>
+                    @endif
                     @if ($week['notice'])
-                        <p class="mt-1 max-w-sm text-xs text-warning" data-testid="load-notice-{{ $key }}">{{ $week['notice'] }}</p>
+                        <p class="mt-1 max-w-sm text-xs {{ $week['administrative'] !== null ? 'text-error' : 'text-warning' }}" data-testid="load-notice-{{ $key }}">{{ $week['notice'] }}</p>
                     @endif
                 </div>
             </header>

@@ -111,6 +111,7 @@ function dimensionTables(): array
         'staffing.ranking' => 'staffing_rankings',
         'staffing.teacher' => 'group_teacher_assignments',
         'staffing.teacher_load' => 'teacher_term_loads',
+        'staffing.honorarios' => 'teacher_extra_hours_decisions',
         'staffing.change_request' => 'change_requests',
         'staffing.selection' => 'staffing_selections',
         'solver.department_run' => 'solver_runs',

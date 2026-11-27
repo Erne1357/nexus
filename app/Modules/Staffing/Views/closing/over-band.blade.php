@@ -5,6 +5,6 @@
 --}}
 @if ($n > 0)
     <span class="mt-0.5 flex items-center gap-1 text-xs text-warning" data-testid="board-over-band-{{ $code }}">
-        <x-icon name="o-document-text" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span><span class="font-mono tabular-nums">{{ $n }}</span> {{ $n === 1 ? 'pasa su banda' : 'pasan su banda' }} · aviso, oficio pendiente</span>
+        <x-icon name="o-document-text" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span><span class="font-mono tabular-nums">{{ $n }}</span> con honorarios por autorizar · aviso</span>
     </span>
 @endif

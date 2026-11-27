@@ -32,7 +32,7 @@ use Illuminate\Validation\ValidationException;
  * En una transacción, en este orden: el candado consultivo de la selección (las elecciones de una selección van de una
  * en una, también las de quienes comparten turno), su turno, la carga en compartido y el grupo bloqueado (el orden de
  * LoadEditability, como AssignTeacher). El grupo es de una carga incluida, no está cancelado y no tiene docente: si ya
- * lo tiene, «Este grupo ya fue asignado.». HC-01 y HC-09 del validador son duros; HC-08 no veta (SEL-05: la banda de ±2 con la
+ * lo tiene, «Este grupo ya fue asignado.». HC-01, HC-09 y HC-22 (el tope de 42 h de la plaza administrativa) del validador son duros; HC-08 no veta (SEL-05: la banda de ±2 con la
  * casilla lo reemplaza al terminar). El salón debe ser elegible (SEL-01 a SEL-04, SelectionRoomOptionsQuery); sin
  * salón, solo si no hay ninguno elegible (supuesto por confirmar), y el jefe se lo asigna. Escribe con
  * RecordTeacherAssignment, con el motivo «Orden de selección, turno N», y pone el salón en todas las sesiones no
@@ -43,7 +43,7 @@ final class PickSelectionGroup
     use GuardsSelectionTurn;
 
     /** Las reglas del docente que vetan una elección. */
-    private const array HARD_RULES = ['HC-01', 'HC-09'];
+    private const array HARD_RULES = ['HC-01', 'HC-09', 'HC-22'];
 
     public function __construct(
         private readonly RecordTeacherAssignment $record,
@@ -114,7 +114,7 @@ final class PickSelectionGroup
     }
 
     /**
-     * HC-01 (cruce con lo suyo, en cualquier campus) y HC-09 (su disponibilidad).
+     * HC-01 (cruce con lo suyo, en cualquier campus), HC-09 (su disponibilidad) y HC-22 (el tope de su plaza administrativa).
      *
      * @throws ValidationException
      */

@@ -23,7 +23,7 @@ final readonly class RankingInput
         public bool $fromOtherDepartment,
     ) {}
 
-    public function toCandidate(bool $noHours, bool $clash, bool $unavailable, ?int $remainingHours, bool $tightTravel = false, bool $bandAccepted = false): RankingCandidate
+    public function toCandidate(bool $noHours, bool $clash, bool $unavailable, ?int $remainingHours, bool $tightTravel = false, bool $bandAccepted = false, bool $noRoom = false): RankingCandidate
     {
         return new RankingCandidate(
             $this->teacherId,
@@ -39,6 +39,7 @@ final readonly class RankingInput
             $this->previousRank,
             $tightTravel,
             $bandAccepted,
+            $noRoom,
         );
     }
 }

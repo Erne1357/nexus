@@ -344,7 +344,7 @@ describe('cerrar', function () {
             ->assertSeeHtml('data-testid="closing-hour-notices"')
             ->assertSee('1 docente pasa su banda de horas frente a grupo')
             ->assertSee('aviso, no impide cerrar')
-            ->assertSee('Ana Pérez pasa su banda de horas frente a grupo (1 h, de 0 a 3): lleva 7 h. Requiere oficio de conformidad del docente (pendiente).');
+            ->assertSee('Ana Pérez pasa su banda de horas frente a grupo (1 h, de 0 a 3): lleva 7 h. 4 h extra · honorarios por autorizar (jefe de depto).');
 
         expect(closingActionDisabled($page, 'close'))->toBeFalse();
 

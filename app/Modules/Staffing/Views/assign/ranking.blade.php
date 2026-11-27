@@ -44,7 +44,7 @@
                         <div role="row" class="flex flex-wrap items-center gap-x-2 gap-y-1 bg-warning/10 px-4 py-2" data-testid="over-band-tier">
                             <p role="cell" class="flex min-w-0 items-start gap-2 text-sm">
                                 <x-icon name="o-clock" class="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-                                <span><span class="font-mono font-semibold tabular-nums">{{ count($overBand) }}</span> {{ count($overBand) === 1 ? 'pasa su banda' : 'pasan su banda' }} de horas frente a grupo con este grupo <span class="text-neutral">· se pueden asignar; requiere oficio de conformidad del docente (pendiente)</span></span>
+                                <span><span class="font-mono font-semibold tabular-nums">{{ count($overBand) }}</span> {{ count($overBand) === 1 ? 'queda con horas extra' : 'quedan con horas extra' }} con este grupo <span class="text-neutral">· se pueden asignar; las horas extra quedan como honorarios por autorizar (jefe de depto)</span></span>
                             </p>
                         </div>
                         @foreach ($overBand as $candidate)

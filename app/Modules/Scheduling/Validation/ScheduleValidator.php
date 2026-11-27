@@ -10,6 +10,7 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\ScheduleStateQuery;
+use App\Modules\Scheduling\Rules\Constraints\AdministrativeHours;
 use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
 use App\Modules\Scheduling\Rules\Constraints\Constraint;
 use App\Modules\Scheduling\Rules\Constraints\LabRoom;
@@ -57,6 +58,7 @@ final class ScheduleValidator
         LabRoom::class,
         QuotasWithinCapacity::class,
         TeacherHours::class,
+        AdministrativeHours::class,
         TeacherAvailability::class,
         RoomLoan::class,
         RoomBlocked::class,
@@ -69,7 +71,7 @@ final class ScheduleValidator
      * Lo que checkTeacher() responde: choque (HC-01), horas (HC-08) y disponibilidad (HC-09) del docente, y el aviso de
      * traslado justo entre campus (SC-09).
      */
-    public const array TEACHER_RULES = ['HC-01', 'HC-08', 'HC-09', 'SC-09'];
+    public const array TEACHER_RULES = ['HC-01', 'HC-08', 'HC-09', 'HC-22', 'SC-09'];
 
     /** @var array<string, ScheduleState> */
     private array $states = [];
@@ -127,7 +129,7 @@ final class ScheduleValidator
      * externas (TeacherHourLimit); null si el docente está borrado. La usa la orden de selección para autorizar al
      * cerrar justo las horas que HC-08 le cuenta (SEL-12).
      *
-     * @return array{base_hours: int, teaching_hours: int, band_from: int, band_to: int, external_hours: int, assigned_hours: int, tolerance: int, honorarios_cap: ?int, band_limit: int, allowance_hours: ?int, limit: int, remaining_hours: int, over_band: bool, accepted: bool, hard: bool, groups: array<string, int>}|null
+     * @return array<string, mixed>|null
      */
     public function teacherTermHours(Teacher $teacher, Term $term): ?array
     {

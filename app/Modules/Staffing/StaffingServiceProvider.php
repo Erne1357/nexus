@@ -36,6 +36,7 @@ use App\Modules\Faculty\Events\TeachingHoursChanged;
 use App\Modules\Faculty\Queries\SelectionCsvHours;
 use App\Modules\Faculty\Queries\SelectionQueueMembership;
 use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
+use App\Modules\Faculty\Rules\TeachingHours;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupMovedToCampus;
@@ -265,6 +266,12 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             new SettingDefinition('staffing.honorarios_max_hours', ...$module, label: 'Tope de horas de un docente por honorarios',
                 help: 'Las horas semanales máximas de quien da clases por honorarios. Sin valor, se usa su banda de horas frente a grupo más la tolerancia.',
                 type: SettingType::Integer, default: null, rules: ['min:1', 'max:40'], unit: 'horas', nullable: true),
+            new SettingDefinition('staffing.administrative_max_hours', ...$module, label: 'Tope de horas de quien tiene plaza administrativa',
+                help: 'Las horas semanales que pueden sumar las clases, las horas externas y las horas de la plaza administrativa (apoyo y asistencia) de un docente. Nexus no deja asignarle más clases que pasen de ahí. No lleva la banda de más o menos 2 horas.',
+                type: SettingType::Integer, default: TeachingHours::ADMINISTRATIVE_MAX, rules: ['min:1', 'max:60'], unit: 'horas'),
+            new SettingDefinition('staffing.max_hours_with_honorarios', ...$module, label: 'Tope de horas con honorarios de quien tiene plaza docente',
+                help: 'Las horas semanales que pueden sumar la plaza de un docente (TC de 40 h, tres cuartos de 30 h, medio tiempo de 20 h, asignatura) y sus horas extra pagadas como honorarios. Nexus no deja asignarle más clases que pasen de ahí. Las horas extra son las que pasan de sus horas frente a grupo más 2.',
+                type: SettingType::Integer, default: TeachingHours::MAX_WITH_HONORARIOS, rules: ['min:1', 'max:60'], unit: 'horas'),
             new SettingDefinition('staffing.min_campus_travel_minutes', ...$module, label: 'Minutos mínimos para cambiar de campus',
                 help: 'El tiempo que necesita un docente entre dos clases seguidas en campus distintos. Con menos, Nexus avisa del traslado (no bloquea).',
                 type: SettingType::Integer, default: CampusTravel::DEFAULT_MINUTES, rules: ['min:0', 'max:240'], unit: 'minutos'),
@@ -300,6 +307,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 StaffingPermission::SelectionView,
                 StaffingPermission::ChangeRequestDecide,
                 StaffingPermission::ChangeRequestApplyRoom,
+                StaffingPermission::HonorariosAuthorize,
             ],
             Role::JefeProyectoDocente->value => [
                 StaffingPermission::RankingView,

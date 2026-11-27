@@ -137,14 +137,14 @@ describe('mosaicos', function () {
         $tile = fn (Teacher $teacher) => $dom->querySelector("[data-testid=tile][data-teacher=\"{$teacher->id}\"]");
 
         expect(textOf($tile($seed['over'])->querySelector('[data-testid=tile-band]')))->toBe('frente a grupo 12 h (10 a 14)')
-            ->and(textOf($tile($seed['over'])->querySelector('[data-testid=tile-notice]')))->toBe('Oficio de conformidad pendiente')
+            ->and(textOf($tile($seed['over'])->querySelector('[data-testid=tile-notice]')))->toBe('9 h extra · honorarios por autorizar (jefe de depto)')
             ->and(textOf($tile($seed['part'])->querySelector('[data-testid=tile-band]')))->toBe('frente a grupo 22 h (20 a 24)')
             ->and($tile($seed['part'])->querySelector('[data-testid=tile-notice]'))->toBeNull()
             ->and(textOf($tile($seed['full'])->querySelector('[data-testid=tile-notice]')))->toBe('Aceptado por el docente (casilla)')
             ->and(textOf($tile($seed['hon'])->querySelector('[data-testid=tile-band]')))->toBe('frente a grupo 12 h (tope de honorarios)');
 
         loadsPage()->call('open', $seed['over']->id)
-            ->assertSee('Pasa su banda de horas frente a grupo (12 h, de 10 a 14): lleva 23 h. Requiere oficio de conformidad del docente (pendiente).');
+            ->assertSee('Pasa su banda de horas frente a grupo (12 h, de 10 a 14): lleva 23 h. 9 h extra · honorarios por autorizar (jefe de depto).');
         loadsPage()->call('open', $seed['full']->id)
             ->assertSee('Pasa su banda de horas frente a grupo (12 h, de 10 a 14): lleva 16 h, aceptado por el docente (casilla).');
     });
@@ -355,7 +355,7 @@ describe('TeacherLoadsBoardQuery', function () {
 
         app(RefreshTeacherTermLoads::class)->handle($this->term);
 
-        expect($count())->toBe($before)->and($before)->toBeLessThanOrEqual(6);
+        expect($count())->toBe($before)->and($before)->toBeLessThanOrEqual(7);
     });
 
     it('cuenta a los docentes sin fila como pendientes y trae la plaza y lo asignado por campus', function () {
@@ -369,5 +369,42 @@ describe('TeacherLoadsBoardQuery', function () {
             ->and($row->positionLabels)->toBe(['MT'])
             ->and($row->hoursByCampus)->toBe(['C1' => 8, 'C2' => 15])
             ->and($board->totals()['over'])->toBe(1);
+    });
+});
+
+describe('horas extra y honorarios (PL-04, tarea 1.81)', function () {
+    it('PL-04: el drawer dice el estado de las horas extra y el jefe del departamento puede autorizarlas', function () {
+        $seed = boardSeed();
+
+        $page = loadsPage()->call('open', $seed['over']->id)
+            ->assertSeeHtml('data-testid="drawer-extra"')
+            ->assertSeeText('9 h extra · honorarios por autorizar (jefe de depto)')
+            ->assertSeeHtml('data-testid="extra-authorize"')
+            ->assertSeeHtml('data-testid="extra-unauthorize"')
+            ->call('decideExtra', 'authorized');
+
+        $page->assertSeeText('9 h de honorarios autorizadas');
+
+        $page->call('decideExtra', 'unauthorized')->assertSeeText('9 h extra no autorizadas · requiere oficio del docente (pendiente)');
+    });
+
+    it('PL-04: quien ve la carga pero no tiene el permiso de autorizar (Subdirección) no ve los botones y no puede decidir', function () {
+        $seed = boardSeed();
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+        loadsPage($subdireccion, ['depto' => 'SC'])->call('open', $seed['over']->id)
+            ->assertSeeText('9 h extra · honorarios por autorizar (jefe de depto)')
+            ->assertDontSeeHtml('data-testid="extra-authorize"')
+            ->call('decideExtra', 'authorized')
+            ->assertForbidden();
+    });
+
+    it('PL-04: quien tiene jefatura aparece sin honorarios y sin botones de autorizar', function () {
+        $seed = boardSeed();
+        $seed['over']->update(['user_id' => User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => $this->cb->id])->create()->id]);
+
+        loadsPage()->call('open', $seed['over']->id)
+            ->assertSeeText('Jefatura: sin honorarios · requiere oficio del docente (pendiente)')
+            ->assertDontSeeHtml('data-testid="extra-authorize"');
     });
 });
