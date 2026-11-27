@@ -968,8 +968,9 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 | Abrir (menú, credencial) | `cubic-bezier(.3, 1.06, .5, 1)`, rebote apenas perceptible | 0.55 s; elementos nuevos 0.32 s en cascada por columna y renglón, y ninguno espera más de 0.4 s |
 | Cerrar y regresar | `cubic-bezier(.22, 1, .36, 1)`, sin rebote | 0.42 s, todo junto y sin cascada; lo que se va se desvanece en 0.12 s a la vez |
 | Salto de la liebre al abrir | la misma de abrir | 0.5 s, 4 px |
+| Cambio de tema (Claro ↔ Oscuro) | `mask-size` por tramos casi geométricos: 0 → 14vmin en el primer 20 % (`cubic-bezier(.22, 1, .36, 1)`), después lineal entre 42vmin, 126vmin, 500vmax y 1400vmax | 1 s |
 
-- Solo se anima `transform`, `opacity` y `clip-path`.
+- Solo se anima `transform`, `opacity` y `clip-path`. Única excepción: el cambio de tema anima `mask-size` de la transición de vista (la liebre como máscara, centrada); con movimiento reducido o sin la API, cambia sin animar.
 - Con `prefers-reduced-motion`, todo cambia sin animar.
 - Lo que se mueve lleva el punto que el ojo sigue (el centro del icono, el principio del texto), no el borde de su caja, y lo que espera para moverse se queda en su lugar inicial mientras espera (`fill: 'backwards'`): nada brinca al empezar.
 - Nunca dos movimientos del menú encimados: lo que se pide mientras uno corre (Esc justo después de abrir) se hace al terminar. Esc cierra solo la capa de arriba: la credencial si está abierta sobre el menú; si no, el menú.
@@ -981,6 +982,7 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 - **Uso:** como máscara CSS, para que tome el color del lugar: blanca sobre el cuadro rojo.
 - **Animación:** se mueve completa. Las orejas se animarían por separado solo con un SVG que las tenga como piezas aparte.
 - Es la única marca: no hay otro logo en la banda.
+- **Cambio de tema (tarea 1.84):** la liebre crece desde el centro de la pantalla y descubre el tema nuevo (`nexusSwitchTheme`, `resources/js/app.js`; reglas `::view-transition-*` en `resources/css/app.css`). A 1400vmax su parte sólida (~33 px de radio en 512) pasa 1.5 veces la media diagonal en 390×844, 1440×1000 y 2560×1440: el último cuadro ya es la página nueva.
 - **Ícono de la pestaña (tarea 1.79):** la liebre blanca en el cuadro rojo Tec, con las esquinas apenas redondeadas, en `public/favicon.ico` (16, 32 y 48 px); `public/apple-touch-icon.png` (180 px) va a sangre, porque el celular redondea solo. Los enlaza `core::favicon` en el `<head>` de cada layout y se regeneran con `php .github/scripts/favicon-build.php` (en el contenedor) desde `liebre-512.png`.
 
 ### Pantalla de acceso

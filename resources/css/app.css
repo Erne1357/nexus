@@ -288,3 +288,65 @@
     }
 }
 
+
+/*
+| Cambio de tema con la liebre (tarea 1.84; DESIGN.md, "Movimiento"). A mano porque Tailwind no alcanza los
+| pseudoelementos de la transición de vista, y solo bajo html[data-theme-switch] (lo pone `nexusSwitchTheme`,
+| resources/js/app.js) para no tocar otras transiciones. Se quita el fundido del navegador y el tema nuevo se
+| descubre con la liebre como máscara: aparece chica al centro, crece y su silueta termina cubriendo la
+| ventana (1400vmax: la parte sólida de la liebre mide ~33 px de radio en 512 y así pasa 1.5 veces la media diagonal).
+*/
+html[data-theme-switch]::view-transition-group(root),
+html[data-theme-switch]::view-transition-old(root),
+html[data-theme-switch]::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+}
+
+html[data-theme-switch]::view-transition-old(root) {
+    z-index: 1;
+}
+
+html[data-theme-switch]::view-transition-new(root) {
+    z-index: 2;
+    mask: url('../images/liebre-512.png') center / 0 no-repeat;
+    animation: nexus-hare-reveal 1s both;
+}
+
+@keyframes nexus-hare-reveal {
+    0% {
+        mask-size: 0;
+        animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    20% {
+        mask-size: 14vmin;
+        animation-timing-function: linear;
+    }
+
+    40% {
+        mask-size: 42vmin;
+        animation-timing-function: linear;
+    }
+
+    60% {
+        mask-size: 126vmin;
+        animation-timing-function: linear;
+    }
+
+    80% {
+        mask-size: 500vmax;
+        animation-timing-function: linear;
+    }
+
+    100% {
+        mask-size: 1400vmax;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html[data-theme-switch]::view-transition-new(root) {
+        animation: none;
+        mask: none;
+    }
+}
