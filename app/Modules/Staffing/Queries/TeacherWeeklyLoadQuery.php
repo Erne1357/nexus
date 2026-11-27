@@ -3,9 +3,8 @@
 namespace App\Modules\Staffing\Queries;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Queries\OrgChartQuery;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
 use App\Modules\Faculty\Rules\BaseHours;
@@ -21,13 +20,13 @@ use Carbon\CarbonInterface;
  *
  * Cada semana de Nexus se parte por el departamento del grupo (tarea 1.59, B3): `departments` trae primero los de
  * adscripción del docente (`home`, el principal antes) y luego los demás con grupos, cada uno con su jefe vigente
- * (puesto jefe_departamento sobre ese departamento), sus horas y sus grupos, y cada bloque de `days` lleva su
+ * (el titular vigente de la unidad, OrgChartQuery::titularNames), sus horas y sus grupos, y cada bloque de `days` lleva su
  * `department_id` y su `tone` (1 a 12, el color del departamento). La semana que sale del SII no sabe el departamento
  * del grupo en Nexus: lleva `departments` vacío y se muestra sin partir (supuesto por confirmar).
  */
 final class TeacherWeeklyLoadQuery implements TeacherWeeklyLoad
 {
-    public function __construct(private readonly MyLoadQuery $loads) {}
+    public function __construct(private readonly MyLoadQuery $loads, private readonly OrgChartQuery $orgChart) {}
 
     public function forTeacher(Teacher $teacher): array
     {
@@ -89,9 +88,7 @@ final class TeacherWeeklyLoadQuery implements TeacherWeeklyLoad
         $used = array_values(array_unique(array_filter(array_map(fn (string $id): ?string => $byGroup[$id] ?? null, $ids))));
         $order = [...$homeIds, ...array_values(array_diff($used, $homeIds))];
         $names = Department::query()->whereIn('id', $order)->pluck('name', 'id')->all();
-        $heads = RoleAssignment::query()->current()->where('role', Role::JefeDepartamento)->whereIn('org_unit_id', $used)
-            ->with('user:id,name')->orderBy('valid_from')->get()->unique('org_unit_id')
-            ->mapWithKeys(fn (RoleAssignment $assignment): array => [$assignment->org_unit_id => $assignment->user->name])->all();
+        $heads = $this->orgChart->titularNames($used);
         $tones = array_flip($order);
 
         $sections = [];
