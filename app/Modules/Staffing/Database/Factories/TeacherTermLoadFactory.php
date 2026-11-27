@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Docente con 10 horas de base y 4 asignadas en 2 grupos, sin externas, con tope de 12.
+ * Docente con 10 horas de base y 10 frente a grupo (banda de 8 a 12), 4 asignadas en 2 grupos, sin externas, con tope de 12.
  *
  * @extends Factory<TeacherTermLoad>
  */
@@ -25,6 +25,8 @@ class TeacherTermLoadFactory extends Factory
             'teacher_id' => Teacher::factory(),
             'term_id' => Term::factory(),
             'base_hours' => 10,
+            'teaching_hours' => 10,
+            'band_limit_hours' => 12,
             'external_hours' => 0,
             'assigned_hours' => 4,
             'limit_hours' => 12,

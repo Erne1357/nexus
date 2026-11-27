@@ -13,13 +13,16 @@ use App\Modules\Faculty\Enums\QualificationLevel;
 final readonly class RankingRow
 {
     /** Las marcas que bajan al docente al bloque final del ranking, con su nombre en pantalla. */
-    public const array MARKS = ['sin_horas' => 'Sin horas', 'choque' => 'Choque', 'no_disponible' => 'No disponible'];
-
-    /** Los avisos que se muestran discretos sin mover al docente de lugar (SC-09), con su nombre en pantalla. */
-    public const array NOTICES = ['traslado_justo' => 'traslado justo'];
+    public const array MARKS = ['choque' => 'Choque', 'no_disponible' => 'No disponible'];
 
     /**
-     * @param  list<string>  $flags  `sin_horas`, `choque`, `no_disponible`, `sin_evaluacion`, `traslado_justo`
+     * Los avisos que se muestran discretos junto a la plaza, con su nombre en pantalla: con el grupo pasa su banda de
+     * horas frente a grupo (HC-08; además lo pone en el bloque «Pasan su banda», tarea 1.50) y traslado justo (SC-09).
+     */
+    public const array NOTICES = ['sin_horas' => 'pasa su banda', 'traslado_justo' => 'traslado justo'];
+
+    /**
+     * @param  list<string>  $flags  `sin_horas`, `banda_aceptada`, `choque`, `no_disponible`, `sin_evaluacion`, `traslado_justo`
      */
     public function __construct(
         public int $rank,
@@ -38,11 +41,28 @@ final readonly class RankingRow
     ) {}
 
     /**
-     * Si va en el bloque final: sin horas, choque o no disponible.
+     * Si va en el bloque final: choque o no disponible.
      */
     public function isFlagged(): bool
     {
         return $this->marks() !== [];
+    }
+
+    /**
+     * Si va en el bloque «Pasan su banda» (HC-08, tarea 1.50): con el grupo pasa su banda de horas frente a grupo, sin
+     * choque ni no disponible. Se puede asignar; va debajo de los demás y antes del bloque final.
+     */
+    public function isOverBand(): bool
+    {
+        return in_array('sin_horas', $this->flags, true) && ! $this->isFlagged();
+    }
+
+    /**
+     * Si su casilla (SEL-12) ya cubre las horas con las que pasa su banda: «aceptado por el docente (casilla)».
+     */
+    public function bandAccepted(): bool
+    {
+        return in_array('banda_aceptada', $this->flags, true);
     }
 
     /**
@@ -56,7 +76,7 @@ final readonly class RankingRow
     }
 
     /**
-     * Los avisos discretos que tiene (traslado justo, SC-09), por su clave, con su nombre.
+     * Los avisos discretos que tiene (pasa su banda, HC-08; traslado justo, SC-09), por su clave, con su nombre.
      *
      * @return array<string, string>
      */

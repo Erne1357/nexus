@@ -6,8 +6,10 @@ use App\Modules\Faculty\Enums\QualificationLevel;
 
 /**
  * Un docente candidato a un grupo, con los datos que necesita el ranking (reglas-de-negocio.md, «Ranking docente
- * (desempate)»). `evaluation` es el promedio de 0 a 5 o null si no tiene; `remainingHours` es informativo. `tightTravel`
- * es el aviso de traslado justo entre campus (SC-09): se muestra, pero no lo baja al bloque final.
+ * (desempate)»). `evaluation` es el promedio de 0 a 5 o null si no tiene; `remainingHours` es informativo. `noHours`
+ * (con el grupo pasa su banda de horas frente a grupo, HC-08; `bandAccepted` si su casilla ya lo cubre) lo baja al
+ * bloque «Pasan su banda», asignable, debajo de los demás (tarea 1.50); choque y no disponible, al bloque final.
+ * `tightTravel` es el aviso de traslado justo entre campus (SC-09): se muestra, pero no lo mueve.
  */
 final readonly class RankingCandidate
 {
@@ -24,10 +26,24 @@ final readonly class RankingCandidate
         public bool $unavailable,
         public ?int $previousRank,
         public bool $tightTravel = false,
+        public bool $bandAccepted = false,
     ) {}
 
+    /** El bloque final, «no pueden tomarlo»: choque (HC-01) o no disponible (HC-09). */
     public function isFlagged(): bool
     {
-        return $this->noHours || $this->clash || $this->unavailable;
+        return $this->clash || $this->unavailable;
+    }
+
+    /** El bloque «Pasan su banda» (HC-08): asignable, debajo de los demás y antes del bloque final. */
+    public function isOverBand(): bool
+    {
+        return $this->noHours && ! $this->isFlagged();
+    }
+
+    /** El bloque para ordenar: 0 los demás, 1 pasan su banda, 2 el bloque final. */
+    public function tier(): int
+    {
+        return $this->isFlagged() ? 2 : ($this->noHours ? 1 : 0);
     }
 }

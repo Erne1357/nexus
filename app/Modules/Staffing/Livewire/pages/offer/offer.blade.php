@@ -159,7 +159,7 @@
                 @if (count($groups) === 0)
                     Todavía no hay grupos que ver: la oferta aparece cuando la carga de tu departamento entra a asignación de docentes.
                 @elseif ($state === 'top')
-                    No estás entre los 3 primeros de ningún grupo que coincida, sin una marca que te baje (sin horas, choque o no disponible).
+                    No estás entre los 3 primeros de ningún grupo que coincida, sin una marca que te baje (pasa tu banda, choque o no disponible).
                 @else
                     Ningún grupo coincide con los filtros.
                 @endif

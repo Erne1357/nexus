@@ -28,7 +28,7 @@ final class TeachingTargetQuery
 
         foreach ($csvHours as $teacherId => $csv) {
             // Plazas que dan 0 h frente a grupo (solo apoyo u honorarios) cuentan como sin plaza: se usa el CSV (supuesto por confirmar).
-            $targets[$teacherId] = ($fromPositions[$teacherId] ?? 0) > 0 ? $fromPositions[$teacherId] : TeachingHours::fromCsvHours($csv);
+            $targets[$teacherId] = TeachingHours::target($fromPositions[$teacherId] ?? 0, $csv);
         }
 
         return $targets;

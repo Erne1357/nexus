@@ -136,12 +136,33 @@ final readonly class RunComparison
     }
 
     /**
-     * Los problemas de entrada por corregir (ApplyPlan::$inputProblems: HC-07, HC-08, HC-13): no retienen al grupo, que
-     * se escribe, y se avisan sin bloquear. Cada uno con los títulos de sus grupos de la carga.
+     * Los problemas de entrada por corregir (ApplyPlan::$inputProblems: HC-07, HC-13): no retienen al grupo, que se
+     * escribe, y se avisan sin bloquear. Cada uno con los títulos de sus grupos de la carga. HC-08 no va aquí desde la
+     * tarea 1.50 (hourNotices()): lo asignado de más por las personas es aviso con el oficio pendiente, no algo por
+     * corregir en la carga.
      *
      * @return list<array{rule: string, message: string, groups: list<string>}>
      */
     public function inputProblems(): array
+    {
+        return array_values(array_filter($this->problemRows(), fn (array $problem): bool => $problem['rule'] !== 'HC-08'));
+    }
+
+    /**
+     * Los avisos de horas (HC-08) que trae la salida, como inputProblems(): solo los de corridas de antes de la tarea
+     * 1.50 o de una entrada armada a mano, porque con una entrada de la base el motor ya no los da. Son informativos.
+     *
+     * @return list<array{rule: string, message: string, groups: list<string>}>
+     */
+    public function hourNotices(): array
+    {
+        return array_values(array_filter($this->problemRows(), fn (array $problem): bool => $problem['rule'] === 'HC-08'));
+    }
+
+    /**
+     * @return list<array{rule: string, message: string, groups: list<string>}>
+     */
+    private function problemRows(): array
     {
         $movable = $this->movable();
         $rows = [];

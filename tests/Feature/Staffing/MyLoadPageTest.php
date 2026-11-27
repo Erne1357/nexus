@@ -105,7 +105,7 @@ it('sin huecos ni traslados no los marca', function () {
     Livewire::actingAs($this->user)->test('staffing::pages.my-load')->assertDontSeeHtml('data-testid="gap"')->assertDontSeeHtml('data-testid="transfer"');
 });
 
-it('muestra la ecuación de horas: base, externas con su fuente, asignadas y restantes (HC-08)', function () {
+it('HC-08: muestra la ecuación de horas: el tope de su banda frente a grupo, externas con su fuente, asignadas y restantes', function () {
     myLoadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00']]);
     myLoadGroup($this->c1, '1B', 'Cálculo', [[2, '07:00', '09:00']]);
     TeacherPosition::factory()->asignatura(20)->create(['teacher_id' => $this->me->id]);
@@ -113,7 +113,18 @@ it('muestra la ecuación de horas: base, externas con su fuente, asignadas y res
 
     Livewire::actingAs($this->user)->test('staffing::pages.my-load')
         ->assertSeeHtml('data-testid="hours-base"')
-        ->assertSeeInOrder(['Horas base', '20', 'Otra modalidad', '3', 'Colegio Bachilleres', 'Asignadas', '8', '2 grupos', 'Restantes', '9']);
+        ->assertSeeInOrder(['Tope de tu banda', '22', 'frente a grupo', '20', 'h (18 a 22)', 'Otra modalidad', '3', 'Colegio Bachilleres', 'Asignadas', '8', '2 grupos', 'Restantes', '11'])
+        ->assertDontSeeHtml('data-testid="hours-notice"');
+});
+
+it('HC-08: si pasa su banda, ve que su oficio de conformidad está pendiente', function () {
+    myLoadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00']]);
+    myLoadGroup($this->c1, '1B', 'Cálculo', [[2, '07:00', '09:00']]);
+    TeacherPosition::factory()->asignatura(1)->create(['teacher_id' => $this->me->id]);
+
+    Livewire::actingAs($this->user)->test('staffing::pages.my-load')
+        ->assertSee('Pasas de tu banda')
+        ->assertSee('Pasas de tu banda de horas frente a grupo: requiere tu oficio de conformidad (pendiente).');
 });
 
 it('un docente sin grupos igual ve base y externas con asignadas en 0', function () {
@@ -122,7 +133,7 @@ it('un docente sin grupos igual ve base y externas con asignadas en 0', function
 
     $data = app(MyLoadQuery::class)->forTeacher($this->me, $this->term);
 
-    expect($data['hours'])->toMatchArray(['base' => 12, 'external' => 2, 'assigned' => 0, 'remaining' => 10]);
+    expect($data['hours'])->toMatchArray(['base' => 12, 'teaching' => 12, 'band_limit' => 14, 'external' => 2, 'assigned' => 0, 'remaining' => 12, 'over_band' => false]);
 
     Livewire::actingAs($this->user)->test('staffing::pages.my-load')->assertSee('UACJ')->assertSee('Todavía no tienes grupos asignados');
 });

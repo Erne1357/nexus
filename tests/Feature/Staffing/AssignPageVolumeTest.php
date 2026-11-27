@@ -56,7 +56,7 @@ describe('ranking completo', function () {
         volumeAssignPage($this->jefe)
             ->call('toggleRanking', $this->group->id)
             ->assertSeeHtmlInOrder(['Ana Ruiz', 'Beto Salas', 'Carla Díaz', 'data-testid="flagged-tier"'])
-            ->assertSeeText('3 docentes no pueden tomarlo (1 sin horas, 2 choque, 1 no disponible)')
+            ->assertSeeText('3 docentes no pueden tomarlo (2 choque, 1 no disponible)')
             ->assertDontSee('Dante Ortiz')
             ->assertDontSee('Fausto Gil')
             ->call('toggleFinalTier', $this->group->id)
@@ -85,6 +85,37 @@ describe('ranking completo', function () {
             ->assertSeeText('Orden: horas base › historial y perfil › evaluación')
             ->call('toggleRanking', $this->group->id)
             ->assertSeeHtml('data-testid="ranking-order"');
+    });
+});
+
+describe('pasan su banda (HC-08, tarea 1.50)', function () {
+    beforeEach(function () {
+        $this->band = $this->world->group($this->world->subject('SCD-1022', 'Redes de Computadoras'), $this->world->career('IIN'), 'B', 3, [[3, '10:00', '11:00']]);
+        $this->world->rank($this->band, $this->teachers->take(4)->all(), [
+            1 => ['flags' => ['sin_horas']],
+            2 => ['flags' => ['sin_horas', 'banda_aceptada']],
+            3 => ['flags' => ['sin_horas', 'choque']],
+        ]);
+    });
+
+    it('HC-08: quien pasa su banda va en su bloque, abierto y asignable, entre los demás y el bloque final', function () {
+        $html = volumeAssignPage($this->jefe)->call('toggleRanking', $this->band->id)
+            ->assertSeeHtmlInOrder(['Ana Ruiz', 'data-testid="over-band-tier"', 'Beto Salas', 'Carla Díaz', 'data-testid="flagged-tier"'])
+            ->assertSeeText('2 pasan su banda de horas frente a grupo con este grupo')
+            ->assertSeeText('1 docente no puede tomarlo (1 choque)')
+            ->assertDontSee('Dante Ortiz')
+            ->html();
+        $beto = domOf($html)->querySelector('[data-testid=ranking] [data-teacher="'.$this->teachers[1]->id.'"]');
+
+        expect($beto->querySelector('[data-testid=assign-button]'))->not->toBeNull();
+    });
+
+    it('HC-08: el título del aviso dice si falta el oficio o si su casilla ya lo aceptó', function () {
+        $dom = domOf(volumeAssignPage($this->jefe)->call('toggleRanking', $this->band->id)->html());
+        $title = fn (int $index): string => $dom->querySelector('[data-testid=ranking] [data-teacher="'.$this->teachers[$index]->id.'"] [data-testid=notice-sin_horas]')->getAttribute('title');
+
+        expect($title(1))->toBe('Con este grupo pasa su banda de horas frente a grupo: se puede asignar, pero requiere oficio de conformidad del docente (pendiente).')
+            ->and($title(2))->toBe('Con este grupo pasa su banda de horas frente a grupo, aceptado por el docente (casilla).');
     });
 });
 

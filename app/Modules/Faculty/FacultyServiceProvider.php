@@ -28,8 +28,10 @@ use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Faculty\Queries\InvitationRelease;
 use App\Modules\Faculty\Queries\NoInvitationRelease;
+use App\Modules\Faculty\Queries\NoSelectionCsvHours;
 use App\Modules\Faculty\Queries\NoSelectionQueueMembership;
 use App\Modules\Faculty\Queries\NoTeacherWeeklyLoad;
+use App\Modules\Faculty\Queries\SelectionCsvHours;
 use App\Modules\Faculty\Queries\SelectionQueueMembership;
 use App\Modules\Faculty\Queries\TeacherUnitAdscriptions;
 use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
@@ -53,6 +55,9 @@ final class FacultyServiceProvider extends ModuleServiceProvider
 
         // Sin la orden de selección nadie está en una cola, y la invitación va solo al institucional; Staffing lo reemplaza (SEL-13).
         $this->app->bindIf(SelectionQueueMembership::class, NoSelectionQueueMembership::class);
+
+        // Sin la orden de selección no hay CSV: las horas frente a grupo de HC-08 salen solo de las plazas; Staffing lo reemplaza (1.50).
+        $this->app->bindIf(SelectionCsvHours::class, NoSelectionCsvHours::class);
 
         // Sin carga docente la pestaña «Carga» de la ficha sale vacía; Staffing lo reemplaza (D-03).
         $this->app->bindIf(TeacherWeeklyLoad::class, NoTeacherWeeklyLoad::class);

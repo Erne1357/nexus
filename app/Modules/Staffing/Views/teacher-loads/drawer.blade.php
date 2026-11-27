@@ -1,6 +1,8 @@
 {{--
-    El drawer de un docente (staffing::pages.teacher-loads): sus cifras, sus grupos por campus y su semana de lunes a
-    viernes de 7 a 21 h, con el campus por color. `close()` es del x-drawer.
+    El drawer de un docente (staffing::pages.teacher-loads): sus cifras (frente a grupo con su banda, otra modalidad,
+    asignadas y restantes), el aviso de HC-08 si pasa su banda (tarea 1.50: oficio de conformidad pendiente, o aceptado
+    por el docente con la casilla), sus grupos por campus y su semana de lunes a viernes de 7 a 21 h, con el campus por
+    color. `close()` es del x-drawer.
 --}}
 @php
     $status = $row->status();
@@ -18,7 +20,7 @@
             <h2 id="teacher-drawer-title" class="mt-0.5 text-xl font-bold leading-tight">{{ $row->name }}</h2>
             <p class="mt-2 flex flex-wrap gap-1.5">
                 @if ($status === 'over')
-                    <x-core::status-badge tone="error" :label="'Excede +'.$row->excessHours().' h'" />
+                    <x-core::status-badge tone="warning" icon="o-document-text" :label="'Excede +'.$row->excessHours().' h'" />
                 @elseif ($status === 'none')
                     <x-core::status-badge tone="warning" label="Sin carga" icon="o-clock" />
                 @elseif ($status === 'full')
@@ -35,13 +37,22 @@
 
     <div class="flex-1 space-y-6 px-5 py-4">
         <dl class="grid grid-cols-2 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 min-[480px]:grid-cols-4">
-            @foreach ([['Base', $row->baseHours, ''], ['Otra modalidad', $row->externalHours, ''], ['Asignadas', $row->assignedHours, ''], ['Restan', $row->remainingHours, $row->remainingHours < 0 ? 'text-error' : '']] as [$label, $value, $tone])
+            @foreach ([[$row->teachingHours === null ? 'Base' : 'Frente a grupo', $row->teachingHours ?? $row->baseHours, ''], ['Otra modalidad', $row->externalHours, ''], ['Asignadas', $row->assignedHours, ''], ['Restan', $row->remainingHours, $row->remainingHours < 0 ? 'text-warning' : '']] as [$label, $value, $tone])
                 <div class="min-w-0 bg-base-100 p-3">
                     <dt class="truncate text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $label }}</dt>
                     <dd class="mt-1 font-mono text-2xl font-semibold leading-none tabular-nums {{ $tone }}" data-testid="drawer-{{ Str::slug($label) }}">{{ $value }}</dd>
                 </div>
             @endforeach
         </dl>
+        @if ($row->bandLabel() !== null)
+            <p class="-mt-3 text-sm text-neutral" data-testid="drawer-band">Frente a grupo: <span class="font-mono text-base-content">{{ $row->bandLabel() }}</span> · base de su plaza <span class="font-mono text-base-content">{{ $row->baseHours }} h</span></p>
+        @endif
+        @if ($row->hourNotice() !== null)
+            <div role="note" @class(['alert alert-soft items-start text-sm', 'alert-warning' => $status === 'over', 'alert-info' => $status !== 'over']) data-testid="drawer-hour-notice">
+                <x-icon :name="$status === 'over' ? 'o-document-text' : 'o-check-circle'" class="h-5 w-5 shrink-0" aria-hidden="true" />
+                <span>{{ $row->hourNotice() }}</span>
+            </div>
+        @endif
 
         @forelse ($byCampus as $code => $groups)
             <section aria-labelledby="campus-{{ $code }}" data-testid="drawer-campus-{{ $code }}">

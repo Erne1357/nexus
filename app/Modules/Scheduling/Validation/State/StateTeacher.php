@@ -3,8 +3,14 @@
 namespace App\Modules\Scheduling\Validation\State;
 
 /**
- * Un docente en el estado del validador: horas base y externas del periodo (HC-08), sus bloques no disponibles
- * (HC-09), cada uno como [día, inicio, fin] en minutos, y sus horas autorizadas del periodo (SEL-12; null si no tiene).
+ * Un docente en el estado del validador: horas base (las de sus plazas) y externas del periodo, sus horas frente a
+ * grupo (PL-01 con el respaldo del CSV de la selección; con ellas mide HC-08 desde la tarea 1.50), sus bloques no
+ * disponibles (HC-09), cada uno como [día, inicio, fin] en minutos, y sus horas autorizadas del periodo (SEL-12; null si
+ * no tiene).
+ *
+ * `engineLimit` solo lo lleva la foto que se arma del contrato del motor (ContractState): es el límite de HC-08 que ya
+ * trae la entrada (lo que le queda más sus grupos fijos) y con él HC-08 es choque duro, porque la propuesta automática
+ * no sobrecarga a nadie sin oficio (1.50, supuesto por confirmar). En la foto de la base es null y HC-08 es aviso.
  */
 final readonly class StateTeacher
 {
@@ -19,5 +25,7 @@ final readonly class StateTeacher
         public array $unavailable = [],
         public bool $isHonorarios = false,
         public ?int $allowanceHours = null,
+        public int $teachingHours = 0,
+        public ?int $engineLimit = null,
     ) {}
 }

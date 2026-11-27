@@ -22,6 +22,7 @@ final readonly class RankedCandidate
         $candidate = $this->candidate;
         $flags = array_keys(array_filter([
             'sin_horas' => $candidate->noHours,
+            'banda_aceptada' => $candidate->noHours && $candidate->bandAccepted,
             'choque' => $candidate->clash,
             'no_disponible' => $candidate->unavailable,
             'sin_evaluacion' => $candidate->evaluation === null,

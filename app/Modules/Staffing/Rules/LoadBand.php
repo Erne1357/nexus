@@ -2,12 +2,14 @@
 
 namespace App\Modules\Staffing\Rules;
 
+use App\Modules\Faculty\Rules\TeachingHours;
+
 /**
- * SEL-05. Banda de carga de un docente: de la base a más o menos 2 horas, inclusiva. Puro.
+ * SEL-05. Banda de carga de un docente: de sus horas frente a grupo a más o menos 2 horas (art. 147), inclusiva. Puro.
  */
 final readonly class LoadBand
 {
-    public const MARGIN = 2;
+    public const MARGIN = TeachingHours::MARGIN;
 
     /**
      * @return 'within'|'over'|'under'

@@ -37,6 +37,20 @@ final class ConflictRecomputeTargetsQuery
     }
 
     /**
+     * Los periodos y modalidades con grupos no cancelados de esos docentes en el periodo: cambiaron sus horas frente a
+     * grupo (TeachingHoursChanged, HC-08).
+     *
+     * @param  list<string>  $teacherIds
+     * @return list<array{string, string}>
+     */
+    public function forTeachers(array $teacherIds, string $termId): array
+    {
+        return $this->pairs(Group::query()->whereIn('teacher_id', $teacherIds)
+            ->where('status', '<>', GroupStatus::Cancelled->value)
+            ->where('term_id', $termId));
+    }
+
+    /**
      * Los periodos y modalidades donde el docente tiene grupos activos.
      *
      * @return list<array{string, string}>

@@ -25,8 +25,10 @@ use Closure;
  * violación dura: si la segunda validación encontrara una o un puntaje peor, se devuelve lo validado antes de buscar.
  *
  * HC-08 es la excepción, porque no depende del horario: un docente cuyos grupos movibles suman más horas de las que le
- * quedan se pasa igual con o sin sesiones. Sus grupos se colocan, la violación queda en `hard_violations` como un
- * problema de la entrada y la corrida sale `partial` (PS-08, supuesto por confirmar).
+ * da la entrada se pasa igual con o sin sesiones. Sus grupos se colocan, la violación queda en `hard_violations` y la
+ * corrida sale `partial` (PS-08, supuesto por confirmar). Desde la tarea 1.50 BuildSolverInput le da a cada docente al
+ * menos las horas de sus movibles (lo asignado de más por las personas es aviso, no problema del motor), así que con
+ * una entrada de la base no pasa: el motor solo no agrega horas por encima del tope.
  *
  * Sale `feasible` si todo cupo sin violaciones, `partial` si algo quedó. Reporta el avance con el puntaje que lleva,
  * sin bajar nunca (al buscar, en cada iteración): hasta 50 al construir, de 51 a 59 al validar lo construido, de 60 a
@@ -203,7 +205,7 @@ final class PhpHeuristicEngine implements AcceptsClock, SolverEngine
             array_filter($violations, fn (HardViolation $violation): bool => $violation->rule === 'HC-08')));
 
         if ($overloaded !== []) {
-            $log[] = 'HC-08: '.count($overloaded).' docente(s) con más horas asignadas de las que les quedan. No depende del horario: corrígelo en la asignación de docentes.';
+            $log[] = 'HC-08: '.count($overloaded).' docente(s) con más horas en sus grupos movibles de las que les da la entrada. No depende del horario; el motor no agrega horas por encima del tope de la banda.';
         }
 
         if ($skipped) {

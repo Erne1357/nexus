@@ -138,8 +138,8 @@ final class PublishSelection
 
     /**
      * SEL-16: cierra los renglones de elección previa con las horas de sus grupos y justifica en HC-08 las que queden
-     * (SEL-12), salvo a quien quedó arriba de la banda de su base sin confirmar: ese queda cerrado pero con HC-08 como
-     * choque hasta que confirme con la casilla (ConfirmPriorChoiceHours, ampliación de SEL-16 del 25 de noviembre de 2026).
+     * (SEL-12), salvo a quien quedó arriba de la banda de sus horas frente a grupo sin confirmar: ese queda cerrado pero
+     * con el aviso de HC-08 y el oficio pendiente hasta que confirme con la casilla (ConfirmPriorChoiceHours, ampliación de SEL-16 del 25 de noviembre de 2026).
      *
      * @return Collection<int, array{entry: SelectionEntry, hours: int, base: int}> los renglones que deben confirmar
      */

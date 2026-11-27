@@ -269,9 +269,11 @@ final class MyLoadQuery
     }
 
     /**
-     * La cuenta de horas con las asignadas que se ven: base, externas y límite de ahora (HC-08).
+     * La cuenta de horas con las asignadas que se ven: base, frente a grupo con su banda, externas y límite de ahora
+     * (HC-08, que desde la tarea 1.50 se mide contra las horas frente a grupo: el límite es el tope de su banda o lo que
+     * autorizó su casilla, SEL-12). `over_band` y `accepted` dicen si pasa su banda y si su casilla lo cubre.
      *
-     * @return array{base: int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, sources: list<array{source: string, hours: int}>}
+     * @return array{base: int, teaching: int, band_from: int, band_to: int, band_limit: int, honorarios_cap: ?int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, over_band: bool, accepted: bool, sources: list<array{source: string, hours: int}>}
      */
     private function hours(Teacher $teacher, Term $term, ScheduleState $state, int $assigned): array
     {
@@ -281,15 +283,24 @@ final class MyLoadQuery
         }
 
         $limit = TeacherHourLimit::of($state, $teacher->id)
-            ?? ['base_hours' => 0, 'external_hours' => 0, 'tolerance' => 0, 'limit' => 0];
+            ?? ['base_hours' => 0, 'teaching_hours' => 0, 'band_from' => 0, 'band_to' => 0, 'band_limit' => 0, 'honorarios_cap' => null, 'external_hours' => 0, 'tolerance' => 0, 'limit' => 0, 'allowance_hours' => null];
+        $total = $assigned + $limit['external_hours'];
+        $overBand = $total > $limit['band_limit'];
 
         return [
             'base' => $limit['base_hours'],
+            'teaching' => $limit['teaching_hours'],
+            'band_from' => $limit['band_from'],
+            'band_to' => $limit['band_to'],
+            'band_limit' => $limit['band_limit'],
+            'honorarios_cap' => $limit['honorarios_cap'],
             'limit' => $limit['limit'],
             'tolerance' => $limit['tolerance'],
             'external' => $limit['external_hours'],
             'assigned' => $assigned,
-            'remaining' => $limit['limit'] - $limit['external_hours'] - $assigned,
+            'remaining' => $limit['limit'] - $total,
+            'over_band' => $overBand,
+            'accepted' => $overBand && $limit['allowance_hours'] !== null && $total <= $limit['allowance_hours'],
             'sources' => TeacherExternalLoad::query()->where('term_id', $term->id)->where('teacher_id', $teacher->id)
                 ->orderBy('source')->get(['source', 'hours'])
                 ->map(fn (TeacherExternalLoad $load): array => ['source' => (string) $load->source, 'hours' => (int) $load->hours])->all(),

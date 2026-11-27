@@ -10,11 +10,14 @@ use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
+use App\Modules\Faculty\Actions\GrantHourAllowance;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherAvailability;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
@@ -22,6 +25,8 @@ use App\Modules\Solver\Contract\GroupInput;
 use App\Modules\Solver\Contract\ScopeKind;
 use App\Modules\Solver\Contract\SessionKind;
 use App\Modules\Solver\Contract\SolverInput;
+use App\Modules\Solver\Evaluation\ContractEvaluator;
+use App\Modules\Solver\Evaluation\ContractState;
 use App\Modules\Solver\Queries\BuildSolverInput;
 use App\Modules\Solver\Queries\SolverInputBuild;
 use App\Modules\Solver\Rules\InputFingerprint;
@@ -229,14 +234,37 @@ it('trae los docentes de los grupos con horas restantes, honorarios, no disponib
     $teachers = collect(buildInputForDepartment()->input->teachers)->keyBy('id');
     $t1 = $teachers[$this->t1->id];
 
-    // 40 h base, menos las 5 del grupo de otra modalidad y las 5 del fijo; las del movible no cuentan (se reprograman).
+    // HC-08 (tarea 1.50): tiempo completo da 22 h frente a grupo + 2 = 24, menos las 5 del grupo de otra modalidad y las 5
+    // del fijo; las del movible no cuentan (se reprograman). Medio tiempo: 12 + 2 = 14, menos las 5 de su grupo fijo.
     expect($teachers->keys()->all())->toEqualCanonicalizing([$this->t1->id, $this->t2->id])
-        ->and($t1->remainingHours)->toBe(30)
+        ->and($t1->remainingHours)->toBe(14)
         ->and($t1->honorarios)->toBeFalse()
         ->and(array_map(fn ($slot) => $slot->toArray(), $t1->unavailable))->toBe([['day' => 2, 'starts_at' => '10:00', 'ends_at' => '12:00']])
         ->and(array_map(fn ($slot) => $slot->toArray(), $t1->preferred))->toBe([['day' => 4, 'starts_at' => '08:00', 'ends_at' => '10:00']])
         ->and(array_map(fn ($slot) => $slot->toArray(), $t1->busy))->toBe([['day' => 5, 'starts_at' => '07:00', 'ends_at' => '09:00', 'campus_code' => 'S1']])
-        ->and($teachers[$this->t2->id]->remainingHours)->toBe(15);
+        ->and($teachers[$this->t2->id]->remainingHours)->toBe(9);
+});
+
+it('HC-08: lo que las personas ya asignaron de más no es problema de la entrada: sus movibles caben y el motor no le agrega horas (tarea 1.50)', function () {
+    TeacherExternalLoad::factory()->for($this->t1)->create(['term_id' => $this->term->id, 'hours' => 30]);
+
+    $input = buildInputForDepartment()->input;
+    $t1 = collect($input->teachers)->keyBy('id')[$this->t1->id];
+    $movableHours = collect($input->groups)->where('movable', true)->where('teacherId', $this->t1->id)->sum('weeklyHours');
+
+    expect($movableHours)->toBeGreaterThan(0)
+        ->and($t1->remainingHours)->toBe($movableHours)
+        ->and(collect((new ContractEvaluator)->evaluate($input, ContractState::currentSessions($input))->hardViolations)->where('rule', 'HC-08')->all())->toBe([]);
+});
+
+it('HC-08: el motor recibe el tope nuevo, frente a grupo + 2, o lo que autorizó la casilla si es más (tarea 1.50)', function () {
+    app(GrantHourAllowance::class)->handle($this->t2, $this->term, 30, 'Cerró su carga con horas de más (SEL-05)', User::factory()->admin()->create());
+
+    $teachers = collect(buildInputForDepartment()->input->teachers)->keyBy('id');
+
+    // Medio tiempo: lo autorizado (30) pasa de 12 + 2, menos las 5 de su grupo fijo.
+    expect($teachers[$this->t2->id]->remainingHours)->toBe(25)
+        ->and($teachers[$this->t1->id]->remainingHours)->toBe(14);
 });
 
 it('un docente de honorarios se marca y un grupo cancelado no ocupa al docente', function () {

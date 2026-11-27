@@ -971,7 +971,8 @@ final class StaffingDemoSeeder extends Seeder
 
         $result = $this->validator->validate($state->withTeacher($groupId, $teacherId), new ValidationScope([$groupId], [$teacherId]), ScheduleValidator::TEACHER_RULES);
 
-        return new ValidationResult($result->forGroup($groupId));
+        // La demo no sobrecarga a nadie sin oficio, como el motor: el aviso de HC-08 cuenta como duro (tarea 1.50).
+        return (new ValidationResult($result->forGroup($groupId)))->asEngine();
     }
 
     /**

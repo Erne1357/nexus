@@ -23,6 +23,9 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\ScheduleStateQuery;
 use App\Modules\Scheduling\Rules\Constraints\QuotasWithinCapacity;
 use App\Modules\Scheduling\Validation\ValidationScope;
+use App\Modules\Staffing\Enums\SelectionStatus;
+use App\Modules\Staffing\Models\Selection;
+use App\Modules\Staffing\Models\SelectionEntry;
 
 /*
 | ScheduleStateQuery: la foto del periodo vista desde una modalidad, con los grupos de todos sus campus (M1), que leen
@@ -97,6 +100,50 @@ it('trae del docente sus horas base, externas, bloques no disponibles y si es de
         ->externalHours->toBe(6)
         ->unavailable->toBe([[3, 420, 540]])
         ->isHonorarios->toBeTrue();
+});
+
+it('HC-08: trae las horas frente a grupo del docente (PL-01) y, sin plazas que las den, las del CSV de la selección del periodo como la banda de la selección (tarea 1.50)', function () {
+    $career = Teacher::factory()->create();
+    TeacherPosition::factory()->for($career)->tiempoCompleto()->create();
+    $csvOnly = Teacher::factory()->create();
+    $honorarios = Teacher::factory()->create();
+    TeacherPosition::factory()->for($honorarios)->honorarios()->create();
+    $twoSelections = Teacher::factory()->create();
+    $cancelledOnly = Teacher::factory()->create();
+    $nowhere = Teacher::factory()->create();
+    $mixedLow = Teacher::factory()->create();
+    $mixedHigh = Teacher::factory()->create();
+    $live = Selection::factory()->create(['term_id' => $this->term->id]);
+    $other = Selection::factory()->create(['term_id' => $this->term->id]);
+    $cancelled = Selection::factory()->create(['term_id' => $this->term->id, 'status' => SelectionStatus::Cancelled]);
+    $elsewhere = Selection::factory()->create(['term_id' => Term::factory()->create()->id]);
+    SelectionEntry::factory()->for($live)->create(['teacher_id' => $career->id, 'base_hours' => 40]);
+    SelectionEntry::factory()->for($live)->create(['teacher_id' => $csvOnly->id, 'base_hours' => 30]);
+    SelectionEntry::factory()->for($live)->create(['teacher_id' => $honorarios->id, 'base_hours' => 20]);
+    SelectionEntry::factory()->for($live)->create(['teacher_id' => $twoSelections->id, 'base_hours' => 40]);
+    SelectionEntry::factory()->for($other)->create(['teacher_id' => $twoSelections->id, 'base_hours' => 30]);
+    SelectionEntry::factory()->for($other)->create(['teacher_id' => $cancelledOnly->id, 'base_hours' => 0]);
+    SelectionEntry::factory()->for($cancelled)->create(['teacher_id' => $cancelledOnly->id, 'base_hours' => 40]);
+    SelectionEntry::factory()->for($elsewhere)->create(['teacher_id' => $nowhere->id, 'base_hours' => 40]);
+    SelectionEntry::factory()->for($live)->create(['teacher_id' => $mixedLow->id, 'base_hours' => 25]);
+    SelectionEntry::factory()->for($other)->create(['teacher_id' => $mixedLow->id, 'base_hours' => 30]);
+    SelectionEntry::factory()->for($live)->create(['teacher_id' => $mixedHigh->id, 'base_hours' => 35]);
+    SelectionEntry::factory()->for($other)->create(['teacher_id' => $mixedHigh->id, 'base_hours' => 40]);
+
+    $teachers = collect(app(ScheduleStateQuery::class)->teachers($this->term, [$career->id, $csvOnly->id, $honorarios->id, $twoSelections->id, $cancelledOnly->id, $nowhere->id, $mixedLow->id, $mixedHigh->id]))->keyBy('id');
+
+    // Tiempo completo titular: 22 (sus plazas mandan aunque venga en el CSV); 30 en el CSV es 16, 20 es 12; con dos
+    // selecciones, cada renglón se convierte y cuenta el menor (25 y 30 → 25 y 16 → 16; 35 y 40 → 35 y 22 → 22); un
+    // renglón en 0, una selección cancelada o de otro periodo no cuentan.
+    expect($teachers[$career->id]->teachingHours)->toBe(22)
+        ->and($teachers[$csvOnly->id]->teachingHours)->toBe(16)
+        ->and($teachers[$honorarios->id])->teachingHours->toBe(12)->isHonorarios->toBeTrue()
+        ->and($teachers[$twoSelections->id]->teachingHours)->toBe(16)
+        ->and($teachers[$cancelledOnly->id]->teachingHours)->toBe(0)
+        ->and($teachers[$nowhere->id]->teachingHours)->toBe(0)
+        ->and($teachers[$mixedLow->id]->teachingHours)->toBe(16)
+        ->and($teachers[$mixedHigh->id]->teachingHours)->toBe(22)
+        ->and($teachers[$career->id]->engineLimit)->toBeNull();
 });
 
 it('un perfil guardado inválido de otra modalidad, aun borrada, no rompe la foto: esa modalidad toma el perfil por omisión', function () {

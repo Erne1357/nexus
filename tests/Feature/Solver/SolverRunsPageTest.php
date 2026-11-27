@@ -136,20 +136,37 @@ it('el jefe lanza con el motor de prueba, ve la semana con los cambios y acepta:
     $page->assertSee('Aplicada');
 });
 
-it('SV-06: una violación HC-08 no retiene: el modal de aceptar y el aviso de la aplicada muestran «Problemas de entrada por corregir»', function () {
+it('SV-06: una violación HC-07 no retiene: el modal de aceptar y el aviso de la aplicada muestran «Problemas de entrada por corregir»', function () {
     $page = launchFromRunsPage($this->jefe);
     $run = SolverRun::query()->sole();
-    $run->update(['output' => [...$run->output, 'hard_violations' => [['rule' => 'HC-08', 'group_ids' => [$this->second->id], 'message' => 'Ana Pérez no tiene horas libres.']]]]);
+    $run->update(['output' => [...$run->output, 'hard_violations' => [['rule' => 'HC-07', 'group_ids' => [$this->second->id], 'message' => 'Los cupos pasan la capacidad del grupo.']]]]);
 
     $page->call('openAccept')
         ->assertSeeHtml('data-testid="accept-input-problems"')
         ->assertSee('Problemas de entrada por corregir')
-        ->assertSee('Ana Pérez no tiene horas libres.')
+        ->assertSee('Los cupos pasan la capacidad del grupo.')
         ->call('apply');
 
     expect($this->second->sessions()->count())->toBeGreaterThan(0);
 
     $page->assertSeeHtml('data-testid="applied-input-problems"')->assertSee('Problemas de entrada por corregir');
+});
+
+it('HC-08: las horas de más de una corrida no son «Problemas de entrada por corregir»: salen como aviso con el oficio pendiente (tarea 1.50)', function () {
+    $page = launchFromRunsPage($this->jefe);
+    $run = SolverRun::query()->sole();
+    $run->update(['output' => [...$run->output, 'hard_violations' => [['rule' => 'HC-08', 'group_ids' => [$this->second->id], 'message' => 'Ana Pérez no tiene horas libres.']]]]);
+
+    $page->call('openAccept')
+        ->assertDontSeeHtml('data-testid="accept-input-problems"')
+        ->assertSeeHtml('data-testid="accept-hour-notices"')
+        ->assertSee('Horas de más (aviso):')
+        ->assertSee('Ana Pérez no tiene horas libres.')
+        ->call('apply');
+
+    expect($this->second->sessions()->count())->toBeGreaterThan(0);
+
+    $page->assertDontSeeHtml('data-testid="applied-input-problems"')->assertSeeHtml('data-testid="applied-hour-notices"');
 });
 
 it('SV-02: con la carga cambiada, «Aceptar» abre el aviso de entrada vencida y no escribe', function () {

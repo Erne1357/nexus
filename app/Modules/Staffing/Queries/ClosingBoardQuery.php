@@ -135,7 +135,7 @@ final class ClosingBoardQuery
      * Las sumas de un conjunto de cargas, por columna del tablero.
      *
      * @param  Collection<int, LoadProgress>  $loads
-     * @return array{groups: int, hard: int, unscheduled: int, withoutTeacher: int, withoutRoom: int, others: int, justified: int}
+     * @return array{groups: int, hard: int, unscheduled: int, withoutTeacher: int, withoutRoom: int, others: int, justified: int, overBand: int}
      */
     private static function sums(Collection $loads): array
     {
@@ -147,12 +147,13 @@ final class ClosingBoardQuery
             'withoutRoom' => (int) $loads->sum('withoutRoom'),
             'others' => (int) $loads->sum(fn (LoadProgress $load): int => $load->others()),
             'justified' => (int) $loads->sum('justified'),
+            'overBand' => (int) $loads->sum('overBand'),
         ];
     }
 
     /**
      * Las cifras de cada carga del periodo, con una consulta para las banderas de los grupos (GroupClosingFlagsQuery),
-     * una para las solicitudes y una para los acuerdos. Cada carga se cuenta con la regla por grupo del veto
+     * una para las solicitudes, una para los acuerdos y una para los avisos de HC-08 (los que pasan su banda). Cada carga se cuenta con la regla por grupo del veto
      * (ClosingBlockers::tally) y el perfil de su modalidad, pero con los choques duros vigentes de `schedule_conflicts`.
      *
      * @param  \Illuminate\Database\Eloquent\Collection<int, AcademicLoad>  $loads
@@ -171,8 +172,9 @@ final class ClosingBoardQuery
             ->pluck('total', 'load_key');
 
         $agreements = $this->agreements->countsByLoad($term->getKey());
+        $overBand = $this->conflicts->hourNoticesByLoad($term);
 
-        return $loads->map(function (AcademicLoad $load) use ($groups, $requests, $agreements): LoadProgress {
+        return $loads->map(function (AcademicLoad $load) use ($groups, $requests, $agreements, $overBand): LoadProgress {
             $key = "{$load->modality_id}|{$load->department_id}";
             $ofLoad = $groups[$key] ?? collect();
             $blockers = ClosingBlockers::tally($ofLoad, $load->modality->profile);
@@ -195,6 +197,7 @@ final class ClosingBoardQuery
                 awaiting: $agreements[$key]['awaiting'] ?? 0,
                 justified: $blockers->justified,
                 blockingGroups: $blockers->groups,
+                overBand: $overBand[$key] ?? 0,
             );
         });
     }

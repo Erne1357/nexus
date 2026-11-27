@@ -21,6 +21,7 @@ use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
@@ -148,6 +149,8 @@ it('en el punto 8 falla con el motivo del veto si una carga no se puede cerrar (
 
 it('en la demo mezclada cierra cargas con justificaciones, quita al docente que se pasa de su tope (HC-08), reabre la última con su motivo y no toca las reservadas ni las de solicitudes aprobadas, sin repetir al volver a correr', function () {
     $cea = loadClosingDepartment('CEA', days: [1, 2], hours: [2 => 1]);
+    // HC-08 (tarea 1.50): 1 h frente a grupo + 2 = 3; con 5 externas, su grupo de 2 h lo pasa sin oficio.
+    TeacherExternalLoad::factory()->for(loadClosingGroup($cea, 2)->teacher)->create(['term_id' => test()->term->id, 'hours' => 5]);
     $ii = loadClosingDepartment('II', days: [3, 4]);
     loadClosingGroup($ii, 4)->update(['teacher_id' => null]);
     $mm = loadClosingDepartment('MM', days: [5]);

@@ -20,7 +20,8 @@ use Closure;
  * vez todos los grupos de las violaciones que queden y termina con una evaluación más.
  *
  * HC-08 no depende del horario (cuenta los grupos del docente, tengan o no sesiones): quitar sesiones no lo corrige, así
- * que se deja en la salida como problema de la entrada (PS-08, supuesto por confirmar). Sin estado entre llamadas.
+ * que se deja en la salida (PS-08, supuesto por confirmar). Con una entrada de la base no sale desde la tarea 1.50: lo
+ * asignado de más por las personas cabe en `remaining_hours`. Sin estado entre llamadas.
  */
 final readonly class FinalValidation
 {

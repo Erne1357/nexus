@@ -7,6 +7,9 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
+use App\Modules\Scheduling\Enums\ConflictSeverity;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Models\ScheduleConflict;
 use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
 use App\Modules\Staffing\Models\ChangeRequest;
@@ -85,6 +88,29 @@ it('un renglón por departamento con una entrada por modalidad con grupos y lo q
         ->and($loads['PRES']->procedures())->toBe(1)
         ->and($loads['PRES']->missing())->toBe(6)
         ->and($loads['PRES']->bucket())->toBe('missing');
+});
+
+it('HC-08: cuenta por carga los docentes que pasan su banda, uno por docente, como aviso que no falta (tarea 1.50)', function () {
+    $teacher = $this->world->teacher();
+    $first = $this->world->group(teacher: $teacher);
+    $second = $this->world->group(scheduled: false, teacher: $teacher);
+    GroupSession::factory()->for($second)->on(2, '07:00', '09:00')->inRoom($this->world->room($second->campus_id))->create();
+    $other = $this->world->group();
+    $notice = fn (Group $group) => ScheduleConflict::factory()->create([
+        'group_id' => $group->id, 'term_id' => $group->term_id, 'campus_id' => $group->campus_id, 'department_id' => $group->department_id,
+        'rule' => 'HC-08', 'severity' => ConflictSeverity::Soft, 'subject_type' => 'teacher', 'subject_id' => $group->teacher_id,
+        'message' => 'Pasa su banda de horas frente a grupo.',
+    ]);
+    $notice($first);
+    $notice($second);
+    $notice($other);
+    ScheduleConflict::factory()->create(['group_id' => $other->id, 'term_id' => $other->term_id, 'campus_id' => $other->campus_id, 'department_id' => $other->department_id,
+        'rule' => 'HC-08', 'severity' => ConflictSeverity::Soft, 'subject_type' => 'teacher', 'subject_id' => $other->teacher_id, 'resolved_at' => now()]);
+
+    $loads = closingBoardLoads(closingBoardOf(), 'SC');
+
+    expect($loads['PRES'])->overBand->toBe(2)->hard->toBe(0)->blockingGroups->toBe(0)
+        ->and($loads['PRES']->bucket())->toBe('ready');
 });
 
 it('HC-15: cuenta por grupo lo mismo que el veto (ClosingBlockersQuery), con la misma regla', function () {
@@ -237,5 +263,6 @@ it('lee todo el Tec en pocas consultas, sin importar cuántas cargas haya', func
     DB::enableQueryLog();
     closingBoardOf();
 
-    expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(7);
+    // Ocho: una más desde la tarea 1.50 por los avisos de HC-08 de todas las cargas, también constante.
+    expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(8);
 });

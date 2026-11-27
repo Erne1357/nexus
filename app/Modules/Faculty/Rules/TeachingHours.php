@@ -17,10 +17,13 @@ use App\Modules\Faculty\Enums\PositionKind;
  *   tabla del art. 149 (1→1, 2→1, 3→2 … 9→5; de 10 en adelante, la mitad hacia arriba: supuesto por confirmar).
  * - Apoyo y asistencia: 0 (supuesto por confirmar: no es plaza docente). Honorarios: 0, que es lo que ya valían sus
  *   horas base; el tope de `staffing.honorarios_max_hours` lo mide HC-08, no esta regla (supuesto por confirmar).
- * - El margen de ±2 (art. 147) lo aplica LoadBand (SEL-05).
+ * - El margen de ±2 (art. 147, MARGIN) lo aplican la banda de la selección (LoadBand, SEL-05) y HC-08 (1.50).
  */
 final class TeachingHours
 {
+    /** Art. 147: la carga frente a grupo puede variar dos horas arriba o abajo (la banda de SEL-05 y el tope de HC-08). */
+    public const int MARGIN = 2;
+
     /** Horas de carrera por familia y jornada [TC, ¾, ½] (arts. 143, 144 y 146). */
     private const array CAREER = [
         'titular' => ['tiempo_completo' => 22, 'tres_cuartos' => 16, 'medio_tiempo' => 12],
@@ -76,6 +79,16 @@ final class TeachingHours
             20 => 12,
             default => $hours,
         };
+    }
+
+    /**
+     * Las horas frente a grupo que se le piden al docente: las de sus plazas en Nexus (forPositions) y, si no tiene o
+     * dan 0 (solo apoyo u honorarios), las de su renglón del CSV de la selección (fromCsvHours; supuesto por
+     * confirmar). La comparten la selección (SEL-05) y HC-08 (1.50).
+     */
+    public static function target(int $fromPositions, int $csvHours): int
+    {
+        return $fromPositions > 0 ? $fromPositions : self::fromCsvHours($csvHours);
     }
 
     /** Art. 149 para n horas de asignatura sobre una plaza de carrera. */
