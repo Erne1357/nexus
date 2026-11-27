@@ -21,6 +21,7 @@ use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
+use App\Modules\Staffing\Rules\AdministrativeCap;
 use App\Modules\Staffing\Rules\ScheduleSummary;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -183,7 +184,7 @@ final class SelectionTimetableQuery
     /**
      * Las horas del docente en la selección y su base (SEL-05), para «Con este grupo llevarías…».
      *
-     * @return array{hours: int, base: int}
+     * @return array{hours: int, base: int, administrative: ?int}
      */
     public function hoursOf(Selection $selection, SelectionEntry $entry): array
     {
@@ -192,7 +193,7 @@ final class SelectionTimetableQuery
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->sum(DB::raw(SubjectTeacherHours::SQL));
 
-        return ['hours' => $hours, 'base' => $this->baseOf($selection, $entry)];
+        return ['hours' => $hours, 'base' => $this->baseOf($selection, $entry), 'administrative' => $this->administrativeOf($selection, $entry)];
     }
 
     /**
@@ -201,7 +202,7 @@ final class SelectionTimetableQuery
      * sin él, el nombre no sale de la consulta (SEL-05: el docente solo sabe que ya fue asignado).
      *
      * @param  (Closure(Group): bool)|null  $reveals
-     * @return array{days: list<int>, hours: list<string>, cells: array<string, list<Cell>>, my_hours: int, base_hours: int, my_groups: list<array<string, mixed>>, groups: int, free: int, turn: array<string, mixed>}
+     * @return array{days: list<int>, hours: list<string>, cells: array<string, list<Cell>>, my_hours: int, base_hours: int, administrative_hours: ?int, administrative_cap: int, my_groups: list<array<string, mixed>>, groups: int, free: int, turn: array<string, mixed>}
      */
     public function forTeacher(Selection $selection, ?Teacher $teacher, CarbonImmutable $now, ?SelectionEntry $entry = null, ?Closure $reveals = null): array
     {
@@ -240,6 +241,9 @@ final class SelectionTimetableQuery
             'cells' => $cells,
             'my_hours' => array_sum(array_column($mine, 'hours')),
             'base_hours' => $entry === null ? 0 : $this->baseOf($selection, $entry),
+            // PL-03: las horas administrativas de quien tiene plaza administrativa (sin banda), o null.
+            'administrative_hours' => $entry === null ? null : $this->administrativeOf($selection, $entry),
+            'administrative_cap' => AdministrativeCap::current(),
             'my_groups' => $mine,
             'groups' => $groups->count(),
             'free' => $groups->whereNull('teacher_id')->count(),
@@ -271,7 +275,7 @@ final class SelectionTimetableQuery
      * AssignTeacher). `$order` es SelectionOrderQuery::forSelection().
      *
      * @param  list<array<string, mixed>>  $order
-     * @return list<array{teacher_id: string, position: int, name: string, tier_label: ?string, hours: int, base_hours: int, status: string, in_turn: bool, clash_with: ?string}>
+     * @return list<array{teacher_id: string, position: int, name: string, tier_label: ?string, hours: int, base_hours: int, administrative_hours: ?int, status: string, in_turn: bool, clash_with: ?string}>
      */
     public function candidates(Selection $selection, Group $group, array $order): array
     {
@@ -285,6 +289,7 @@ final class SelectionTimetableQuery
             ->toBase()
             ->pluck('hours', 'teacher_id');
         $targets = $this->targets->forTerm($this->term($selection), array_column(array_map(fn (array $row): array => ['id' => $row['teacher_id'], 'csv' => (int) $row['base_hours']], $order), 'csv', 'id'));
+        $administrative = $this->targets->administrativeForTerm($this->term($selection), $ids);
         $clashes = $this->clashesFor($selection, $group, $ids);
 
         return array_map(fn (array $row): array => [
@@ -294,6 +299,7 @@ final class SelectionTimetableQuery
             'tier_label' => $row['tier_label'],
             'hours' => (int) ($hours[$row['teacher_id']] ?? 0),
             'base_hours' => $targets[$row['teacher_id']] ?? 0,
+            'administrative_hours' => $administrative[$row['teacher_id']] ?? null,
             'status' => $row['status'],
             'in_turn' => $row['in_turn'],
             'clash_with' => $clashes[$row['teacher_id']] ?? null,
@@ -464,6 +470,14 @@ final class SelectionTimetableQuery
     private function baseOf(Selection $selection, SelectionEntry $entry): int
     {
         return $this->targets->forTerm($this->term($selection), [$entry->teacher_id => (int) $entry->base_hours])[$entry->teacher_id] ?? 0;
+    }
+
+    /**
+     * PL-03: las horas administrativas del docente (apoyo y asistencia) o null si no tiene plaza administrativa.
+     */
+    private function administrativeOf(Selection $selection, SelectionEntry $entry): ?int
+    {
+        return $entry->teacher_id === null ? null : ($this->targets->administrativeForTerm($this->term($selection), [$entry->teacher_id])[$entry->teacher_id] ?? null);
     }
 
     private function term(Selection $selection): Term

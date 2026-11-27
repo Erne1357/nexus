@@ -48,11 +48,23 @@ it('el objetivo de la selección sale de las plazas y, sin ellas, de las horas d
     expect($targets)->toBe([$withPositions->id => 22, $without->id => 16]);
 });
 
-it('PL-01 (supuesto por confirmar): quien solo tiene plaza de apoyo u honorarios (0 h frente a grupo) usa el CSV', function () {
-    $support = Teacher::factory()->create();
+it('PL-01 (supuesto por confirmar): quien solo tiene plaza de honorarios (0 h frente a grupo) usa el CSV', function () {
     $fees = Teacher::factory()->create();
-    TeacherPosition::factory()->for($support)->create(['kind' => PositionKind::Apoyo, 'base_hours' => 36, 'category' => 'IA08']);
     TeacherPosition::factory()->for($fees)->honorarios()->create();
 
-    expect(app(TeachingTargetQuery::class)->forTerm($this->term, [$support->id => 20, $fees->id => 8]))->toBe([$support->id => 12, $fees->id => 8]);
+    expect(app(TeachingTargetQuery::class)->forTerm($this->term, [$fees->id => 8]))->toBe([$fees->id => 8]);
+});
+
+it('PL-03: quien tiene plaza de apoyo no usa el CSV (sin banda) y se identifica por sus horas administrativas; antes valía 12 h por el CSV', function () {
+    $support = Teacher::factory()->create();
+    $mixed = Teacher::factory()->create();
+    $career = Teacher::factory()->create();
+    TeacherPosition::factory()->for($support)->create(['kind' => PositionKind::Apoyo, 'base_hours' => 36, 'category' => 'IA08']);
+    TeacherPosition::factory()->for($mixed)->create(['kind' => PositionKind::Apoyo, 'base_hours' => 36, 'category' => 'IA08']);
+    TeacherPosition::factory()->for($mixed)->create(['kind' => PositionKind::Asignatura, 'base_hours' => 6]);
+    TeacherPosition::factory()->for($career)->tiempoCompleto()->create();
+    $ids = [$support->id => 20, $mixed->id => 20, $career->id => 20];
+
+    expect(app(TeachingTargetQuery::class)->forTerm($this->term, $ids))->toBe([$support->id => 0, $mixed->id => 0, $career->id => 22])
+        ->and(app(TeachingTargetQuery::class)->administrativeForTerm($this->term, array_keys($ids)))->toBe([$support->id => 36, $mixed->id => 36]);
 });

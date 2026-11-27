@@ -37,14 +37,16 @@
 
     <div class="flex-1 space-y-6 px-5 py-4">
         <dl class="grid grid-cols-2 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 min-[480px]:grid-cols-4">
-            @foreach ([[$row->teachingHours === null ? 'Base' : 'Frente a grupo', $row->teachingHours ?? $row->baseHours, ''], ['Otra modalidad', $row->externalHours, ''], ['Asignadas', $row->assignedHours, ''], ['Restan', $row->remainingHours, $row->remainingHours < 0 ? 'text-warning' : '']] as [$label, $value, $tone])
+            @foreach ([[$row->isAdministrative() ? 'Plaza administrativa' : ($row->teachingHours === null ? 'Base' : 'Frente a grupo'), $row->isAdministrative() ? $row->administrativeHours : ($row->teachingHours ?? $row->baseHours), ''], ['Otra modalidad', $row->externalHours, ''], ['Asignadas', $row->assignedHours, ''], ['Restan', $row->remainingHours, $row->remainingHours < 0 ? 'text-warning' : '']] as [$label, $value, $tone])
                 <div class="min-w-0 bg-base-100 p-3">
                     <dt class="truncate text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $label }}</dt>
                     <dd class="mt-1 font-mono text-2xl font-semibold leading-none tabular-nums {{ $tone }}" data-testid="drawer-{{ Str::slug($label) }}">{{ $value }}</dd>
                 </div>
             @endforeach
         </dl>
-        @if ($row->bandLabel() !== null)
+        @if ($row->administrativeSummary() !== null)
+            <p class="-mt-3 text-sm text-neutral" data-testid="drawer-band"><span class="font-mono text-base-content">{{ $row->administrativeSummary() }}</span></p>
+        @elseif ($row->bandLabel() !== null)
             <p class="-mt-3 text-sm text-neutral" data-testid="drawer-band">Frente a grupo: <span class="font-mono text-base-content">{{ $row->bandLabel() }}</span> · base de su plaza <span class="font-mono text-base-content">{{ $row->baseHours }} h</span></p>
         @endif
         @if ($row->hourNotice() !== null)

@@ -60,6 +60,11 @@ final class TeacherWeeklyLoadQuery implements TeacherWeeklyLoad
         $hours = $load['hours'];
         $split = $load['source'] === 'nexus' && $load['groups'] !== [] ? $this->split($teacher, $load['days'], $load['groups']) : ['days' => $load['days'], 'departments' => []];
 
+        $administrative = [
+            'administrative_hours' => $hours['administrative'], 'administrative_cap' => $hours['administrative_cap'],
+            'administrative_excess' => max(0, -$hours['remaining']), 'assigned_hours' => $hours['assigned'], 'external_hours' => $hours['external'],
+        ];
+
         return [
             'term' => $term->name,
             'code' => $term->code,
@@ -72,12 +77,15 @@ final class TeacherWeeklyLoadQuery implements TeacherWeeklyLoad
             'band_from' => $hours['band_from'],
             'band_to' => $hours['band_to'],
             'honorarios_cap' => $hours['honorarios_cap'],
+            // PL-03 y HC-22: con plaza administrativa no hay banda; trae el resumen «Plaza administrativa: 36 h · clases 4 h · 40 de 42 h» y, si pasa el tope de 42 h, su aviso.
+            'administrative' => $hours['administrative'],
+            'administrative_summary' => $hours['administrative'] === null ? null : TeacherHourLimit::administrativeSummary($administrative),
             'over_band' => $hours['over_band'],
-            'notice' => TeacherHourLimit::notice([
+            'notice' => $hours['administrative'] === null ? TeacherHourLimit::notice([
                 'teaching_hours' => $hours['teaching'], 'band_from' => $hours['band_from'], 'band_to' => $hours['band_to'],
                 'honorarios_cap' => $hours['honorarios_cap'], 'assigned_hours' => $hours['assigned'], 'external_hours' => $hours['external'],
                 'over_band' => $hours['over_band'], 'accepted' => $hours['accepted'],
-            ]),
+            ]) : TeacherHourLimit::administrativeNotice($administrative),
         ];
     }
 

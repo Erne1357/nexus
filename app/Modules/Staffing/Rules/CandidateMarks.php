@@ -7,7 +7,7 @@ use App\Modules\Scheduling\Validation\ValidationResult;
 
 /**
  * Las marcas que el validador de Scheduling (checkTeachers) le pone a un candidato del ranking docente, por id de regla
- * (reglas-de-negocio.md, «Ranking docente (desempate)»): choque (HC-01) y no disponible (HC-09) lo bajan al bloque
+ * (reglas-de-negocio.md, «Ranking docente (desempate)»): choque (HC-01), no disponible (HC-09) y, con plaza administrativa, pasar el tope de 42 h con el grupo (HC-22, `sin_cupo`: no le caben, no se puede asignar) lo bajan al bloque
  * final («no pueden tomarlo»); con el grupo pasar su banda de horas frente a grupo (HC-08, aviso desde la tarea 1.50:
  * se puede asignar, con el oficio de conformidad pendiente) lo baja a su propio bloque, «Pasan su banda», debajo de los
  * demás y antes del final (decisión del coordinador del riel, 26 de noviembre de 2026); la clave `sin_horas` se conserva
@@ -17,7 +17,7 @@ use App\Modules\Scheduling\Validation\ValidationResult;
 final class CandidateMarks
 {
     /** Las reglas que bajan al docente al bloque final («Un solo bloque final»), con su marca. */
-    public const array FINAL_TIER = ['HC-01' => 'choque', 'HC-09' => 'no_disponible'];
+    public const array FINAL_TIER = ['HC-01' => 'choque', 'HC-09' => 'no_disponible', 'HC-22' => 'sin_cupo'];
 
     /** Las reglas que bajan al docente al bloque «Pasan su banda» (asignable), con su marca. */
     public const array BAND_TIER = ['HC-08' => 'sin_horas'];

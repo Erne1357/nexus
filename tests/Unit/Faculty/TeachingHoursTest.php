@@ -63,3 +63,12 @@ it('PL-01 (supuesto por confirmar): sin plazas en Nexus, las horas del CSV pasan
         ->and(TeachingHours::fromCsvHours(8))->toBe(8)
         ->and(TeachingHours::fromCsvHours(0))->toBe(0);
 });
+
+it('PL-03: las horas administrativas son la suma de las plazas de apoyo y asistencia; sin ellas, null', function () {
+    expect(TeachingHours::administrativeHours([plaza(PositionKind::Apoyo, 'IA08', 36)]))->toBe(36)
+        ->and(TeachingHours::administrativeHours([plaza(PositionKind::Apoyo, 'IA08', 36), plaza(PositionKind::Asignatura, null, 6)]))->toBe(36)
+        ->and(TeachingHours::administrativeHours([plaza(PositionKind::Apoyo, null, 20), plaza(PositionKind::Apoyo, null, 10)]))->toBe(30)
+        ->and(TeachingHours::administrativeHours([plaza(PositionKind::TiempoCompleto, 'E3817')]))->toBeNull()
+        ->and(TeachingHours::administrativeHours([]))->toBeNull()
+        ->and(TeachingHours::ADMINISTRATIVE_MAX)->toBe(42);
+});

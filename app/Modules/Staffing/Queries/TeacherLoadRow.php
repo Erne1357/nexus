@@ -9,7 +9,9 @@ use App\Modules\Scheduling\Rules\TeacherHourLimit;
  * Un docente en el tablero de carga por docente: sus horas de `teacher_term_loads`, su plaza, lo asignado por campus,
  * sus grupos y sus sesiones de la semana para el drawer. `teachingHours`, `bandLimitHours` y `honorariosCapHours` son
  * los de HC-08 desde la tarea 1.50 (nulos en una fila calculada antes): con ellos la pantalla muestra la banda de horas
- * frente a grupo y el aviso del oficio con los mismos textos que el validador (TeacherHourLimit).
+ * frente a grupo y el aviso del oficio con los mismos textos que el validador (TeacherHourLimit). Con plaza administrativa
+ * (PL-03: `administrativeHours` y `administrativeCapHours`) no hay banda: muestra el resumen «Plaza administrativa: 36 h ·
+ * clases 4 h · 40 de 42 h» y excede si pasa el tope duro de 42 h (HC-22).
  */
 final readonly class TeacherLoadRow
 {
@@ -49,6 +51,8 @@ final readonly class TeacherLoadRow
         public ?int $teachingHours = null,
         public ?int $bandLimitHours = null,
         public ?int $honorariosCapHours = null,
+        public ?int $administrativeHours = null,
+        public ?int $administrativeCapHours = null,
     ) {}
 
     /**
@@ -75,11 +79,32 @@ final readonly class TeacherLoadRow
     }
 
     /**
+     * PL-03: tiene una plaza administrativa (apoyo y asistencia) y no lleva banda de ±2.
+     */
+    public function isAdministrative(): bool
+    {
+        return $this->administrativeHours !== null;
+    }
+
+    /**
+     * «Plaza administrativa: 36 h · clases 4 h · 40 de 42 h» (en el tope, «· ya no le caben clases»), o null sin plaza administrativa.
+     */
+    public function administrativeSummary(): ?string
+    {
+        return $this->isAdministrative() ? TeacherHourLimit::administrativeSummary([
+            'administrative_hours' => $this->administrativeHours,
+            'administrative_cap' => $this->administrativeCapHours ?? TeachingHours::ADMINISTRATIVE_MAX,
+            'assigned_hours' => $this->assignedHours,
+            'external_hours' => $this->externalHours,
+        ]) : null;
+    }
+
+    /**
      * «22 h (20 a 24)», o «12 h (tope de honorarios)»; null en una fila calculada antes de la tarea 1.50.
      */
     public function bandLabel(): ?string
     {
-        return $this->teachingHours === null ? null : TeacherHourLimit::bandLabel($this->hourLimit());
+        return $this->teachingHours === null || $this->isAdministrative() ? null : TeacherHourLimit::bandLabel($this->hourLimit());
     }
 
     /**
@@ -87,6 +112,13 @@ final readonly class TeacherLoadRow
      */
     public function hourNotice(): ?string
     {
+        if ($this->isAdministrative()) {
+            return TeacherHourLimit::administrativeNotice([
+                'administrative_hours' => $this->administrativeHours, 'administrative_cap' => $this->administrativeCapHours ?? TeachingHours::ADMINISTRATIVE_MAX,
+                'administrative_excess' => $this->excessHours(), 'assigned_hours' => $this->assignedHours, 'external_hours' => $this->externalHours,
+            ]);
+        }
+
         return $this->teachingHours === null || $this->bandLimitHours === null ? null : TeacherHourLimit::notice($this->hourLimit());
     }
 

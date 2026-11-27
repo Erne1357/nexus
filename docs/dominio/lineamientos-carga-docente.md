@@ -46,7 +46,7 @@ La categoría de cada plaza se guarda en `teacher_positions.category` (la import
 - Asignatura sola: todas sus horas (arts. 140 y 155).
 - Asignatura más plaza de carrera: la tabla del art. 149. **(supuesto por confirmar)** Se aplica también con tiempo completo, aunque el artículo solo nombra medio tiempo y tres cuartos, y de 10 horas en adelante la mitad hacia arriba (la tabla llega a 9).
 - Plaza de carrera sin categoría conocida: titular. **(supuesto por confirmar)**
-- Apoyo y asistencia: 0, porque no es plaza docente. **(supuesto por confirmar)**
+- Apoyo y asistencia: 0 en esta cuenta, porque no es plaza docente; quien la tiene es de **plaza administrativa** y no se mide con esta tabla ni con la banda de ±2, sino con PL-03 y HC-22: sus horas administrativas (las de sus plazas de apoyo) más sus clases y horas externas no pasan de 42 h (confirmado el 27 de noviembre de 2026; que apoyo sea plaza administrativa y sus 36 h por omisión siguen siendo supuestos por confirmar). Ver PL-03 y HC-22 en [reglas-de-negocio.md](reglas-de-negocio.md).
 - Honorarios: 0, lo que ya valían sus horas base; su tope sigue siendo `staffing.honorarios_max_hours` en HC-08. **(supuesto por confirmar)**
 - HC-08 (tarea 1.50, confirmado el 26 de noviembre de 2026): se mide contra estas horas frente a grupo + 2 (art. 147), con el mismo respaldo del CSV que la selección, y dejó de ser tope duro: pasarse se permite con un oficio de conformidad del docente, que Nexus todavía no registra («oficio pendiente»). Ver HC-08 en [reglas-de-negocio.md](reglas-de-negocio.md).
 - Varias plazas: se suman las horas de cada una (tomadas por familia y jornada).
