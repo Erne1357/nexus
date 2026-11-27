@@ -19,6 +19,7 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\OrgUnitKind;
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
@@ -27,6 +28,7 @@ use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use App\Modules\Core\Support\PrivacyNotice;
 use Database\Seeders\DemoSeeder;
 use Dom\Element;
 use Dom\HTMLDocument;
@@ -559,4 +561,20 @@ function failingDisk(string $name, array $methods): void
     }
 
     Storage::set($name, $disk);
+}
+
+/**
+ * Deja al usuario de un alumno recién migrado (con su NIP del SII, SyncStudentAccounts) como si ya hubiera cambiado su
+ * NIP por una contraseña propia y aceptado el aviso de privacidad vigente (AC-12 y AC-22), para que sus peticiones HTTP
+ * pasen EnsurePasswordIsChanged y EnsurePrivacyNoticeAccepted. Las de Livewire::test() no pasan por esos middleware.
+ */
+function settledStudentUser(User $user): User
+{
+    $user->forceFill([
+        'password_origin' => PasswordOrigin::User,
+        'privacy_notice_accepted_at' => now(),
+        'privacy_notice_version' => PrivacyNotice::VERSION,
+    ])->save();
+
+    return $user;
 }

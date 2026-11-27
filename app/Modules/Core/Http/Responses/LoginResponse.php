@@ -6,6 +6,7 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\CredentialQuery;
 use App\Modules\Core\Queries\PageTrailQuery;
+use App\Modules\Core\Rules\AccessRequirements;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
@@ -18,7 +19,8 @@ use Symfony\Component\HttpFoundation\Response;
  * llevarla a la banda, la dirección a la que sigue (la que se había pedido o el inicio, como la redirección) y si la
  * siguiente página tiene banda, con su ruta (PageTrailQuery: el área y la pantalla, como las pinta la banda), que ocupa su
  * lugar en la banda de llegada para que la credencial caiga donde estará (#694). Sin banda: con cambio de contraseña
- * pendiente, o si la página no la tiene (una descarga, una página pública, una de otro puesto). Sin JSON redirige como
+ * pendiente (también el del NIP del SII, AC-12) o con el aviso de privacidad por aceptar (AC-22), porque la siguiente
+ * página es la de cambiarla o la del aviso, o si la página no la tiene (una descarga, una página pública, una de otro puesto). Sin JSON redirige como
  * siempre.
  *
  * No guarda estado: el contexto se pide en cada respuesta (Octane).
@@ -37,7 +39,9 @@ final class LoginResponse implements LoginResponseContract
         }
 
         $user = $request->user();
-        $page = $user instanceof User && $user->must_change_password ? null : app(PageTrailQuery::class)->forUrl($target->getTargetUrl(), app(Actor::class));
+        $pending = $user instanceof User
+            && (AccessRequirements::mustChangePassword($user) || app(AccessRequirements::class)->mustAcceptPrivacyNotice($user));
+        $page = $pending ? null : app(PageTrailQuery::class)->forUrl($target->getTargetUrl(), app(Actor::class));
 
         return new JsonResponse([
             'redirect' => $target->getTargetUrl(),

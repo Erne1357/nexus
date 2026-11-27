@@ -6,19 +6,22 @@ use App\Modules\CatalogValidation\Actions\NotifyPendingReviews;
 use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
+use App\Modules\Core\Actions\SavePositionMailbox;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\HeldPositionMail;
+use App\Modules\Core\Models\PositionMailbox;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
-use Illuminate\Support\Facades\Notification;
 use Symfony\Component\Mailer\SentMessage;
 use Symfony\Component\Mime\Address;
 
 /*
-| CV11 (confirmado el 15 de noviembre de 2026): el correo del aviso de apertura y del recordatorio de la validación va
-| al correo institucional de la ficha de docente del jefe; si la ficha no tiene, al de su usuario, si es del dominio
-| institucional; sin ninguno, el aviso va solo a la campana. Nunca va al correo personal. Las pruebas mandan el correo
-| de verdad (transporte `array`, cola `sync`) y miran a quién llegó.
+| CE-02 (confirmado el 26 de noviembre de 2026): el aviso de apertura y el recordatorio de la validación competen a la
+| jefatura, así que su correo va al buzón del puesto (`position_mailboxes`) y no al de la persona; sin buzón, la campana
+| llega y el correo espera hasta que el admin lo capture. CV11 (confirmado el 15 de noviembre de 2026) queda para el
+| aviso que no se manda a un puesto: la ficha de docente del jefe, luego su usuario, nunca el personal. Las pruebas
+| mandan el correo de verdad (transporte `array`, cola `sync`) y miran a quién llegó.
 */
 
 beforeEach(function () {
@@ -63,85 +66,90 @@ function headRecord(?string $institutionalEmail): Teacher
     return Teacher::factory()->create(['user_id' => test()->jefe->id, 'institutional_email' => $institutionalEmail]);
 }
 
-it('CV11: el aviso va al correo institucional de la ficha del jefe, no al personal de su usuario', function (string $kind) {
-    headRecord('ana.soto@cdjuarez.tecnm.mx');
+/**
+ * El aviso de la validación sin puesto: sigue la regla de CV11.
+ */
+function personalReviewNotice(): CatalogReviewsPending
+{
+    return new CatalogReviewsPending(test()->term, test()->sis, [Catalog::Teachers]);
+}
 
-    noticeHeads($kind);
+describe('CE-02: el buzón de la jefatura', function () {
+    it('con buzón, el aviso va al buzón del puesto y no a la ficha ni al usuario del jefe', function (string $kind) {
+        $this->jefe->update(['email' => 'asoto@cdjuarez.tecnm.mx']);
+        headRecord('ana.soto@cdjuarez.tecnm.mx');
+        PositionMailbox::factory()->create(['org_unit_id' => $this->sis->id, 'email' => 'jefatura_syc@cdjuarez.tecnm.mx']);
 
-    expect(mailedTo())->toBe(['ana.soto@cdjuarez.tecnm.mx'])
-        ->and($this->jefe->notifications()->count())->toBe(1);
-})->with(['apertura', 'recordatorio']);
+        noticeHeads($kind);
 
-it('CV11: la ficha gana aunque su usuario también tenga un correo institucional', function (string $kind) {
-    $this->jefe->update(['email' => 'asoto@cdjuarez.tecnm.mx']);
-    headRecord('ana.soto@cdjuarez.tecnm.mx');
+        expect(mailedTo())->toBe(['jefatura_syc@cdjuarez.tecnm.mx'])
+            ->and($this->jefe->notifications()->count())->toBe(1);
+    })->with(['apertura', 'recordatorio']);
 
-    noticeHeads($kind);
+    it('sin buzón, la campana llega y el correo espera aunque el jefe tenga correo institucional', function (string $kind) {
+        headRecord('ana.soto@cdjuarez.tecnm.mx');
 
-    expect(mailedTo())->toBe(['ana.soto@cdjuarez.tecnm.mx']);
-})->with(['apertura', 'recordatorio']);
+        noticeHeads($kind);
 
-it('CV11: si la ficha no tiene correo institucional, va al institucional de su usuario', function (string $kind, bool $hasRecord) {
-    $this->jefe->update(['email' => 'ana.soto@cdjuarez.tecnm.mx']);
+        expect(mailedTo())->toBe([])
+            ->and($this->jefe->notifications()->count())->toBe(1)
+            ->and(HeldPositionMail::query()->sole())->org_unit_id->toBe($this->sis->id)->kind->toBe('CatalogReviewsPending');
+    })->with(['apertura', 'recordatorio']);
 
-    if ($hasRecord) {
-        headRecord(null);
-    }
+    it('de punta a punta: el aviso sale de la cola, espera cifrado y, al capturar el buzón, sale con sus modelos restaurados y lo que falta', function () {
+        noticeHeads('apertura');
 
-    noticeHeads($kind);
+        $held = HeldPositionMail::query()->sole();
 
-    expect(mailedTo())->toBe(['ana.soto@cdjuarez.tecnm.mx']);
-})->with(['apertura', 'recordatorio'])->with(['con ficha sin correo' => true, 'sin ficha' => false]);
+        expect($held->notification)->not->toContain('Sistemas y Computación')->not->toContain('CatalogReviewsPending')
+            ->and($held->subject)->toBe('Tienes catálogos por validar');
 
-it('CV11: con solo un correo personal no le llega ningún correo, solo la campana', function (string $kind, bool $hasRecord) {
-    if ($hasRecord) {
-        headRecord(null);
-    }
+        app(SavePositionMailbox::class)->handle(['role' => 'jefe_departamento', 'org_unit_id' => $this->sis->id, 'email' => 'jefatura_syc@cdjuarez.tecnm.mx']);
 
-    noticeHeads($kind);
+        $sent = app('mail.manager')->mailer()->getSymfonyTransport()->messages()->sole()->getOriginalMessage();
 
-    expect(mailedTo())->toBe([])
-        ->and($this->jefe->notifications()->count())->toBe(1);
-})->with(['apertura', 'recordatorio'])->with(['con ficha sin correo' => true, 'sin ficha' => false]);
-
-it('CV11: sin ficha ni correo, el aviso va solo a la campana', function (string $kind) {
-    $this->jefe->update(['email' => null]);
-    Notification::fake();
-
-    noticeHeads($kind);
-
-    Notification::assertSentTo($this->jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $notice, array $channels) => $channels === ['database']
-        && $this->jefe->routeNotificationFor('mail', $notice) === null);
-})->with(['apertura', 'recordatorio']);
-
-it('CV11: el canal de correo se decide con la misma dirección que recibe el correo', function () {
-    headRecord('ana.soto@cdjuarez.tecnm.mx');
-    Notification::fake();
-
-    noticeHeads('apertura');
-
-    Notification::assertSentTo($this->jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $notice, array $channels) => $channels === ['database', 'mail']
-        && $this->jefe->routeNotificationFor('mail', $notice) === 'ana.soto@cdjuarez.tecnm.mx');
+        expect(mailedTo())->toBe(['jefatura_syc@cdjuarez.tecnm.mx'])
+            ->and($sent->getSubject())->toBe('Tienes catálogos por validar')
+            ->and($sent->getHtmlBody())->toContain('En Sistemas y Computación te falta validar')->toContain('Docentes')
+            ->and($held->fresh()->released_at)->not->toBeNull()
+            ->and($this->jefe->notifications()->count())->toBe(1);
+    });
 });
 
-it('CV11: con la ficha inactiva, sin borrar, el aviso va igual a su correo institucional (confirmado el 15 de noviembre de 2026)', function (string $kind) {
-    $this->jefe->update(['email' => 'asoto@cdjuarez.tecnm.mx']);
-    Teacher::factory()->create(['user_id' => $this->jefe->id, 'institutional_email' => 'ana.soto@cdjuarez.tecnm.mx', 'is_active' => false]);
+describe('CV11: el aviso que no se manda a un puesto', function () {
+    it('va al correo institucional de la ficha del jefe, que gana al de su usuario', function () {
+        $this->jefe->update(['email' => 'asoto@cdjuarez.tecnm.mx']);
+        headRecord('ana.soto@cdjuarez.tecnm.mx');
 
-    noticeHeads($kind);
+        expect($this->jefe->routeNotificationFor('mail', personalReviewNotice()))->toBe('ana.soto@cdjuarez.tecnm.mx')
+            ->and(personalReviewNotice()->via($this->jefe))->toBe(['database', 'mail']);
+    });
 
-    expect(mailedTo())->toBe(['ana.soto@cdjuarez.tecnm.mx']);
-})->with(['apertura', 'recordatorio']);
+    it('si la ficha no tiene, va al institucional de su usuario; con solo un personal, a ninguno', function () {
+        headRecord(null);
 
-it('CV11: una ficha borrada o con un correo que no es del dominio institucional no cuenta (supuesto por confirmar)', function (string $case) {
-    $this->jefe->update(['email' => 'ana.soto@cdjuarez.tecnm.mx']);
-    $record = headRecord($case === 'borrada' ? 'asoto@cdjuarez.tecnm.mx' : 'asoto@itcj.edu.mx');
+        expect($this->jefe->routeNotificationFor('mail', personalReviewNotice()))->toBeNull()
+            ->and(personalReviewNotice()->via($this->jefe))->toBe(['database']);
 
-    if ($case === 'borrada') {
-        $record->delete();
-    }
+        $this->jefe->update(['email' => 'ana.soto@cdjuarez.tecnm.mx']);
 
-    noticeHeads('apertura');
+        expect($this->jefe->routeNotificationFor('mail', personalReviewNotice()))->toBe('ana.soto@cdjuarez.tecnm.mx');
+    });
 
-    expect(mailedTo())->toBe(['ana.soto@cdjuarez.tecnm.mx']);
-})->with(['borrada', 'de otro dominio']);
+    it('una ficha borrada o con un correo que no es del dominio institucional no cuenta (supuesto por confirmar)', function (string $case) {
+        $this->jefe->update(['email' => 'ana.soto@cdjuarez.tecnm.mx']);
+        $record = headRecord($case === 'borrada' ? 'asoto@cdjuarez.tecnm.mx' : 'asoto@itcj.edu.mx');
+
+        if ($case === 'borrada') {
+            $record->delete();
+        }
+
+        expect($this->jefe->routeNotificationFor('mail', personalReviewNotice()))->toBe('ana.soto@cdjuarez.tecnm.mx');
+    })->with(['borrada', 'de otro dominio']);
+
+    it('con la ficha inactiva, sin borrar, va igual a su correo institucional (confirmado el 15 de noviembre de 2026)', function () {
+        Teacher::factory()->create(['user_id' => $this->jefe->id, 'institutional_email' => 'ana.soto@cdjuarez.tecnm.mx', 'is_active' => false]);
+
+        expect($this->jefe->routeNotificationFor('mail', personalReviewNotice()))->toBe('ana.soto@cdjuarez.tecnm.mx');
+    });
+});

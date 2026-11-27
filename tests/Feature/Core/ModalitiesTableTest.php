@@ -20,8 +20,9 @@ beforeEach(function () {
     // Las tablas de la carga, la apertura y el calendario del periodo, los nombramientos y la modalidad del alumno
     // apuntan al catálogo: sus migraciones, posteriores, se deshacen primero, de la última a la primera (la primera, la
     // contracción, que devuelve a los campus su modalidad y su perfil). La proyección de demanda, el historial de grupos
-    // por materia (y sus sesiones, 1.24.1), la evaluación de la precisión (fase 5) las corridas del motor (fase 6) y las selecciones de carga (fase 1, 1.33) también
+    // por materia (y sus sesiones, 1.24.1), la evaluación de la precisión (fase 5) las corridas del motor (fase 6) y las selecciones de carga (fase 1, 1.33) y el buzón del puesto (1.63b, CE-02) también
     // apuntan a la modalidad, así que van antes que todas, de la más nueva a la más vieja.
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_26_000631_create_position_mailboxes_table.php'))->down();
     (require base_path('app/Modules/Staffing/Database/Migrations/2026_11_25_000401_create_staffing_prior_choices_table.php'))->down();
     (require base_path('app/Modules/Staffing/Database/Migrations/2026_11_24_000303_create_staffing_selection_loads_table.php'))->down();
     (require base_path('app/Modules/Staffing/Database/Migrations/2026_11_24_000302_create_staffing_selection_entries_table.php'))->down();

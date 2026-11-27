@@ -69,7 +69,7 @@ it('D8-bis: la ficha del alumno lleva una sola consulta de alias por plan, sin i
 });
 
 it('D8-bis: la retícula y el kárdex del alumno muestran 1EA principal y ACF-2301 debajo, y su identidad sigue siendo la de Nexus', function () {
-    $page = Livewire::actingAs($this->staff)->test('students::pages.student', ['student' => $this->student->id])
+    $page = Livewire::actingAs($this->staff)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $this->student->id])
         ->assertSeeHtml('data-subject="ACF-2301"')
         ->assertSeeHtml('shrink-0">1EA</span>')
         ->assertSeeHtml('data-secondary-code>ACF-2301</span>')
@@ -85,7 +85,7 @@ it('D8-bis: la retícula y el kárdex del alumno muestran 1EA principal y ACF-23
 });
 
 it('D8-bis: el «Pide» de la retícula usa la misma clave principal que el mosaico del requisito', function () {
-    $page = Livewire::actingAs($this->staff)->test('students::pages.student', ['student' => $this->student->id]);
+    $page = Livewire::actingAs($this->staff)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $this->student->id]);
 
     expect($page->html())->toContain('Pide <span class="font-mono font-semibold">2VC</span>')->not->toContain('Pide <span class="font-mono font-semibold">ACF-2303</span>')
         ->toContain('data-label="1EA"');

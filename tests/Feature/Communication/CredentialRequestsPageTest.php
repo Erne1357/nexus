@@ -171,3 +171,29 @@ it('CO-09: quien atiende la bandeja pero no administra fotos no ve «Subir foto�
     expect(Storage::disk('student_photos')->exists('2021/21111182.jpg'))->toBeFalse()
         ->and($request->fresh()->photo_updated_at)->toBeNull();
 });
+
+it('CO-12: la bandeja muestra el motivo y lo del SIISAE, y el drawer avisa que la foto se agregó sola', function () {
+    CredentialRequest::factory()->create([
+        'student_id' => $this->ana->id, 'wants_reposition' => true, 'wants_photo' => true,
+        'reposition_reason' => 'lost_was_santander', 'siisae_photo_visible' => false, 'siisae_data_correct' => true,
+    ]);
+    CredentialRequest::factory()->create(['student_id' => $this->beto->id, 'wants_reposition' => false, 'wants_photo' => true]);
+
+    $page = Livewire::actingAs($this->head)->test('communication::pages.credential-requests')
+        ->assertSee('Motivo')->assertSee('En el SIISAE')
+        ->assertSee('Por daño o extravío (ya contaba con tarjeta Santander)')
+        ->assertSee('Sin foto')->assertSee('Datos correctos');
+
+    $page->call('openRequest', CredentialRequest::query()->where('student_id', $this->ana->id)->value('id'))
+        ->assertSeeHtml('data-testid="request-reason"')
+        ->assertSeeHtml('data-testid="photo-auto-note"')
+        ->assertSee('La foto se agregó sola porque no ve su foto en el SIISAE.');
+});
+
+it('CO-12: una solicitud sin respuestas del SIISAE (foto sola o anterior) no inventa motivo ni insignias', function () {
+    CredentialRequest::factory()->create(['student_id' => $this->beto->id, 'wants_reposition' => false, 'wants_photo' => true]);
+
+    Livewire::actingAs($this->head)->test('communication::pages.credential-requests')
+        ->assertSeeHtml('data-testid="row-reason"')
+        ->assertDontSee('Sin foto')->assertDontSee('Datos correctos');
+});

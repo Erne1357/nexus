@@ -7,6 +7,7 @@ use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Queries\RoleTitleQuery;
 use App\Modules\Core\Queries\TermCalendarQuery;
 use App\Modules\Core\Support\HomeCard;
+use App\Modules\Core\Support\HomePanels;
 use App\Modules\Core\Support\StageTimeline;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Title;
@@ -22,7 +23,8 @@ use Livewire\Component;
  * Inicio no elige modalidad. A quien puede ver el periodo (TermPolicy) le enlaza su ficha.
  * Al personal le muestra también las tarjetas de lo que le toca hacer, que ponen los módulos al contestar
  * HomeCardsRequested (Core no los conoce): por ejemplo, la validación de catálogos abierta (CV-S13).
- * Al alumno no: su portada es mínima, el bloque de su puesto y «Mis datos» en el menú (AC-15, supuesto por confirmar).
+ * Al alumno no: su portada es el tablero «Resumen» que Students registra en HomePanels (AC-15, tarea 1.67; Core no lo conoce)
+ * y que sustituye al bloque de su puesto.
  * Al docente tampoco (D12, confirmado el 14 de noviembre de 2026): su Inicio es solo lo suyo, y su bloque lleva su
  * acceso (usuario, correo institucional y «Cambiar contraseña»).
  *
@@ -33,9 +35,9 @@ use Livewire\Component;
 new #[Title('Resumen')] class extends Component
 {
     /**
-     * @return array{name: string, blocks: list<array{title: string, description: string, account: array{username: string, email: ?string}|null, links: list<array{label: string, url: string, icon: string}>}>, cards: list<HomeCard>, calendar: array{timeline: StageTimeline, caption: string, termUrl: ?string}|null}
+     * @return array{panel: ?string, name: string, blocks: list<array{title: string, description: string, account: array{username: string, email: ?string}|null, links: list<array{label: string, url: string, icon: string}>}>, cards: list<HomeCard>, calendar: array{timeline: StageTimeline, caption: string, termUrl: ?string}|null}
      */
-    public function with(Actor $context, TermCalendarQuery $calendar, RoleTitleQuery $titles, Navigation $navigation): array
+    public function with(Actor $context, TermCalendarQuery $calendar, RoleTitleQuery $titles, Navigation $navigation, HomePanels $panels): array
     {
         $active = $context->activeRole();
         $roles = $active === null ? [] : [$active];
@@ -50,6 +52,7 @@ new #[Title('Resumen')] class extends Component
         }
 
         return [
+            'panel' => $active === null ? null : $panels->for($active),
             'calendar' => $windows === [] ? null : [
                 'timeline' => StageTimeline::build($windows, [], today()->toImmutable()),
                 'caption' => $term->name,

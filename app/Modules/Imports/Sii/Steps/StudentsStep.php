@@ -19,6 +19,8 @@ use Generator;
  * como activos ACT, INS y las bajas temporales. El aspirante (ASP) se migra inactivo y sin estatus (el «cómo» es
  * supuesto por confirmar), igual que un código que no se conoce, que además deja un aviso por código.
  *
+ * `especialidad` es la que el SII le asignó (1.69), tal cual; el alumno la recibe si su plan tiene esa clave.
+ *
  * Solo pide a `SiiCsvReader` las columnas de `COLUMNS`: el NIP, la CURP, la fecha de nacimiento y los domicilios se
  * descartan al leer el renglón y nunca llegan aquí. Lo que no se emite se cuenta en avisos agregados sin números de
  * control ni nombres. Un solo lote `students`; los renglones salen en streaming.
@@ -28,7 +30,7 @@ final class StudentsStep implements SiiStep
     /** @var list<string> las únicas columnas que se leen: las que el paso usa, ninguna más */
     public const array COLUMNS = [
         'no_de_control', 'carrera', 'reticula', 'semestre', 'estatus_alumno',
-        'apellido_paterno', 'apellido_materno', 'nombre_alumno', 'campus',
+        'apellido_paterno', 'apellido_materno', 'nombre_alumno', 'campus', 'especialidad',
     ];
 
     private const array CAMPUSES = ['1' => 'C1', '2' => 'C2'];
@@ -121,6 +123,7 @@ final class StudentsStep implements SiiStep
                 'modality' => $planFor[$key]['modality'],
                 'status_reason' => $code,
                 'active' => in_array($status, self::ACTIVE, true) ? 'Sí' : 'No',
+                'specialty' => trim($row['especialidad']),
             ];
         }
     }
