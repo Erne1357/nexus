@@ -4,6 +4,7 @@ use App\Modules\Academic\Actions\SetSubjectRequiredSpace;
 use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\CatalogValidation\Queries\ConfirmedRoomsQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Modality;
@@ -529,8 +530,8 @@ new #[Title('Orden de selección')] class extends Component
             'poolTeachers' => RecomputeSelectionOrder::pool($selection)->orderBy('name')->get(['id', 'name']),
             'subjects' => $subjects,
             'groupCounts' => $counts,
-            'ownRooms' => $this->rooms($selection)->where('department_id', $selection->department_id)->get(),
-            'freeRooms' => $this->rooms($selection)->whereNull('department_id')->get(),
+            'ownRooms' => $this->rooms($selection)->get(),
+            'roomsValidated' => app(ConfirmedRoomsQuery::class)->isValidated($selection->term_id, $selection->department_id),
             'entries' => $entries,
             'priorHours' => $groups->hoursByTeacher($selection, $entries->whereNotNull('prior_choice_at')->pluck('teacher_id')->filter()->values()->all()),
             'slotPreview' => $this->slotPreview($entries, $selection),
@@ -538,7 +539,8 @@ new #[Title('Orden de selección')] class extends Component
     }
 
     /**
-     * Salones que se ofrecen: los del departamento y los sin dueño de los campus de los grupos (SEL-01).
+     * Salones que se ofrecen: los del departamento confirmados en su revisión de salones validada, de los campus de los
+     * grupos (SEL-01, tarea 1.53); sin esa revisión validada, ninguno.
      *
      * @return Builder<Room>
      */
@@ -549,7 +551,8 @@ new #[Title('Orden de selección')] class extends Component
             ->where('is_active', true)
             ->whereIn('type', [RoomType::Aula->value, RoomType::Laboratorio->value, RoomType::SalaComputo->value])
             ->whereIn('campus_id', app(SelectionGroupsQuery::class)->of($selection)->select('campus_id'))
-            ->where(fn ($query) => $query->whereNull('department_id')->orWhere('department_id', $selection->department_id))
+            ->where('department_id', $selection->department_id)
+            ->whereIn('id', app(ConfirmedRoomsQuery::class)->ids($selection->term_id, $selection->department_id))
             ->orderBy('code');
     }
 

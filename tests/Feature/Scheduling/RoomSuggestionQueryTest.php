@@ -273,6 +273,6 @@ it('lee con pocas consultas aunque el campus tenga muchos salones', function () 
 
     expect($result['rooms'])->toHaveCount(25)
         ->and($searched['results'])->not->toBe([])
-        ->and($searchQueries)->toBeLessThanOrEqual(12)
-        ->and($queries)->toBeLessThanOrEqual(12);
+        ->and($searchQueries)->toBeLessThanOrEqual(13)
+        ->and($queries)->toBeLessThanOrEqual(13);
 });

@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Queries\RoomLoansQuery;
+use App\Modules\AcademicLoad\Rules\AgreementSettings;
 use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Room;
@@ -85,7 +86,8 @@ final class RoomSuggestionQuery
      * El departamento del grupo (el que asigna), el salón actual de la sesión (aunque ya no esté activo), los
      * `$limit` mejores salones y, con `$search`, hasta `$limit` más que contienen el texto en su clave o nombre y no
      * están entre los sugeridos (`results`) y los ids de los sugeridos que también lo contienen (`matched`). Todo sale
-     * del mismo contexto: buscar no vuelve a leer la base.
+     * del mismo contexto: buscar no vuelve a leer la base. Con los préstamos de salón apagados (AgreementSettings, tarea
+     * 1.53) no ofrece los salones de otro departamento que pedirían uno nuevo.
      *
      * @return array{department: array{code: string, name: string}, current: Row|null, rooms: list<Row>, results: list<Row>, matched: list<string>}
      */
@@ -106,6 +108,7 @@ final class RoomSuggestionQuery
             ?? Room::withTrashed()->whereKey($session->room_id)->with(['building' => $withTrashed, 'department' => $withTrashed])->first();
 
         $loans = $this->loans($group, $session);
+        $loansEnabled = AgreementSettings::roomLoansEnabled();
 
         $context = [
             'group' => $group,
@@ -121,6 +124,7 @@ final class RoomSuggestionQuery
 
         $ranked = $rooms->toBase()
             ->map(fn (Room $room): array => $this->row($room, $context))
+            ->reject(fn (array $row): bool => ! $loansEnabled && $row['state']['needsLoan'] && ! $row['state']['covered'])
             ->sort(fn (array $a, array $b): int => [$b['score'], $a['code']] <=> [$a['score'], $b['code']])
             ->values();
         $needle = mb_strtolower(trim($search));

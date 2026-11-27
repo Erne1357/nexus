@@ -4,6 +4,7 @@ namespace App\Modules\Staffing\Queries;
 
 use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\CatalogValidation\Queries\ConfirmedRoomsQuery;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
@@ -18,7 +19,8 @@ use Illuminate\Database\Eloquent\Builder;
 /**
  * Los salones que un docente puede elegir para un grupo durante la selección (tarea 1.33, SEL-01 a SEL-04).
  *
- * SEL-01: salones activos del campus del grupo, del departamento de la selección o sin dueño, sin bloqueo y sin otro
+ * SEL-01: salones activos del campus del grupo, del departamento de la selección y confirmados en su revisión de salones
+ * validada del periodo (ConfirmedRoomsQuery; los sin dueño ya no se ofrecen, tarea 1.53), sin bloqueo y sin otro
  * grupo del periodo en **todas** las sesiones del grupo. La ocupación y los bloqueos salen de una consulta cada una,
  * sin importar cuántos salones haya. El tipo, la capacidad y la reserva de salas los decide `RoomEligibility`.
  *
@@ -26,6 +28,8 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class SelectionRoomOptionsQuery
 {
+    public function __construct(private readonly ConfirmedRoomsQuery $confirmed) {}
+
     /**
      * Los salones que el jefe o el JPD pueden ponerle al grupo a mano durante la selección (diseño 6.14): sin el filtro
      * de SEL-02 a SEL-04, todos los activos del campus del grupo que son del departamento de la selección o no tienen
@@ -71,10 +75,12 @@ final class SelectionRoomOptionsQuery
     /**
      * Los rechazados traen los mismos datos del salón más su motivo (el mapa los pone en gris por su `map_key`).
      *
-     * @return array{eligible: list<Option>, rejected: list<array{id: string, code: string, building: ?string, type: string, capacity: int, map_key: ?string, reason: string}>}
+     * @return array{eligible: list<Option>, rejected: list<array{id: string, code: string, building: ?string, type: string, capacity: int, map_key: ?string, reason: string}>, validated: bool} `validated`: si la revisión de salones del departamento ya está validada en el periodo
      */
     public function forGroup(Selection $selection, Group $group): array
     {
+        $validated = $this->confirmed->isValidated($selection->term_id, $selection->department_id);
+        $confirmed = $validated ? $this->confirmed->ids($selection->term_id, $selection->department_id) : [];
         $sessions = GroupSession::query()
             ->where('group_id', $group->id)
             ->where('kind', '!=', SessionKind::Virtual->value)
@@ -84,7 +90,8 @@ final class SelectionRoomOptionsQuery
             ->where('campus_id', $group->campus_id)
             ->where('is_active', true)
             ->whereIn('type', [RoomType::Aula->value, RoomType::Laboratorio->value, RoomType::SalaComputo->value])
-            ->where(fn (Builder $query) => $query->whereNull('department_id')->orWhere('department_id', $selection->department_id))
+            ->where('department_id', $selection->department_id)
+            ->whereIn('id', $confirmed)
             ->with('building')
             ->orderBy('code')
             ->get();
@@ -92,7 +99,7 @@ final class SelectionRoomOptionsQuery
         $need = Subject::withTrashed()->whereKey($group->subject_id)->first(['id', 'required_space'])?->required_space;
 
         if ($sessions->isEmpty() || $rooms->isEmpty()) {
-            return ['eligible' => [], 'rejected' => []];
+            return ['eligible' => [], 'rejected' => [], 'validated' => $validated];
         }
 
         $busy = $this->busyBySlot($group, $sessions->all(), $rooms->modelKeys());
@@ -122,6 +129,7 @@ final class SelectionRoomOptionsQuery
         return [
             'eligible' => array_map($option, $result['eligible']),
             'rejected' => array_values(array_map(fn (string $id, string $reason): array => $option($id) + ['reason' => $reason], array_keys($result['rejected']), $result['rejected'])),
+            'validated' => $validated,
         ];
     }
 

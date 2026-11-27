@@ -37,8 +37,13 @@
         <div role="note" class="alert alert-warning alert-soft items-start text-sm" data-testid="selection-no-rooms">
             <x-icon name="o-exclamation-triangle" class="mt-0.5 h-5 w-5" aria-hidden="true" />
             <div>
-                <p class="font-semibold">No queda ningún salón que se pueda elegir</p>
-                <p>Puedes tomarlo sin salón; lo asigna la jefatura.</p>
+                @if ($options['validated'] ?? true)
+                    <p class="font-semibold">No queda ningún salón que se pueda elegir</p>
+                    <p>Puedes tomarlo sin salón; lo asigna la jefatura.</p>
+                @else
+                    <p class="font-semibold">El catálogo de salones de tu departamento aún no está validado</p>
+                    <p>El jefe asignará el salón. Puedes tomar el grupo sin salón.</p>
+                @endif
             </div>
         </div>
     @else

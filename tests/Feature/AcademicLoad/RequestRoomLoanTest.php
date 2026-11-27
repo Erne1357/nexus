@@ -232,3 +232,16 @@ it('no avisa si la transacción externa se revierte', function () {
     Event::assertNotDispatched(AgreementRequested::class);
     expect(InterdepartmentalAgreement::query()->count())->toBe(0);
 });
+
+it('con los préstamos de salón apagados (por omisión) rechaza el préstamo y no crea nada', function () {
+    roomLoans(false);
+
+    expect(requestLoanErrors())->toBe(['room_id' => ['Los préstamos de salón no están disponibles por ahora.']])
+        ->and(InterdepartmentalAgreement::query()->count())->toBe(0);
+});
+
+it('con el parámetro encendido pide el préstamo como siempre', function () {
+    roomLoans(true);
+
+    expect(requestLoan()->status)->toBe(AgreementStatus::Proposed);
+});

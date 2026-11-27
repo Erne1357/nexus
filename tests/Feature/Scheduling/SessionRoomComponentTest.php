@@ -271,3 +271,22 @@ it('muestra los tres mejores sugeridos y los demás con «Ver N más»; si todos
     $component->set('search', 'CC-08');
     expect($listOf())->toBe('{ more: true }');
 });
+
+it('con los préstamos apagados no ofrece los salones de otro departamento y rechaza asignarlos', function () {
+    roomLoans(false);
+
+    sessionRoomAs($this->jefe)
+        ->assertSee('CC-05')
+        ->assertDontSee('MM-L2')
+        ->call('assign', $this->foreign->id)
+        ->assertHasErrors();
+
+    expect(InterdepartmentalAgreement::query()->count())->toBe(0)
+        ->and($this->session->fresh()->room_id)->toBeNull();
+});
+
+it('con los préstamos encendidos ofrece los salones de otro departamento', function () {
+    roomLoans(true);
+
+    sessionRoomAs($this->jefe)->assertSee('MM-L2');
+});

@@ -121,8 +121,14 @@ final class SelectionWorld
         return $group;
     }
 
-    public function room(string $code, RoomType $type = RoomType::Aula, int $capacity = 35): Room
+    /**
+     * Un salón del departamento de la selección, confirmado en su revisión de salones validada (SEL-01, tarea 1.53); con
+     * `$confirm` en false, solo del departamento y fuera de la foto de la revisión.
+     */
+    public function room(string $code, RoomType $type = RoomType::Aula, int $capacity = 35, bool $confirm = true): Room
     {
-        return Room::factory()->create(['building_id' => $this->building->id, 'code' => $code, 'type' => $type, 'capacity' => $capacity]);
+        $room = Room::factory()->create(['building_id' => $this->building->id, 'code' => $code, 'type' => $type, 'capacity' => $capacity, 'department_id' => $this->department->id]);
+
+        return $confirm ? tap($room, fn (Room $room) => confirmRooms($this->term->id, $this->department->id, [$room])) : $room;
     }
 }
