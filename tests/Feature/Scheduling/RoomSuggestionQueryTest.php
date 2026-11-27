@@ -17,6 +17,9 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\RoomSuggestionQuery;
 use Illuminate\Support\Facades\DB;
 
+// Estas pruebas piden préstamos de salón, apagados por omisión (tarea 1.53).
+beforeEach(fn () => roomLoans());
+
 /*
 | RoomSuggestionQuery (tarea 3.7, SC-03): los salones activos del campus del grupo para una sesión, ordenados por un
 | puntaje con sus motivos (por defecto de la materia, historial, tipo requerido, capacidad y mismo edificio que la

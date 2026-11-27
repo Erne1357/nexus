@@ -18,6 +18,9 @@ use App\Modules\Scheduling\Models\GroupSession;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
+// Estas pruebas piden préstamos de salón, apagados por omisión (tarea 1.53).
+beforeEach(fn () => roomLoans());
+
 /*
 | Sección de salón del cajón de la sesión (tarea 3.7; maqueta `cajones`, estado `#sesion`): el salón actual, los
 | sugeridos con sus motivos y su estado, el buscador y «Asignar salón» o «Asignar y pedir préstamo». Asigna el jefe del

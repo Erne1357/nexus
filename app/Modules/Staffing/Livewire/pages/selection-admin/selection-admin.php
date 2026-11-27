@@ -274,7 +274,7 @@ new #[Title('Orden de selección')] class extends Component
     public function setRoomType(string $roomId, string $type): void
     {
         $selection = $this->managed();
-        $room = KeyLookup::findOrFail($this->rooms($selection), $roomId);
+        $room = KeyLookup::findOrFail($this->rooms($selection, app(ConfirmedRoomsQuery::class)->ids($selection->term_id, $selection->department_id, keepLastValidation: $selection->status->isLive()) ?? []), $roomId);
         Gate::authorize('update', $room);
 
         app(UpdateRoom::class)->handle($room, ['type' => RoomType::from($type)->value]);
@@ -506,6 +506,7 @@ new #[Title('Orden de selección')] class extends Component
     private function stepData(Selection $selection): array
     {
         $groups = app(SelectionGroupsQuery::class);
+        $confirmedRooms = app(ConfirmedRoomsQuery::class)->ids($selection->term_id, $selection->department_id, keepLastValidation: $selection->status->isLive());
         $entries = $selection->entries()->with('teacher:id,name')->orderBy('position')->get();
         $csv = $entries->where('source', SelectionEntrySource::Csv)->sortBy('csv_line')->values();
         $unresolved = $csv->whereNull('teacher_id')->count();
@@ -530,8 +531,8 @@ new #[Title('Orden de selección')] class extends Component
             'poolTeachers' => RecomputeSelectionOrder::pool($selection)->orderBy('name')->get(['id', 'name']),
             'subjects' => $subjects,
             'groupCounts' => $counts,
-            'ownRooms' => $this->rooms($selection)->get(),
-            'roomsValidated' => app(ConfirmedRoomsQuery::class)->isValidated($selection->term_id, $selection->department_id),
+            'ownRooms' => $this->rooms($selection, $confirmedRooms ?? [])->get(),
+            'roomsValidated' => $confirmedRooms !== null,
             'entries' => $entries,
             'priorHours' => $groups->hoursByTeacher($selection, $entries->whereNotNull('prior_choice_at')->pluck('teacher_id')->filter()->values()->all()),
             'slotPreview' => $this->slotPreview($entries, $selection),
@@ -542,9 +543,10 @@ new #[Title('Orden de selección')] class extends Component
      * Salones que se ofrecen: los del departamento confirmados en su revisión de salones validada, de los campus de los
      * grupos (SEL-01, tarea 1.53); sin esa revisión validada, ninguno.
      *
+     * @param  list<string>  $confirmed  ConfirmedRoomsQuery::ids()
      * @return Builder<Room>
      */
-    private function rooms(Selection $selection): Builder
+    private function rooms(Selection $selection, array $confirmed): Builder
     {
         return Room::query()
             ->with('building:id,code')
@@ -552,7 +554,7 @@ new #[Title('Orden de selección')] class extends Component
             ->whereIn('type', [RoomType::Aula->value, RoomType::Laboratorio->value, RoomType::SalaComputo->value])
             ->whereIn('campus_id', app(SelectionGroupsQuery::class)->of($selection)->select('campus_id'))
             ->where('department_id', $selection->department_id)
-            ->whereIn('id', app(ConfirmedRoomsQuery::class)->ids($selection->term_id, $selection->department_id))
+            ->whereIn('id', $confirmed)
             ->orderBy('code');
     }
 

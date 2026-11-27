@@ -22,6 +22,9 @@ use App\Modules\Scheduling\Notifications\LoanCancelled;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
+// Estas pruebas piden préstamos de salón, apagados por omisión (tarea 1.53).
+beforeEach(fn () => roomLoans());
+
 /*
 | SyncSessionLoans (tarea 3.7, HC-10): deja los préstamos de un grupo en un salón de otro departamento, en un día, al
 | tamaño de sus sesiones. Un aceptado se conserva mientras alguna sesión del grupo siga dentro de sus horas (acortar no

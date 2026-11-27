@@ -108,7 +108,6 @@ final class RoomSuggestionQuery
             ?? Room::withTrashed()->whereKey($session->room_id)->with(['building' => $withTrashed, 'department' => $withTrashed])->first();
 
         $loans = $this->loans($group, $session);
-        $loansEnabled = AgreementSettings::roomLoansEnabled();
 
         $context = [
             'group' => $group,
@@ -122,9 +121,13 @@ final class RoomSuggestionQuery
             'loans' => $loans['own'],
         ];
 
+        $loansEnabled = null;
         $ranked = $rooms->toBase()
             ->map(fn (Room $room): array => $this->row($room, $context))
-            ->reject(fn (array $row): bool => ! $loansEnabled && $row['state']['needsLoan'] && ! $row['state']['covered'])
+            ->reject(function (array $row) use (&$loansEnabled): bool {
+                // El parámetro se lee una sola vez, y solo si algún salón pediría un préstamo nuevo.
+                return $row['state']['needsLoan'] && ! $row['state']['covered'] && ! ($loansEnabled ??= AgreementSettings::roomLoansEnabled());
+            })
             ->sort(fn (array $a, array $b): int => [$b['score'], $a['code']] <=> [$a['score'], $b['code']])
             ->values();
         $needle = mb_strtolower(trim($search));

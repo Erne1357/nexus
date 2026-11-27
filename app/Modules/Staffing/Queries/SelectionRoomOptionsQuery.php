@@ -33,7 +33,8 @@ final class SelectionRoomOptionsQuery
     /**
      * Los salones que el jefe o el JPD pueden ponerle al grupo a mano durante la selección (diseño 6.14): sin el filtro
      * de SEL-02 a SEL-04, todos los activos del campus del grupo que son del departamento de la selección o no tienen
-     * dueño, de cualquier tipo. `recommended` son los elegibles de forGroup(); `others`, el resto, con el motivo por el
+     * dueño, de cualquier tipo (intencional: el usuario, 26 de noviembre de 2026, restringió solo lo que elige el docente, SEL-01 de
+     * forGroup; el jefe sigue pudiendo ofrecer salones sin dueño o aún sin confirmar). `recommended` son los elegibles de forGroup(); `others`, el resto, con el motivo por el
      * que no se recomiendan si lo hay (ocupado, otro tipo, no cabe…). Las reglas de hoy (HC-02 duro; HC-05, HC-06 y
      * HC-11 como aviso) las aplica AssignSessionRoom al guardar. Sin sesiones presenciales no hay salón que poner.
      *
@@ -79,8 +80,9 @@ final class SelectionRoomOptionsQuery
      */
     public function forGroup(Selection $selection, Group $group): array
     {
-        $validated = $this->confirmed->isValidated($selection->term_id, $selection->department_id);
-        $confirmed = $validated ? $this->confirmed->ids($selection->term_id, $selection->department_id) : [];
+        $confirmed = $this->confirmed->ids($selection->term_id, $selection->department_id, keepLastValidation: $selection->status->isLive());
+        $validated = $confirmed !== null;
+        $confirmed ??= [];
         $sessions = GroupSession::query()
             ->where('group_id', $group->id)
             ->where('kind', '!=', SessionKind::Virtual->value)

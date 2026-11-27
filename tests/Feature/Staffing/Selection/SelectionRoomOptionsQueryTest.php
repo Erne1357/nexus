@@ -18,6 +18,7 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Queries\SelectionRoomOptionsQuery;
 
@@ -114,6 +115,25 @@ it('SEL-01: sin la revisión de salones del departamento validada no ofrece ning
 
     expect($result['eligible'])->toBe([])
         ->and($result['validated'])->toBeFalse();
+});
+
+it('SEL-01: con la selección viva, una revisión reabierta sigue valiendo la foto de su última validación (supuesto por confirmar)', function () {
+    selectionRoom('A1');
+    CatalogReview::query()->where('catalog', Catalog::Rooms)->update(['status' => ReviewStatus::InReview, 'validated_by' => null, 'validated_at' => null]);
+
+    expect(offeredCodes())->toBe([]);
+
+    $this->selection->update(['status' => SelectionStatus::Running]);
+
+    expect(offeredCodes())->toBe(['A1']);
+});
+
+it('SEL-01: con la selección viva y una revisión que nunca se validó no ofrece ninguno', function () {
+    selectionRoom('A1');
+    CatalogReview::query()->where('catalog', Catalog::Rooms)->update(['status' => ReviewStatus::InReview, 'validated_by' => null, 'validated_at' => null, 'snapshot' => null]);
+    $this->selection->update(['status' => SelectionStatus::Running]);
+
+    expect(offeredCodes())->toBe([]);
 });
 
 it('SEL-01: la revisión validada de otro periodo no confirma salones de este', function () {

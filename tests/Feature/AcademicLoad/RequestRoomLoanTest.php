@@ -17,6 +17,9 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
+// Estas pruebas piden préstamos de salón, apagados por omisión (tarea 1.53).
+beforeEach(fn () => roomLoans());
+
 /*
 | RequestRoomLoan: un departamento pide el préstamo de un salón de otro para un día y unas horas de un grupo
 | (reglas-de-negocio.md, "Acuerdos entre departamentos"; HC-10). Es idempotente y deja la exclusión de la base como

@@ -58,9 +58,9 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature', 'Browser');
 
 /*
-| Los préstamos de salón están apagados por omisión (tarea 1.53, `academic_load.room_loans_enabled`). Las pruebas de horarios,
-| carga académica, motor y asignación los usan, así que arrancan con el parámetro encendido; la prueba que quiere el
-| comportamiento por omisión llama roomLoans(false).
+| Los préstamos de salón están apagados por omisión (tarea 1.53, `academic_load.room_loans_enabled`). Las pruebas corren con
+| el valor de producción; las de préstamos los encienden con `beforeEach(fn () => roomLoans())` en su archivo, y la que
+| quiere el comportamiento por omisión llama roomLoans(false).
 */
 function roomLoans(bool $enabled = true): void
 {
@@ -72,8 +72,6 @@ function roomLoans(bool $enabled = true): void
         Setting::query()->where('key', $key)->delete();
     }
 }
-
-pest()->beforeEach(fn () => roomLoans())->in('Feature/Scheduling', 'Feature/AcademicLoad', 'Feature/Solver', 'Feature/Staffing', 'Browser/Scheduling');
 
 /*
 | Los browser tests cargan el CSS y el JS compilados (`npm run build`), porque la banda, la credencial
