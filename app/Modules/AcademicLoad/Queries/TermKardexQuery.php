@@ -43,13 +43,14 @@ final class TermKardexQuery
     /**
      * Las claves de los periodos con kárdex contable en la modalidad, de la más reciente a la más antigua: los que se
      * pueden evaluar en «Precisión de la proyección» (tarea 5.9c), antes de quitar los de verano y los que no son periodo
-     * de Nexus.
+     * de Nexus. Un registro sin periodo (el kárdex puede venir sin él) no cuenta.
      *
      * @return list<string>
      */
     public function termCodes(Modality $modality): array
     {
         return $this->counted(null, $modality)
+            ->whereNotNull('kardex_records.term_code')
             ->toBase()
             ->distinct()
             ->orderByDesc('kardex_records.term_code')
