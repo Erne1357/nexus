@@ -1,0 +1,27 @@
+# ADR-0039 — Correo solo institucional y buzón del puesto
+
+**Estado:** Aceptada (decisión del usuario, 26 de noviembre de 2026) · **Fecha:** 2026-11-26 · Tarea 1.63 ([#888](https://github.com/Erne1357/nexus/issues/888)) · Rama padre `riel/alumnos`
+
+## Contexto
+El usuario pidió el 26 de noviembre de 2026: «No quiero que nunca se mande correo a un correo personal a menos que se haya declarado específicamente que se puede; siempre todo debería ser a través del correo institucional». Hasta entonces cada notificación decidía su dirección: las que implementan `RoutesMailAddress` elegían el institucional (CV11, RA-06), pero las demás iban a `users.email`, que puede ser personal (la invitación de SEL-13 lo deja así), y las rutas sueltas (`Notification::route('mail', …)`) no pasaban por ninguna revisión. No había un lugar que garantizara la regla.
+
+Ya había dos excepciones confirmadas: SEL-13 (la invitación de acceso de la cola de una orden de selección y su reenvío, que van al personal si el departamento no validó o el docente no tiene institucional) y SEL-15 (los avisos de la orden de selección al docente caen al personal si no tiene institucional), que también usa «Confirma tus horas» (SEL-16, tarea 1.45).
+
+## Decisión
+- **Una sola noción de «institucional»** en Core (`InstitutionalMail`): una dirección válida de un dominio de la lista `nexus.institutional_email_domains` (`NEXUS_INSTITUTIONAL_EMAIL_DOMAINS`, separada por comas; por omisión solo `cdjuarez.tecnm.mx`; `itcj.edu.mx` no cuenta). Es configuración, no código. El dominio con que Nexus arma y valida los correos (`nexus.institutional_email_domain`, AC-06 y AC-13) siempre cuenta, para que un correo que Nexus mismo armó nunca se bloquee (la demo arma sus correos con `docentes.itcj.example`). `PasswordResetRules::isInstitutionalEmail` la usa.
+- **El correo de la persona es su institucional** (`PersonMailAddresses`): `User::routeNotificationForMail` sin una dirección elegida da `users.email` si es institucional; si no, el que dé cada fuente registrada por los módulos al arrancar (Faculty, el institucional de la ficha de docente; Students, el del número de control, AC-13); si no, null y no sale correo. Core no conoce esos módulos; ellos se registran, como en `CredentialPhotos`.
+- **Excepciones explícitas.** La interfaz `AllowsPersonalMail` (`personalMailRule()`: el id de la regla o null para esa instancia) la implementan solo `AccessInvitation` (con la regla que le pasa quien la manda; `InviteTeacherAccess` pasa `SEL-13`) y `SelectionTeacherNotice` (`SEL-15`). La lista `PersonalMailExceptions::DECLARED` (nombre corto => regla, como `MailKinds`, para no depender de los módulos de la derecha) es la que vale, y `tests/Arch/PersonalMailExceptionsTest.php` exige que ninguna otra clase implemente la interfaz salvo las que heredan de una de la lista.
+- **La guardia** `GuardMailRecipient` escucha `NotificationSending` en el canal `mail` (también al salir de la cola y con `notifyNow`), después de `HoldAcademicLoadMail` (MN-05). Resuelve el destino como MailChannel y, si una dirección no es institucional y el aviso no es de una excepción declarada, cancela ese canal y lo anota en `mail_log` con el estado nuevo `blocked` (`MailStatus::Blocked`, «Bloqueado»), el destino, el asunto y el motivo. Es la traza menos invasiva: «Correos y colas» ya la muestra y filtra, `status` era texto (sin migración) y no llena la bitácora de entradas de diagnóstico. Si anotar falla, se reporta y el correo sigue bloqueado.
+- La regla es **CE-01** en una sección nueva de `reglas-de-negocio.md` («Correo de Nexus»): `MN-` es la familia del menú y `CR-` ya es de las solicitudes de cambio.
+
+## Consecuencias
+- Ningún correo de una notificación sale a un dominio que no esté en la lista sin una excepción declarada. Una excepción nueva es una regla nueva: reglas-de-negocio, la lista y su prueba.
+- `CredentialRequestUpdated` (CO-09) ya no manda a un `users.email` personal: va al institucional del número de control. `SendTestMail` (CF-S9) manda al correo del admin solo si es institucional; si no, a la cuenta de envío. El aviso al correo anterior (CF-S3) solo sale si el anterior era institucional (lo bloquea la guardia).
+- Los correos de los mailables (`Mail::to()`) no pasan por la guardia; hoy Nexus no tiene ninguno.
+- Durante un despliegue blue/green, la versión anterior no conoce `blocked`: si en esa ventana el admin abre «Correos y colas» en el color viejo y ya hay un bloqueado, esa página falla hasta que termine el cambio de color. Se acepta: la ventana es corta y solo afecta esa pantalla del admin.
+- Una invitación SEL-13 que ya estaba en la cola antes del release no trae la excepción (la propiedad tiene valor por omisión, así que se lee igual) y, si iba a un personal, se bloquea; queda en el registro para reenviarla.
+
+## Alternativas descartadas
+- **Revisar en cada notificación:** ya existía así (CV11) y dejaba huecos (las rutas sueltas, los avisos sin dirección propia). Un solo punto en el envío no depende de que cada clase se acuerde.
+- **Bitácora (activitylog) como traza del bloqueo:** el bloqueo es del correo, no de un registro del dominio; mezclarlo en la bitácora la llenaría de entradas de diagnóstico, y `mail_log` ya es donde el admin busca por qué no llegó un correo.
+- **Lista de excepciones por provider (como `permissions()`):** dispersaría las excepciones por los módulos; el usuario pidió que cada excepción esté declarada explícitamente, y una lista en Core con su prueba de arquitectura es más fácil de auditar.

@@ -58,7 +58,7 @@
                 @endscope
 
                 @scope('cell_status', $mail)
-                    <x-core::status-badge :tone="$mail->status === \App\Modules\Core\Enums\MailStatus::Sent ? 'success' : 'error'" :label="$mail->status->label()" />
+                    <x-core::status-badge :tone="$mail->status->tone()" :label="$mail->status->label()" />
                     @if ($mail->error)
                         <span class="mt-1 block max-w-xs text-xs text-neutral">{{ \App\Modules\Core\Support\RedactsSecrets::redact($mail->error) }}</span>
                     @endif
@@ -74,7 +74,7 @@
                     <li wire:key="mail-card-{{ $mail->id }}" class="space-y-1 px-4 py-3">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <span class="font-mono text-xs tabular-nums text-neutral">{{ $mail->sent_at->format('d/m/Y H:i') }}</span>
-                            <x-core::status-badge :tone="$mail->status === \App\Modules\Core\Enums\MailStatus::Sent ? 'success' : 'error'" :label="$mail->status->label()" />
+                            <x-core::status-badge :tone="$mail->status->tone()" :label="$mail->status->label()" />
                         </div>
                         <p class="font-semibold">{{ $mail->subject }}</p>
                         <p class="break-all text-sm">{{ $mail->to }}@if ($mail->user) <span class="text-neutral">· {{ $mail->user->username }}</span>@endif</p>

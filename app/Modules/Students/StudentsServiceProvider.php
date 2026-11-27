@@ -18,6 +18,7 @@ use App\Modules\Core\Exceptions\InvalidPhoto;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Notifications\PersonMailAddresses;
 use App\Modules\Core\Support\PhotoNormalizer;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use App\Modules\Students\Enums\StudentsPermission;
@@ -30,6 +31,7 @@ use App\Modules\Students\Listeners\TouchPhotoRequestsOnPhotoChange;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Rules\CredentialRequestSettings;
+use App\Modules\Students\Rules\InstitutionalEmail;
 use App\Modules\Students\Support\StudentPhotos;
 use App\Modules\Students\Support\StudentPhotoUrl;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -77,6 +79,14 @@ final class StudentsServiceProvider extends ModuleServiceProvider
             $student = Student::query()->where('user_id', $user->getKey())->first();
 
             return $student === null ? null : StudentPhotoUrl::own($student);
+        });
+
+        // CE-01: el correo institucional del alumno que no lo tiene en su usuario es el que sale de su número de control
+        // (AC-13). Core no conoce a Students.
+        $this->app->make(PersonMailAddresses::class)->extend(static function (User $user): ?string {
+            $control = Student::query()->where('user_id', $user->getKey())->value('control_number');
+
+            return $control === null ? null : InstitutionalEmail::of((string) $control);
         });
 
         // AC-20: la verificación pública del QR de la credencial. 30 por minuto por dirección y código, y 300 por dirección:

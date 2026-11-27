@@ -176,7 +176,7 @@ Las contraseñas nuevas se entregan aparte, en un archivo privado; no viajan en 
    sudo chown -R 1000:1000 /srv/nexus/fotos /srv/nexus/fotos-personal
    ```
 
-5. **Variables.** `APP_URL` sale de `APP_DOMAIN` (`nexus.cdjuarez.tecnm.mx`); `NEXUS_CREDENTIAL_URL` va vacía en producción (el QR usa `APP_URL`; en la demo apuntaba al túnel); `NEXUS_DEFAULT_PASSWORD` solo hace falta al correr `core:provision-staff` (1.39; ver el punto de `riel/comunicacion` en «Qué hacer al desplegar cada release»); el personal que no se activa así entra por invitación. El correo, en «Correo saliente (Microsoft 365)».
+5. **Variables.** `APP_URL` sale de `APP_DOMAIN` (`nexus.cdjuarez.tecnm.mx`); `NEXUS_CREDENTIAL_URL` va vacía en producción (el QR usa `APP_URL`; en la demo apuntaba al túnel); `NEXUS_DEFAULT_PASSWORD` solo hace falta al correr `core:provision-staff` (1.39; ver el punto de `riel/comunicacion` en «Qué hacer al desplegar cada release»); el personal que no se activa así entra por invitación. `NEXUS_INSTITUTIONAL_EMAIL_DOMAINS` (1.63, CE-01) es la lista, separada por comas, de los dominios a los que Nexus sí manda correo; por omisión `cdjuarez.tecnm.mx`, que es lo que va en producción (`itcj.edu.mx` no cuenta), y lo que salga a otro dominio sin una excepción declarada queda «Bloqueado» en «Correos y colas». El correo, en «Correo saliente (Microsoft 365)».
 6. **Horarios del SII de todos los periodos** (tarea 1.32: el mapa del Inicio sigue el periodo de la credencial y necesita los horarios de cada uno). Una vez, en el color activo; tarda alrededor de un minuto (40 periodos, unas 315 000 sesiones) y se puede repetir:
 
    ```bash

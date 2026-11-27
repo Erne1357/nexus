@@ -3,6 +3,7 @@
 namespace App\Modules\Students\Notifications;
 
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\InstitutionalMail;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Notifications\RoutesMailAddress;
@@ -16,7 +17,8 @@ use Illuminate\Notifications\Messages\MailMessage;
 /**
  * CO-09 (C6): le avisa al alumno, por la campana y por su correo, que su solicitud de credencial se citó, se reprogramó,
  * quedó lista, se entregó o se rechazó. Cancelar no avisa. Lleva a «Mis datos» › «Credencial». El correo va a
- * `users.email` o, si no tiene, al institucional que sale de su número de control (AC-13). La campana se guarda en el
+ * `users.email` si es institucional o, si no, al institucional que sale de su número de control (AC-13); nunca al
+ * personal (CE-01). La campana se guarda en el
  * momento (conexión `sync`) y el correo sale de la cola, después del commit.
  */
 final class CredentialRequestUpdated extends NexusNotification implements RoutesMailAddress, ShouldQueue
@@ -77,8 +79,8 @@ final class CredentialRequestUpdated extends NexusNotification implements Routes
 
     public function mailAddressFor(User $user): ?string
     {
-        if (filled($user->email)) {
-            return $user->email;
+        if (InstitutionalMail::isInstitutional($user->email)) {
+            return mb_strtolower(trim((string) $user->email));
         }
 
         $controlNumber = $this->request->student()->first()?->control_number;

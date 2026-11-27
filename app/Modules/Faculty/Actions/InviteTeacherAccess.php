@@ -102,8 +102,8 @@ final class InviteTeacherAccess
      * un departamento suyo ya validó su catálogo de docentes (InvitationRelease, AC-09) va a su correo institucional,
      * como siempre, y si no lo tiene, al personal; si no lo validó, a su correo personal (`teachers.email`) y, si no lo
      * tiene, al institucional. Es la automática de SendAccessInvitation (a quien tiene otro puesto le da acceso el
-     * admin) y no manda otra a quien tiene una vigente. Devuelve el correo al que la mandó, o null si ya tenía una
-     * vigente.
+     * admin) y no manda otra a quien tiene una vigente. Es la excepción SEL-13 de CE-01: la invitación lleva esa regla
+     * para que la guardia la deje ir al personal. Devuelve el correo al que la mandó, o null si ya tenía una vigente.
      *
      * @throws ValidationException sobre `access` (inactivo, sin usuario, ya tiene acceso, sin correo) o la de
      *                             SendAccessInvitation
@@ -159,7 +159,7 @@ final class InviteTeacherAccess
                 throw ValidationException::withMessages(['access' => $reason]);
             }
 
-            return $this->sendAccessInvitation->handle($user, $email, $actor, $unlessInvited) ? $email : null;
+            return $this->sendAccessInvitation->handle($user, $email, $actor, $unlessInvited, personalMailRule: 'SEL-13') ? $email : null;
         });
     }
 
