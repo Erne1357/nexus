@@ -31,6 +31,7 @@ final class ActivityEvents
         'accepted' => 'Aceptado',
         'applied' => 'Aplicado',
         'approved' => 'Aprobado',
+        'backfilled' => 'Rellenado',
         'cancelled' => 'Cancelado',
         'failed' => 'Falló',
         'justified' => 'Justificado',
