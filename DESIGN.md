@@ -249,7 +249,8 @@ La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php
    - paginación al pie, con el rango («Campus C1 a TNV · 1–5 de 5»);
    - **cabe en su caja** a 1440 y a 1024 px: lo que no cabe son columnas descriptivas largas, que se ocultan (`max-[1200px]:hidden`, y `max-[1535px]:hidden` en Materias y Planes, que tienen más). Si aun así no cabe, la caja se desplaza de lado, nunca la página.
 4. **Formulario en modal** (`x-modal` + `x-form`) para crear y editar. Página completa solo si el formulario no cabe o tiene pasos.
-5. **Avisos** con el `Toast` de MaryUI: título corto y el registro, escapado con `e()`.
+5. **Campos en vivo.** Un campo cuyo valor cambia algo que se ve antes de enviar (un botón, un resumen, un aviso) usa `wire:model.live`; el que solo se lee al enviar, `wire:model`.
+6. **Avisos** con el `Toast` de MaryUI: título corto y el registro, escapado con `e()`.
 
 #### Acciones de fila
 El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados del celular:

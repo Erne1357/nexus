@@ -272,3 +272,17 @@ it('CO-12: el alumno ve el motivo en su solicitud abierta y en su historial', fu
         ->assertSeeHtml('data-testid="credential-request-reason"')
         ->assertSee('Motivo: Por primera vez');
 });
+
+it('1.89: la casilla de la foto es en vivo y, con solo la foto marcada, el pie ya no trae el motivo', function () {
+    [$student, $user] = credentialStudent();
+
+    credentialPage($user)
+        ->assertSeeHtml('wire:model.live="wantsPhoto"')
+        ->assertSeeHtml('data-testid="request-why"')
+        ->set('wantsPhoto', true)
+        ->assertDontSeeHtml('data-testid="request-why"')
+        ->assertSeeHtml('data-testid="request-summary"')
+        ->call('requestCredential')->assertHasNoErrors();
+
+    expect(CredentialRequest::query()->where('student_id', $student->id)->sole()->wants_photo)->toBeTrue();
+});

@@ -194,7 +194,7 @@
                     <div>
                         <label @class(['flex cursor-pointer flex-col gap-0.5 rounded-box border-2 px-3.5 py-3', 'border-primary' => $wantsPhoto, 'border-base-300' => ! $wantsPhoto, 'cursor-not-allowed opacity-70' => $availability['photo'] !== null || $photoLocked])>
                             <span class="flex items-center gap-3 font-semibold">
-                                <input type="checkbox" class="checkbox checkbox-sm" wire:model="wantsPhoto" @disabled($availability['photo'] !== null || $photoLocked) data-testid="want-photo" />
+                                <input type="checkbox" class="checkbox checkbox-sm" wire:model.live="wantsPhoto" @disabled($availability['photo'] !== null || $photoLocked) data-testid="want-photo" />
                                 Tomarme o actualizar la foto
                             </span>
                             <span class="ml-8 text-sm text-neutral">Te citamos para tomártela.</span>
