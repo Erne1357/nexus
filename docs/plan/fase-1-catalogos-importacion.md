@@ -98,7 +98,7 @@ Mientras llegan, cada módulo trabaja con factories y un `DemoSeeder` que reprod
 | 1.49 ⬜ [#881](https://github.com/Erne1357/nexus/issues/881) | Horas frente a grupo por plaza según el Reglamento Interior de Trabajo del Personal Docente (arts. 143, 147 y 149): categoría de la plaza del SII, banda de la orden de selección y documento de lineamientos | | | | |
 | 1.50 ⬜ [#882](https://github.com/Erne1357/nexus/issues/882) | HC-08 deja de ser tope duro: pasar la banda se permite con aviso y queda pendiente el oficio de conformidad del docente («aquí aún no firmarán el oficio», confirmado) | | | | |
 | 1.51 ⬜ [#883](https://github.com/Erne1357/nexus/issues/883) | Orden de selección: los grupos ya elegidos resaltan y el docente no ve quién los eligió, solo que ya está asignado | | | | |
-| 1.52 ⬜ [#884](https://github.com/Erne1357/nexus/issues/884) | Orden de selección: el drawer de la orden, compacto y sin scroll horizontal | | | | |
+| 1.52 ✅ [#906](https://github.com/Erne1357/nexus/pull/906) | Orden de selección: el drawer de la orden, compacto y sin scroll horizontal | | | | |
 | 1.53 ⬜ [#885](https://github.com/Erne1357/nexus/issues/885) | Orden de selección: solo salones confirmados del departamento en su validación de catálogos y, por ahora, sin préstamos de salón | | | | |
 | 1.54 ⬜ [#886](https://github.com/Erne1357/nexus/issues/886) | Orden de selección: los docentes con puesto administrativo eligen primero («Además, puestos administrativos primero», confirmado) | | | | |
 | 1.55 ✅ [#887](https://github.com/Erne1357/nexus/issues/887) | Demo 8095: carga académica y elecciones previas cargadas, orden de selección sin cargar (operación con respaldo, sin PR) | | | | |
