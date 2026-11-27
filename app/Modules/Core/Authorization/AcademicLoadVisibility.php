@@ -69,6 +69,7 @@ final class AcademicLoadVisibility
         'scheduling.agreements',
         'scheduling.parallels',
         'scheduling.reanalysis',
+        'staffing.current-load',
         'staffing.assign',
         'staffing.teacher-loads',
         'staffing.change-requests',
