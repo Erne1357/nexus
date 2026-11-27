@@ -15,18 +15,35 @@ use Illuminate\Notifications\Notification;
  * ser un número de empleado (CF-07, supuesto por confirmar). No lleva ninguna contraseña (confirmado el 14 de noviembre de 2026: el enlace
  * basta). Va solo por `mail` (no es un aviso de la campana) y sale de la cola, después del commit, cifrado (lleva un
  * enlace vivo).
+ *
+ * CE-01: va solo a un correo institucional, salvo la de la cola de una orden de selección y su reenvío, que pueden ir al
+ * personal (SEL-13): quien la manda lo dice con `$personalMailRule` y solo esa regla la exceptúa
+ * (PersonalMailExceptions). La propiedad no es promovida y tiene valor por omisión, para que una invitación que se guardó
+ * en la cola antes de este cambio se lea igual (sin excepción).
  */
-final class AccessInvitation extends Notification implements ShouldBeEncrypted, ShouldQueue
+final class AccessInvitation extends Notification implements AllowsPersonalMail, ShouldBeEncrypted, ShouldQueue
 {
     use Queueable;
+
+    private ?string $personalMailRule = null;
 
     public function __construct(
         public readonly string $username,
         public readonly string $name,
         public readonly string $url,
         public readonly CarbonImmutable $expiresAt,
+        ?string $personalMailRule = null,
     ) {
+        $this->personalMailRule = $personalMailRule;
         $this->afterCommit();
+    }
+
+    /**
+     * La regla por la que esta invitación puede ir a un correo personal (SEL-13), o null.
+     */
+    public function personalMailRule(): ?string
+    {
+        return $this->personalMailRule;
     }
 
     /**
