@@ -6,6 +6,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\TermQuery;
+use Carbon\CarbonImmutable;
 
 /*
 | TermQuery::forTable: la tabla de periodos del más reciente al más antiguo, con búsqueda; vacía para
@@ -48,4 +49,18 @@ it('no lista nada a quien la policy no deja ver', function () {
     $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $campus->id])->create();
 
     expect(termCodesFor($docente))->toBe([]);
+});
+
+describe('lastEnded (1.85)', function () {
+    it('da el periodo de mayor fin anterior al día, y el siguiente que aún no empieza no cuenta', function () {
+        $query = app(TermQuery::class);
+
+        expect($query->lastEnded(CarbonImmutable::parse('2026-12-15'))?->code)->toBe('20263')
+            ->and($query->lastEnded(CarbonImmutable::parse('2027-06-12'))?->code)->toBe('20271')
+            ->and($query->lastEnded(CarbonImmutable::parse('2026-12-11'))?->code)->toBeNull();
+    });
+
+    it('es nulo si ningún periodo ha terminado', function () {
+        expect(app(TermQuery::class)->lastEnded(CarbonImmutable::parse('2026-01-01')))->toBeNull();
+    });
 });

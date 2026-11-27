@@ -88,7 +88,7 @@ final class StudentsServiceProvider extends ModuleServiceProvider
         });
 
         // AC-15 (1.67): el Resumen del alumno es el tablero de Students (Core no lo conoce: lo pinta con HomePanels).
-        $this->app->make(HomePanels::class)->register('alumno', 'students::components.student-summary');
+        $this->app->make(HomePanels::class)->register('alumno', 'students::components.student-summary', 'Tu avance, lo que cursas y lo que necesita tu atención.');
 
         // CE-01: el correo institucional del alumno que no lo tiene en su usuario es el que sale de su número de control
         // (AC-13). Core no conoce a Students.
