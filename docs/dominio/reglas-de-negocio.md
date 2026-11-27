@@ -26,6 +26,7 @@ Reglas que Nexus hace cumplir. Cada regla tiene un identificador para referirla 
 | HC-18 | Ningún registro de bitácora, transición o snapshot se edita ni se borra. | Core | R1 |
 | HC-19 | (R3) Un alumno solo puede inscribir una materia si aprobó su seriación, no la tiene aprobada, hay cupo en su carrera para ese grupo y no se empalma con sus otros grupos. | Enrollment | R3 |
 | HC-20 | La carga de un departamento en una modalidad (M1) no sale de `draft` sin al menos una parte aceptada del departamento en una propuesta de carrera del mismo periodo y modalidad, de cualquiera de sus campus ("Propuesta de carrera"); cuenta aunque esa propuesta esté regresada por otro departamento, porque lo aceptado ya no cambia (supuesto por confirmar). | AcademicLoad | R1 |
+| HC-21 | El jefe de departamento o el jefe de proyecto docente puede asignar a un grupo suyo a un docente activo de cualquier departamento que halle buscando por nombre o RFC en «Asignación docente», sin pedir permiso ni avisar al jefe de su departamento (confirmado el 26 de noviembre de 2026). El docente buscado se asigna como cualquier otro: si no es el primer lugar o no está en el ranking del grupo, exige el motivo de HC-16 (confirmado el 26 de noviembre de 2026). La búsqueda pide al menos 3 caracteres y muestra a lo más 10 resultados (supuesto por confirmar), para que el selector no se llene con todos los docentes; el ranking sigue siendo la lista por omisión. HC-01, HC-08 y HC-09 siguen aplicando al asignar. | Staffing | R1 |
 
 ## Restricciones blandas (SC)
 
@@ -85,6 +86,7 @@ Decisiones del 7 de noviembre de 2026 sobre el cálculo:
 - **Desempate final** (supuesto por confirmar): el orden alfabético no distingue acentos ni mayúsculas y, si dos nombres coinciden, decide el id del docente, para que el orden sea siempre el mismo.
 - **Ventana en verano** (supuesto por confirmar): para un periodo de verano, la ventana empieza en el Ene-Jun del mismo año.
 - **Orden del periodo anterior**: se toma el mejor puesto del docente en los grupos de la misma materia, modalidad y campus del semestre anterior (MS27, supuesto por confirmar).
+- **Buscar otro docente** (HC-21; confirmado el 26 de noviembre de 2026, con 3 caracteres y 10 resultados como supuesto por confirmar): bajo el ranking de cada grupo, «Buscar otro docente · nombre o RFC» (`staffing::components.teacher-search`, `TeacherSearchQuery`) muestra a los docentes activos de cualquier departamento, sin importar mayúsculas ni acentos, con su RFC, su departamento («Otro departamento» si no es el del grupo), el lugar en el ranking del grupo, sus horas asignadas y base del periodo y si chocan («Choca: …») o están libres en el horario del grupo. El choque se muestra pero no veta la búsqueda: lo decide AssignTeacher al asignar (supuesto por confirmar). No muestra al docente que ya tiene el grupo.
 
 ## Grupos y horarios
 
