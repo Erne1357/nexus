@@ -331,6 +331,7 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 - «Seleccionada solamente», que también muestra el SII, llega con la inscripción (R3); su lila queda como token reservado, sin uso, en `resources/css/app.css` (tarea 1.43). Los colores de cada estado de la retícula y su contraste están en DESIGN.md, "Retícula del alumno".
 - Una vez elegida la especialidad (por su kárdex o, si no, la asignada por el SII; esto último, supuesto por confirmar), la retícula ya no muestra las materias de las otras. Sin especialidad, muestra solo las de las especialidades activas, y el tronco común siempre (confirmado el 26 de noviembre de 2026). El avance guardado (`student_progress`) y los elegibles cuentan lo mismo.
 - La ficha calcula el avance al leerla, desde el kardex del alumno, para no esperar al siguiente recálculo de `student_progress`.
+- El kárdex se lee del periodo más reciente al más antiguo; «Sin periodo» va al final; dentro de cada periodo, por código de materia (confirmado el 26 de noviembre de 2026). Aplica a «Mis datos › Kárdex» y a la ficha del personal.
 
 ## Periodo y calendario
 
