@@ -18,6 +18,7 @@ use App\Modules\Core\Exceptions\InvalidPhoto;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Support\HomePanels;
 use App\Modules\Core\Support\PhotoNormalizer;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use App\Modules\Students\Enums\StudentsPermission;
@@ -78,6 +79,9 @@ final class StudentsServiceProvider extends ModuleServiceProvider
 
             return $student === null ? null : StudentPhotoUrl::own($student);
         });
+
+        // AC-15 (1.67): el Resumen del alumno es el tablero de Students (Core no lo conoce: lo pinta con HomePanels).
+        $this->app->make(HomePanels::class)->register('alumno', 'students::components.student-summary');
 
         // AC-20: la verificación pública del QR de la credencial. 30 por minuto por dirección y código, y 300 por dirección:
         // detrás del NAT del campus muchos teléfonos comparten dirección.

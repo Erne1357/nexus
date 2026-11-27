@@ -77,6 +77,7 @@ use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Support\ActivityAttributes;
 use App\Modules\Core\Support\ActivityProtectedProperties;
+use App\Modules\Core\Support\HomePanels;
 use App\Modules\Core\Support\QueueJobScope;
 use App\Modules\Core\View\Components\Drawer;
 use App\Modules\Core\View\DrawerIds;
@@ -141,6 +142,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // Singleton a propósito: las fuentes de fotos se registran una vez al arrancar (boot) y son closures sin estado;
         // nada de lo que guarda cambia por petición, así que es seguro con Octane.
         $this->app->singleton(CredentialPhotos::class);
+
+        // Singleton por lo mismo: los paneles de Resumen por puesto (HomePanels) los registran los módulos en boot().
+        $this->app->singleton(HomePanels::class);
 
         // `scoped` por lo mismo: memoriza los snapshots de nombramientos de la petición en curso.
         $this->app->scoped(AuthorizationSnapshots::class, fn (Application $app): AuthorizationSnapshots => new AuthorizationSnapshots($app['cache.store']));

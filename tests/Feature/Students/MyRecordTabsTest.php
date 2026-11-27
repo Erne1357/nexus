@@ -140,7 +140,7 @@ it('AC-15: el personal sin puesto de alumno no entra a ninguna pestaña de «Mis
 it('la ficha del personal sigue igual: pestañas Retícula y Kárdex, con resaltado, cadenas, «Puede seleccionar» y barra de selección', function () {
     $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->career->id])->create();
 
-    Livewire::actingAs($coordinator)->test('students::pages.student', ['student' => $this->student->id])
+    Livewire::actingAs($coordinator)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $this->student->id])
         ->assertSeeHtml('>Puede seleccionar</span>')
         ->assertSeeHtml('x-data="studentGrid"')
         ->assertSeeHtml('data-testid="chain-legend"')
