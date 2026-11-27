@@ -25,6 +25,7 @@ final readonly class RankedCandidate
             'banda_aceptada' => $candidate->noHours && $candidate->bandAccepted,
             'choque' => $candidate->clash,
             'no_disponible' => $candidate->unavailable,
+            'sin_cupo' => $candidate->noRoom,
             'sin_evaluacion' => $candidate->evaluation === null,
             'traslado_justo' => $candidate->tightTravel,
         ]));

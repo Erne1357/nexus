@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\DB;
  * la cola: con acceso, invitado (invitación vigente), pendiente (con su motivo) o sin correo. Una consulta por cada
  * cosa, sin importar la cola.
  *
- * @phpstan-type Row array{entry: SelectionEntry, name: string, hours: int, target: int, groups: list<string>, current: bool, access: string, confirmation: ?string}
+ * @phpstan-type Row array{entry: SelectionEntry, name: string, hours: int, target: int, administrative: ?int, groups: list<string>, current: bool, access: string, confirmation: ?string}
  * @phpstan-type Access array{counts: array{access: int, invited: int, pending: int, no_email: int}, missing: list<array{teacher_id: ?string, name: string, state: string, reason: string, resendable: bool}>}
  */
 final class SelectionMonitorQuery
@@ -59,7 +59,9 @@ final class SelectionMonitorQuery
         $measured = $this->priorHours->forSelection($selection, $entries);
         $targets = $this->targets->forTerm(Term::query()->whereKey($selection->term_id)->firstOrFail(), $entries->whereNotNull('teacher_id')->pluck('base_hours', 'teacher_id')->map(fn ($csv): int => (int) $csv)->all());
 
-        $rows = $entries->map(function (SelectionEntry $entry) use ($byTeacher, $current, $access, $measured, $targets): array {
+        // PL-03: con plaza administrativa no hay banda; la fila lleva sus horas administrativas en lugar del objetivo.
+        $administrative = $this->targets->administrativeForTerm(Term::query()->whereKey($selection->term_id)->firstOrFail(), $entries->whereNotNull('teacher_id')->pluck('teacher_id')->all());
+        $rows = $entries->map(function (SelectionEntry $entry) use ($byTeacher, $current, $access, $measured, $targets, $administrative): array {
             $taken = $byTeacher->get($entry->teacher_id, collect());
 
             return [
@@ -68,6 +70,7 @@ final class SelectionMonitorQuery
                 // SEL-07: el puesto administrativo con el que pasa primero en la orden (tarea 1.54), o nulo.
                 'admin_post' => $entry->isPriorChoice() ? null : $entry->administrative_post,
                 'hours' => (int) $taken->sum('hours'),
+                'administrative' => $administrative[$entry->teacher_id] ?? null,
                 'target' => $targets[$entry->teacher_id] ?? TeachingHours::fromCsvHours((int) $entry->base_hours),
                 'groups' => $taken->pluck('code')->sort()->values()->all(),
                 'current' => $current?->getKey() === $entry->getKey(),

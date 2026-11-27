@@ -11,6 +11,8 @@
 @php
     $hours = $data['my_hours'];
     $base = $data['base_hours'];
+    $administrative = $data['administrative_hours'];
+    $cap = $data['administrative_cap'];
     $low = $base - LoadBand::MARGIN;
     $high = $base + LoadBand::MARGIN;
     $out = $band !== null && $band !== 'within';
@@ -19,7 +21,11 @@
 @endphp
 <x-modal wire:model="showFinish" :title="$confirming ? '¿Confirmar tu carga?' : '¿Terminar tu carga?'" box-class="max-w-xl" data-testid="selection-finish-modal">
     <div class="space-y-3">
-        <p>Llevas <b class="font-mono">{{ $hours }}</b> h en {{ count($groups) }} {{ count($groups) === 1 ? 'grupo' : 'grupos' }} · frente a grupo: <b class="font-mono">{{ $base }}</b> h ({{ $low }} a {{ $high }}).</p>
+        @if ($administrative !== null)
+            <p>Llevas <b class="font-mono">{{ $hours }}</b> h en {{ count($groups) }} {{ count($groups) === 1 ? 'grupo' : 'grupos' }} · plaza administrativa: <b class="font-mono">{{ $administrative }}</b> h ({{ $hours + $administrative }} de {{ $cap }} h).</p>
+        @else
+            <p>Llevas <b class="font-mono">{{ $hours }}</b> h en {{ count($groups) }} {{ count($groups) === 1 ? 'grupo' : 'grupos' }} · frente a grupo: <b class="font-mono">{{ $base }}</b> h ({{ $low }} a {{ $high }}).</p>
+        @endif
 
         @if ($groups !== [])
             <ul class="divide-y divide-base-300 overflow-hidden rounded-field border border-base-300">
@@ -68,7 +74,7 @@
             <div role="note" class="alert alert-success alert-soft items-start text-sm" data-testid="selection-finish-within">
                 <x-icon name="o-check-circle" class="mt-0.5 h-5 w-5" aria-hidden="true" />
                 <div>
-                    <p class="font-semibold">Estás dentro de tu margen</p>
+                    <p class="font-semibold">{{ $administrative !== null ? 'Tu plaza administrativa no lleva margen' : 'Estás dentro de tu margen' }}</p>
                     <p>{{ $confirming ? 'Al confirmar' : 'Al terminar' }}, tus grupos quedan a tu nombre y ya no los cambias en la selección.</p>
                 </div>
             </div>

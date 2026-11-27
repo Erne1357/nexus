@@ -476,7 +476,7 @@
                                         <td class="font-semibold">{{ $row['name'] }}@if ($row['admin_post'] !== null) <x-core::status-badge tone="info" label="Puesto administrativo" class="badge-sm" title="{{ $row['admin_post'] }}" data-testid="monitor-admin-post" />@endif</td>
                                         <td class="whitespace-nowrap font-mono text-xs">{{ $row['entry']->slot_starts_at?->locale('es')->isoFormat('ddd D, H:mm') }}</td>
                                         <td>{{ $row['current'] ? 'En turno' : $row['entry']->status->label() }}</td>
-                                        <td><span class="font-mono">{{ $row['hours'] }}</span> <span class="text-neutral">· frente a grupo: {{ $row['target'] }} h ({{ $row['target'] - 2 }} a {{ $row['target'] + 2 }})</span></td>
+                                        <td><span class="font-mono">{{ $row['hours'] }}</span> <span class="text-neutral">@if ($row['administrative'] !== null)· plaza administrativa: {{ $row['administrative'] }} h @else· frente a grupo: {{ $row['target'] }} h ({{ $row['target'] - 2 }} a {{ $row['target'] + 2 }}) @endif</span></td>
                                         <td class="font-mono text-xs">{{ $row['groups'] === [] ? '—' : implode(', ', $row['groups']) }}</td>
                                         <td @class(['text-xs', 'font-semibold text-warning' => in_array($row['access'], ['pending', 'no_email'], true)])>{{ $accessLabels[$row['access']] }}</td>
                                     </tr>
@@ -489,7 +489,7 @@
                 <div class="mt-4 grid gap-4 md:grid-cols-2">
                     <x-card title="Ronda extra" shadow data-testid="monitor-extra">
                         @forelse ($monitor['extra'] as $row)
-                            <p><b>{{ $row['name'] }}</b> <span class="text-sm text-neutral">terminó con {{ $row['hours'] }} h (frente a grupo: {{ $row['target'] }} h)</span></p>
+                            <p><b>{{ $row['name'] }}</b> <span class="text-sm text-neutral">terminó con {{ $row['hours'] }} h (@if ($row['administrative'] !== null)plaza administrativa: {{ $row['administrative'] }} h @else frente a grupo: {{ $row['target'] }} h @endif)</span></p>
                         @empty
                             <p class="text-sm text-neutral">Nadie pasó a la ronda extra.</p>
                         @endforelse

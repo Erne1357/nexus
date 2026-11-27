@@ -27,12 +27,13 @@ final readonly class RankingCandidate
         public ?int $previousRank,
         public bool $tightTravel = false,
         public bool $bandAccepted = false,
+        public bool $noRoom = false,
     ) {}
 
-    /** El bloque final, «no pueden tomarlo»: choque (HC-01) o no disponible (HC-09). */
+    /** El bloque final, «no pueden tomarlo»: choque (HC-01), no disponible (HC-09) o, con plaza administrativa, que no le caben las horas del grupo en su tope de 42 h (HC-22, `noRoom`). */
     public function isFlagged(): bool
     {
-        return $this->clash || $this->unavailable;
+        return $this->clash || $this->unavailable || $this->noRoom;
     }
 
     /** El bloque «Pasan su banda» (HC-08): asignable, debajo de los demás y antes del bloque final. */

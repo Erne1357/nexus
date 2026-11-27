@@ -18,6 +18,8 @@ use App\Modules\Scheduling\Validation\Violation;
  * docente lo aceptó. En la foto del motor (ContractState, `engineLimit`) sigue siendo choque duro contra el límite de
  * la entrada (supuesto por confirmar).
  *
+ * PL-03: con plaza administrativa no hay banda y HC-08 no le aplica; su tope de 42 h es la regla dura HC-22 (AdministrativeHours).
+ *
  * Las horas de un grupo son las de su materia, teoría más práctica (supuesto por confirmar); la misma definición que
  * TeacherAssignedHoursQuery. Se reporta una vez por grupo activo del docente que toca el alcance.
  */

@@ -111,11 +111,11 @@
                             @php
                                 $scale = max(48, $row->assignedHours + $row->externalHours, $row->limitHours);
                                 $pct = fn (int $hours): string => round($hours / $scale * 100, 2).'%';
-                                $target = $row->teachingHours ?? $row->baseHours;
+                                $target = $row->isAdministrative() ? 0 : ($row->teachingHours ?? $row->baseHours);
                                 $notice = $row->hourNotice();
                                 $figure = match ($status) {
                                     'over' => ['+'.$row->excessHours(), 'h de más', 'text-warning'],
-                                    'none' => ['0 / '.$target, 'h', ''],
+                                    'none' => $row->isAdministrative() ? ['0', 'h de clase', ''] : ['0 / '.$target, 'h', ''],
                                     'part' => [$row->remainingHours, 'libres', ''],
                                     'full' => ['0', 'libres', 'text-success'],
                                     default => [$row->assignedHours, 'h asignadas', ''],
@@ -154,7 +154,9 @@
                                     @if ($row->externalHours)
                                         <span>ext. <b class="font-mono text-base-content">{{ $row->externalHours }}</b></span>
                                     @endif
-                                    @if ($row->bandLabel() !== null)
+                                    @if ($row->isAdministrative())
+                                        <span data-testid="tile-band" class="whitespace-nowrap">plaza administrativa <b class="font-mono text-base-content">{{ $row->administrativeHours }} h</b></span>
+                                    @elseif ($row->bandLabel() !== null)
                                         <span data-testid="tile-band" class="whitespace-nowrap">frente a grupo <b class="font-mono text-base-content">{{ $row->bandLabel() }}</b></span>
                                     @else
                                         <span>base <b class="font-mono text-base-content">{{ $row->baseHours }}</b></span>

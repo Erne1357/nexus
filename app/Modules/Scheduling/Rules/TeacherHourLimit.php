@@ -4,6 +4,7 @@ namespace App\Modules\Scheduling\Rules;
 
 use App\Modules\Faculty\Rules\TeachingHours;
 use App\Modules\Scheduling\Validation\ScheduleState;
+use App\Modules\Scheduling\Validation\State\StateTeacher;
 
 /**
  * La cuenta de horas de un docente en el periodo que usa HC-08, para todos los que la necesitan (la regla, el ranking,
@@ -22,13 +23,20 @@ use App\Modules\Scheduling\Validation\ScheduleState;
  *   Nexus (pendiente), salvo que la casilla ya lo cubra (`accepted`).
  * - `hard`: la foto del motor trae su propio límite (`engineLimit`, ContractState) y ahí HC-08 sigue siendo choque duro.
  *
+ * PL-03 y HC-22 (confirmado el 27 de noviembre de 2026): quien tiene una plaza de apoyo y asistencia (`administrativeHours`, la
+ * suma de sus horas) no lleva banda de ±2 ni respaldo del CSV, y puede no dar clases. Sus clases, horas externas (supuesto
+ * por confirmar) y horas administrativas no pueden pasar de `staffing.administrative_max_hours` (42): es un límite duro
+ * (HC-22, que veta la asignación y la elección en la selección), no un aviso, y HC-08 no le aplica (`over_band` siempre
+ * falso). Su `limit` es lo que le queda hasta ese tope (`administrative_cap` menos las horas administrativas, nunca menos
+ * de 0), `remaining_hours` es `limit` menos lo suyo (negativo si ya lo pasa) y `administrative_excess` las horas de más.
+ *
  * `$exceptGroupId` no cuenta ese grupo: así el ranking pregunta cuántas horas le quedarían a un candidato sin contarse a
  * sí mismo.
  */
 final class TeacherHourLimit
 {
     /**
-     * @return array{base_hours: int, teaching_hours: int, band_from: int, band_to: int, external_hours: int, assigned_hours: int, tolerance: int, honorarios_cap: ?int, band_limit: int, allowance_hours: ?int, limit: int, remaining_hours: int, over_band: bool, accepted: bool, hard: bool, groups: array<string, int>}|null
+     * @return array{base_hours: int, teaching_hours: int, band_from: int, band_to: int, external_hours: int, assigned_hours: int, tolerance: int, honorarios_cap: ?int, band_limit: int, allowance_hours: ?int, limit: int, remaining_hours: int, over_band: bool, accepted: bool, hard: bool, groups: array<string, int>, administrative_hours: ?int, administrative_cap: ?int, administrative_excess: int}|null
      */
     public static function of(ScheduleState $state, string $teacherId, ?string $exceptGroupId = null): ?array
     {
@@ -50,6 +58,11 @@ final class TeacherHourLimit
 
         $assigned = array_sum($groups);
         $total = $assigned + $teacher->externalHours;
+
+        if ($teacher->administrativeHours !== null) {
+            return self::administrative($teacher, $groups, $assigned, $total, $tolerance, (int) $state->setting('staffing.administrative_max_hours', TeachingHours::ADMINISTRATIVE_MAX));
+        }
+
         $teaching = $teacher->teachingHours;
         $bandTo = $teaching + TeachingHours::MARGIN;
         $honorariosCap = $teacher->isHonorarios && $cap !== null ? (int) $cap : null;
@@ -74,7 +87,78 @@ final class TeacherHourLimit
             'accepted' => $overBand && $teacher->engineLimit === null && $teacher->allowanceHours !== null && $total <= $teacher->allowanceHours,
             'hard' => $teacher->engineLimit !== null,
             'groups' => $groups,
+            'administrative_hours' => null,
+            'administrative_cap' => null,
+            'administrative_excess' => 0,
         ];
+    }
+
+    /**
+     * PL-03 y HC-22: la cuenta de quien tiene plaza administrativa.
+     *
+     * @param  array<string, int>  $groups
+     * @return array<string, mixed>
+     */
+    private static function administrative(StateTeacher $teacher, array $groups, int $assigned, int $total, int $tolerance, int $adminCap): array
+    {
+        $adminCap = max(1, $adminCap);
+        $administrative = (int) $teacher->administrativeHours;
+        $limit = max(0, $adminCap - $administrative);
+
+        return [
+            'base_hours' => $teacher->baseHours,
+            'teaching_hours' => 0,
+            'band_from' => 0,
+            'band_to' => 0,
+            'external_hours' => $teacher->externalHours,
+            'assigned_hours' => $assigned,
+            'tolerance' => $tolerance,
+            'honorarios_cap' => null,
+            'band_limit' => $limit,
+            'allowance_hours' => $teacher->allowanceHours,
+            'limit' => $limit,
+            'remaining_hours' => $limit - $total,
+            'over_band' => false,
+            'accepted' => false,
+            'hard' => false,
+            'groups' => $groups,
+            'administrative_hours' => $administrative,
+            'administrative_cap' => $adminCap,
+            'administrative_excess' => max(0, $total - $limit),
+        ];
+    }
+
+    /**
+     * PL-03, el resumen de quien tiene plaza administrativa para mostrarlo: «Plaza administrativa: 36 h · clases 4 h ·
+     * 40 de 42 h»; en el tope, «42 de 42 h · ya no le caben clases». Las clases incluyen las horas externas.
+     *
+     * @param  array{administrative_hours: ?int, administrative_cap: ?int, assigned_hours: int, external_hours: int}  $hours
+     */
+    public static function administrativeSummary(array $hours): string
+    {
+        $administrative = (int) $hours['administrative_hours'];
+        $classes = $hours['assigned_hours'] + $hours['external_hours'];
+        $cap = (int) $hours['administrative_cap'];
+        $total = $administrative + $classes;
+        $text = "Plaza administrativa: {$administrative} h · clases {$classes} h · {$total} de {$cap} h";
+
+        return $total >= $cap ? "{$text} · ya no le caben clases" : $text;
+    }
+
+    /**
+     * HC-22, el aviso de quien pasa el tope de su plaza administrativa, sin su nombre, o null si no lo pasa.
+     *
+     * @param  array{administrative_hours: ?int, administrative_cap: ?int, administrative_excess: int, assigned_hours: int, external_hours: int}  $hours
+     */
+    public static function administrativeNotice(array $hours): ?string
+    {
+        if ($hours['administrative_hours'] === null || $hours['administrative_excess'] <= 0) {
+            return null;
+        }
+
+        $total = $hours['administrative_hours'] + $hours['assigned_hours'] + $hours['external_hours'];
+
+        return "Pasa el tope de su plaza administrativa ({$hours['administrative_cap']} h): suma {$total} h entre su plaza ({$hours['administrative_hours']} h), clases y horas externas, {$hours['administrative_excess']} h de más.";
     }
 
     /**

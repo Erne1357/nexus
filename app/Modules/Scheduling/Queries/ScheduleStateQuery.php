@@ -176,6 +176,9 @@ final class ScheduleStateQuery
         $teaching = $positions->map(fn ($plazas): int => TeachingHours::forPositions($plazas->map(fn (TeacherPosition $position): array => [
             'kind' => $position->kind, 'category' => $position->category, 'base_hours' => $position->base_hours,
         ])));
+        $administrative = $positions->map(fn ($plazas): ?int => TeachingHours::administrativeHours($plazas->map(fn (TeacherPosition $position): array => [
+            'kind' => $position->kind, 'base_hours' => $position->base_hours,
+        ])));
         $honorarios = $positions->filter(fn ($plazas): bool => $plazas->contains(fn (TeacherPosition $position): bool => $position->kind === PositionKind::Honorarios));
         $csv = $this->csvHours->forTerm($term, $teacherIds);
 
@@ -209,7 +212,10 @@ final class ScheduleStateQuery
                 $unavailable[$teacher->id] ?? [],
                 $honorarios->has($teacher->id),
                 $teacher->allowance_hours === null ? null : (int) $teacher->allowance_hours,
-                ($teaching[$teacher->id] ?? 0) > 0 ? $teaching[$teacher->id] : ($csv[$teacher->id] ?? 0),
+                // PL-03: con plaza administrativa no hay banda, así que no se le inventan horas frente a grupo con el CSV.
+                ($administrative[$teacher->id] ?? null) !== null ? 0 : (($teaching[$teacher->id] ?? 0) > 0 ? $teaching[$teacher->id] : ($csv[$teacher->id] ?? 0)),
+                null,
+                $administrative[$teacher->id] ?? null,
             ))
             ->all();
     }

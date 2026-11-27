@@ -5,7 +5,7 @@ namespace App\Modules\Faculty\Rules;
 use App\Modules\Faculty\Enums\PositionKind;
 
 /**
- * PL-01. Horas frente a grupo que le tocan a un docente según sus plazas vigentes (Reglamento Interior de Trabajo del
+ * PL-01 y PL-03. Horas frente a grupo que le tocan a un docente según sus plazas vigentes (Reglamento Interior de Trabajo del
  * Personal Docente de los Institutos Tecnológicos, arts. 140, 143, 144, 146, 149 y 155; ver
  * docs/dominio/lineamientos-carga-docente.md). Puro: no lee la base.
  *
@@ -15,14 +15,20 @@ use App\Modules\Faculty\Enums\PositionKind;
  *   categoría: titular (supuesto por confirmar). El asistente no tiene clave en el catálogo de claves.
  * - Asignatura sola: todas sus horas (arts. 140 y 155). Con plaza de carrera además, las de asignatura se miden por la
  *   tabla del art. 149 (1→1, 2→1, 3→2 … 9→5; de 10 en adelante, la mitad hacia arriba: supuesto por confirmar).
- * - Apoyo y asistencia: 0 (supuesto por confirmar: no es plaza docente). Honorarios: 0, que es lo que ya valían sus
- *   horas base; el tope de `staffing.honorarios_max_hours` lo mide HC-08, no esta regla (supuesto por confirmar).
- * - El margen de ±2 (art. 147, MARGIN) lo aplican la banda de la selección (LoadBand, SEL-05) y HC-08 (1.50).
+ * - Apoyo y asistencia: 0 en esta cuenta (no es plaza docente). Quien tiene una es «de plaza administrativa» y no se
+ *   mide con esta regla ni con la banda de ±2, sino con PL-03 (administrativeHours, tope de 42 h; confirmado el 27 de
+ *   noviembre de 2026). Honorarios: 0, que es lo que ya valían sus horas base; el tope de `staffing.honorarios_max_hours`
+ *   lo mide HC-08, no esta regla (supuesto por confirmar).
+ * - El margen de ±2 (art. 147, MARGIN) lo aplican la banda de la selección (LoadBand, SEL-05) y HC-08 (1.50) a quien no
+ *   es de plaza administrativa.
  */
 final class TeachingHours
 {
     /** Art. 147: la carga frente a grupo puede variar dos horas arriba o abajo (la banda de SEL-05 y el tope de HC-08). */
     public const int MARGIN = 2;
+
+    /** PL-03 y HC-22: lo más que pueden sumar clases, horas externas y horas administrativas de quien tiene plaza administrativa (límite duro). */
+    public const int ADMINISTRATIVE_MAX = 42;
 
     /** Horas de carrera por familia y jornada [TC, ¾, ½] (arts. 143, 144 y 146). */
     private const array CAREER = [
@@ -65,6 +71,26 @@ final class TeachingHours
         }
 
         return $career + ($hasCareer ? self::onCareer($assignment) : $assignment);
+    }
+
+    /**
+     * PL-03. Las horas administrativas del docente: la suma de las horas base de sus plazas vigentes de apoyo y
+     * asistencia, o null si no tiene ninguna (no es «de plaza administrativa»). Un docente con una de estas plazas no
+     * lleva banda de ±2: su límite es ADMINISTRATIVE_MAX entre clases, horas externas y estas horas.
+     *
+     * @param  iterable<array{kind: PositionKind, category?: ?string, base_hours: int}>  $positions
+     */
+    public static function administrativeHours(iterable $positions): ?int
+    {
+        $hours = null;
+
+        foreach ($positions as $position) {
+            if ($position['kind'] === PositionKind::Apoyo) {
+                $hours = ($hours ?? 0) + $position['base_hours'];
+            }
+        }
+
+        return $hours;
     }
 
     /**

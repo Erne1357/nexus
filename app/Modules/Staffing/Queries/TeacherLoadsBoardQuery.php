@@ -100,6 +100,8 @@ final class TeacherLoadsBoardQuery
                 $load->teaching_hours,
                 $load->band_limit_hours,
                 $load->honorarios_cap_hours,
+                $load->administrative_hours,
+                $load->administrative_cap_hours,
             );
         }
 

@@ -131,6 +131,7 @@ final class RankGroups
                     remainingHours: self::remaining($hours[$input->teacherId] ?? null, 'before'),
                     tightTravel: in_array('traslado_justo', $marks, true),
                     bandAccepted: in_array(CandidateMarks::BAND_ACCEPTED, $marks, true),
+                    noRoom: in_array('sin_cupo', $marks, true),
                 );
             }
 

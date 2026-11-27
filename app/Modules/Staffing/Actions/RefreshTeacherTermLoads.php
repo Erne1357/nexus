@@ -62,6 +62,8 @@ final class RefreshTeacherTermLoads
                 'teaching_hours' => $hours['teaching_hours'],
                 'band_limit_hours' => $hours['band_limit'],
                 'honorarios_cap_hours' => $hours['honorarios_cap'],
+                'administrative_hours' => $hours['administrative_hours'],
+                'administrative_cap_hours' => $hours['administrative_cap'],
                 'external_hours' => $hours['external_hours'],
                 'assigned_hours' => $hours['assigned_hours'],
                 'limit_hours' => $hours['limit'],
@@ -80,7 +82,7 @@ final class RefreshTeacherTermLoads
 
             foreach (array_chunk($rows, self::CHUNK) as $chunk) {
                 TeacherTermLoad::query()->upsert($chunk, ['teacher_id', 'term_id'],
-                    ['base_hours', 'teaching_hours', 'band_limit_hours', 'honorarios_cap_hours', 'external_hours', 'assigned_hours', 'limit_hours', 'remaining_hours', 'groups_count', 'computed_at']);
+                    ['base_hours', 'teaching_hours', 'band_limit_hours', 'honorarios_cap_hours', 'administrative_hours', 'administrative_cap_hours', 'external_hours', 'assigned_hours', 'limit_hours', 'remaining_hours', 'groups_count', 'computed_at']);
             }
         });
 

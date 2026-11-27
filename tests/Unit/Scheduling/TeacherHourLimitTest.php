@@ -95,3 +95,62 @@ it('PL-02: una materia que no cuenta en la carga del docente le suma 0 h; sus ho
         ->and($tutoring->weeklyHours())->toBe(1)
         ->and($tutoring->teacherHours())->toBe(0);
 });
+
+/*
+| PL-03 y HC-22 (confirmado el 27 de noviembre de 2026): quien tiene plaza administrativa no lleva banda de ±2 y no puede pasar
+| de 42 h entre clases, externas y administrativas (límite duro).
+*/
+
+it('PL-03: plaza administrativa de 36 h con 4 h de clase queda sin banda, sin aviso y en 40 de 42 h', function () {
+    $state = States::builder()
+        ->teacher(States::teacher('T1', base: 36, administrative: 36))
+        ->subject(States::subject('S-A', theory: 2, practice: 2))
+        ->group(States::group('A', teacher: 'T1', subject: 'S-A'))
+        ->build();
+    $hours = TeacherHourLimit::of($state, 'T1');
+
+    expect($hours)->toMatchArray([
+        'teaching_hours' => 0, 'band_from' => 0, 'band_to' => 0, 'assigned_hours' => 4, 'administrative_hours' => 36, 'administrative_cap' => 42,
+        'administrative_excess' => 0, 'limit' => 6, 'remaining_hours' => 2, 'over_band' => false, 'hard' => false,
+    ])
+        ->and(TeacherHourLimit::notice($hours))->toBeNull()
+        ->and(TeacherHourLimit::administrativeNotice($hours))->toBeNull()
+        ->and(TeacherHourLimit::administrativeSummary($hours))->toBe('Plaza administrativa: 36 h · clases 4 h · 40 de 42 h');
+});
+
+it('HC-22: 36 + 6 = 42 h cabe y dice que ya no le caben clases; 36 + 8 = 44 h pasa el tope', function () {
+    $state = fn (int $theory) => States::builder()
+        ->teacher(States::teacher('T1', base: 36, administrative: 36))
+        ->subject(States::subject('S-A', theory: $theory, practice: 0))
+        ->group(States::group('A', teacher: 'T1', subject: 'S-A'))
+        ->build();
+
+    $full = TeacherHourLimit::of($state(6), 'T1');
+    $over = TeacherHourLimit::of($state(8), 'T1');
+
+    expect($full)->administrative_excess->toBe(0)->remaining_hours->toBe(0)
+        ->and(TeacherHourLimit::administrativeSummary($full))->toBe('Plaza administrativa: 36 h · clases 6 h · 42 de 42 h · ya no le caben clases')
+        ->and($over)->administrative_excess->toBe(2)->remaining_hours->toBe(-2)->over_band->toBeFalse()
+        ->and(TeacherHourLimit::administrativeNotice($over))->toStartWith('Pasa el tope de su plaza administrativa (42 h)')->toContain('2 h de más');
+});
+
+it('PL-03: el tope sale de staffing.administrative_max_hours, por omisión 42, y las horas externas cuentan', function () {
+    $state = fn (?int $cap) => tap(States::builder(), fn ($b) => $cap === null ? null : $b->setting('staffing.administrative_max_hours', $cap))
+        ->teacher(States::teacher('T1', base: 36, administrative: 30, external: 3))
+        ->build();
+
+    expect(TeacherHourLimit::of($state(null), 'T1'))->administrative_cap->toBe(42)->limit->toBe(12)->remaining_hours->toBe(9)
+        ->and(TeacherHourLimit::of($state(33), 'T1'))->administrative_cap->toBe(33)->limit->toBe(3)->remaining_hours->toBe(0)->administrative_excess->toBe(0);
+});
+
+it('PL-03: sin clases no hay problema, y apoyo más asignatura aplica PL-03 y no la banda (supuesto por confirmar)', function () {
+    $state = States::builder()
+        ->teacher(States::teacher('T1', base: 36, administrative: 36))
+        ->teacher(States::teacher('T2', base: 42, teaching: 6, administrative: 36))
+        ->subject(States::subject('S-A', theory: 3, practice: 3))
+        ->group(States::group('A', teacher: 'T2', subject: 'S-A'))
+        ->build();
+
+    expect(TeacherHourLimit::of($state, 'T1'))->over_band->toBeFalse()->administrative_excess->toBe(0)->remaining_hours->toBe(6)
+        ->and(TeacherHourLimit::of($state, 'T2'))->over_band->toBeFalse()->administrative_excess->toBe(0)->remaining_hours->toBe(0)->teaching_hours->toBe(0);
+});

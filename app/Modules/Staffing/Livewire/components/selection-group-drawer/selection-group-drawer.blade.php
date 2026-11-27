@@ -7,6 +7,7 @@
     «Quitar docente» pide el motivo en el mismo drawer. Con la selección terminada, el docente solo consulta.
 --}}
 @use('App\Modules\Scheduling\Validation\Minutes')
+@use('App\Modules\Staffing\Rules\AdministrativeCap')
 @use('App\Modules\Staffing\Rules\LoadBand')
 @php
     $spaces = [
@@ -153,7 +154,13 @@
 
                         @if ($pickable && $hours !== null)
                             @php($after = $hours['hours'] + ($card['teacher_hours'] ?? $card['hours']))
-                            @php($band = LoadBand::classify($after, $hours['base']))
+                            @php($band = LoadBand::classify($after, $hours['base'], $hours['administrative'] !== null))
+                            @if ($hours['administrative'] !== null)
+                                <p class="flex items-start gap-2 text-sm" data-testid="selection-after">
+                                    <x-icon name="o-calculator" class="mt-0.5 h-4 w-4 flex-none text-neutral" aria-hidden="true" />
+                                    <span>Con este grupo llevarías <b class="font-mono">{{ $after }}</b> h · plaza administrativa: <b class="font-mono">{{ $hours['administrative'] }}</b> h (<b @class(['font-mono', 'text-error' => $after + $hours['administrative'] > AdministrativeCap::current()])>{{ $after + $hours['administrative'] }}</b> de {{ AdministrativeCap::current() }} h)@if ($after + $hours['administrative'] > AdministrativeCap::current()) · <b class="text-error">pasas el tope: no puedes tomarlo</b>@endif</span>
+                                </p>
+                            @else
                             <p class="flex items-start gap-2 text-sm" data-testid="selection-after">
                                 <x-icon name="o-calculator" class="mt-0.5 h-4 w-4 flex-none text-neutral" aria-hidden="true" />
                                 <span>Con este grupo llevarías <b class="font-mono">{{ $after }}</b> h · frente a grupo: <b class="font-mono">{{ $hours['base'] }}</b> h ({{ $hours['base'] - 2 }} a {{ $hours['base'] + 2 }}):
@@ -163,6 +170,7 @@
                                         default => 'dentro de tu margen',
                                     } }}</b></span>
                             </p>
+                            @endif
                         @endif
 
                         @if ($pickable)
