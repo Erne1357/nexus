@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Models\Term;
+use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Queries\TeacherTeachingHoursQuery;
@@ -45,4 +46,13 @@ it('el objetivo de la selección sale de las plazas y, sin ellas, de las horas d
     $targets = app(TeachingTargetQuery::class)->forTerm($this->term, [$withPositions->id => 5, $without->id => 30]);
 
     expect($targets)->toBe([$withPositions->id => 22, $without->id => 16]);
+});
+
+it('PL-01 (supuesto por confirmar): quien solo tiene plaza de apoyo u honorarios (0 h frente a grupo) usa el CSV', function () {
+    $support = Teacher::factory()->create();
+    $fees = Teacher::factory()->create();
+    TeacherPosition::factory()->for($support)->create(['kind' => PositionKind::Apoyo, 'base_hours' => 36, 'category' => 'IA08']);
+    TeacherPosition::factory()->for($fees)->honorarios()->create();
+
+    expect(app(TeachingTargetQuery::class)->forTerm($this->term, [$support->id => 20, $fees->id => 8]))->toBe([$support->id => 12, $fees->id => 8]);
 });

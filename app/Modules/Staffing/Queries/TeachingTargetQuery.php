@@ -9,7 +9,7 @@ use App\Modules\Faculty\Rules\TeachingHours;
 /**
  * Las horas frente a grupo que se le piden a cada docente en la selección (SEL-05, PL-01): salen de sus plazas
  * vigentes en Nexus al inicio del periodo (TeacherTeachingHoursQuery) y, para quien no tiene plazas en Nexus, de las
- * horas de su renglón del CSV (TeachingHours::fromCsvHours, supuesto por confirmar). Una consulta de plazas, sin N+1.
+ * horas de su renglón del CSV (TeachingHours::fromCsvHours, supuesto por confirmar), también si sus plazas dan 0 h frente a grupo (solo apoyo u honorarios; supuesto por confirmar). Una consulta de plazas, sin N+1.
  */
 final class TeachingTargetQuery
 {
@@ -27,7 +27,8 @@ final class TeachingTargetQuery
         $targets = [];
 
         foreach ($csvHours as $teacherId => $csv) {
-            $targets[$teacherId] = $fromPositions[$teacherId] ?? TeachingHours::fromCsvHours($csv);
+            // Plazas que dan 0 h frente a grupo (solo apoyo u honorarios) cuentan como sin plaza: se usa el CSV (supuesto por confirmar).
+            $targets[$teacherId] = ($fromPositions[$teacherId] ?? 0) > 0 ? $fromPositions[$teacherId] : TeachingHours::fromCsvHours($csv);
         }
 
         return $targets;

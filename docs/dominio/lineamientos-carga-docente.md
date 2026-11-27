@@ -49,5 +49,5 @@ La categoría de cada plaza se guarda en `teacher_positions.category` (la import
 - Apoyo y asistencia: 0, porque no es plaza docente. **(supuesto por confirmar)**
 - Honorarios: 0, lo que ya valían sus horas base; su tope sigue siendo `staffing.honorarios_max_hours` en HC-08. **(supuesto por confirmar)**
 - Varias plazas: se suman las horas de cada una (tomadas por familia y jornada).
-- Sin plazas en Nexus, el objetivo sale de las horas del CSV de la selección: 40 → 22, 30 → 16, 20 → 12 y cualquier otro valor n → n. **(supuesto por confirmar)**
+- Sin plazas en Nexus, o con plazas que dan 0 h (solo apoyo u honorarios), el objetivo sale de las horas del CSV de la selección: 40 → 22, 30 → 16, 20 → 12 y cualquier otro valor n → n. **(supuesto por confirmar)**
 - El escalón de SEL-06 sigue saliendo de las horas del CSV: no cambia.
