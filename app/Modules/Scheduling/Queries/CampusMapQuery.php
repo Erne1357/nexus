@@ -22,6 +22,9 @@ use Illuminate\Support\Facades\DB;
  * - Una clase es un grupo a la misma hora en uno o más días (0 = lunes), con su salón del mapa (`map_key`) o sin él
  *   (`room` nulo y `roomLabel` con la clave del aula).
  *
+ * El mapa no antepone el grado al nombre del docente: el grado no considera el género (confirmado por el usuario el 26 de
+ * noviembre de 2026, MP-03).
+ *
  * Solo lectura (MP-01): se guarda en caché por periodo, campus y huella de los datos que lee; un periodo estable
  * (terminado o con siete días o más) vive 30 días y uno reciente diez minutos, y cualquier cambio de datos cambia la
  * huella, que se recalcula cada 60 segundos.
@@ -40,17 +43,48 @@ final class CampusMapQuery
      * @return array{
      *     campus: ?string,
      *     term: array{code: string, name: string}|null,
+     *     time: 'past'|'current'|'future',
      *     source: 'nexus'|'sii'|null,
      *     buildings: array<string, array{code: string, name: string}>,
      *     rooms: array<string, array{code: string, name: ?string, type: string, capacity: int, owner: ?string}>,
      *     departments: list<array{id: string, name: string, b: ?string, room: ?string, location: ?string, phone: ?string, email: ?string, web: ?string}>,
      *     subjects: list<array{id: string, name: string, area: ?string, cred: ?int}>,
      *     groups: list<array{id: string, subject: string, code: string, area: ?string, career: ?string, turno: string}>,
-     *     profs: list<array{id: string, name: string, title: ?string, area: ?string, email: ?string}>,
+     *     profs: list<array{id: string, name: string, area: ?string, email: ?string}>,
      *     classes: list<array{subject: string, group: string, prof: ?string, room: ?string, roomLabel: ?string, days: list<int>, hour: int, end: int}>
      * }
      */
     public function forTerm(?Term $term): array
+    {
+        // El tiempo del periodo va fuera de la caché (que vive hasta 30 días): depende de la fecha de hoy (MP-02).
+        return [...$this->cachedMap($term), 'time' => $this->timeOf($term)];
+    }
+
+    /**
+     * Cuándo cae el periodo respecto a hoy (America/Ciudad_Juarez): `past` si ya terminó, `future` si aún no empieza y
+     * `current` si no (también sin periodo). Con `past` o `future` el mapa no muestra «ahora» ni ocupación en vivo (MP-02).
+     *
+     * @return 'past'|'current'|'future'
+     */
+    public function timeOf(?Term $term): string
+    {
+        if ($term === null) {
+            return 'current';
+        }
+
+        $today = CarbonImmutable::now('America/Ciudad_Juarez')->startOfDay();
+
+        return match (true) {
+            CarbonImmutable::parse($term->ends_on->toDateString(), 'America/Ciudad_Juarez')->lessThan($today) => 'past',
+            CarbonImmutable::parse($term->starts_on->toDateString(), 'America/Ciudad_Juarez')->greaterThan($today) => 'future',
+            default => 'current',
+        };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function cachedMap(?Term $term): array
     {
         $campusId = DB::table('buildings')->whereNotNull('map_key')->whereNull('deleted_at')->value('campus_id');
 
@@ -61,7 +95,7 @@ final class CampusMapQuery
         // Una sola llave por periodo y campus que guarda la huella con el mapa: si la huella cambió, se rehace y se
         // sobrescribe, así las versiones viejas no se acumulan en Valkey.
         $fingerprint = $this->fingerprint($term, $campusId);
-        $key = 'scheduling:campus-map:v3:'.$term->code.':'.$campusId;
+        $key = 'scheduling:campus-map:v4:'.$term->code.':'.$campusId;
         $cached = Cache::get($key);
 
         if (is_array($cached) && ($cached['fp'] ?? null) === $fingerprint) {
@@ -325,7 +359,7 @@ final class CampusMapQuery
 
     /**
      * @param  Collection<int, string>  $ids
-     * @return list<array{id: string, name: string, title: ?string, area: ?string, email: ?string}>
+     * @return list<array{id: string, name: string, area: ?string, email: ?string}>
      */
     private function teachers(Collection $ids): array
     {
@@ -346,11 +380,10 @@ final class CampusMapQuery
         return DB::table('teachers')
             ->whereIn('id', $ids)
             ->orderBy('name')
-            ->get(['id', 'name', 'degree', 'institutional_email'])
+            ->get(['id', 'name', 'institutional_email'])
             ->map(fn (object $teacher): array => [
                 'id' => $teacher->id,
                 'name' => $teacher->name,
-                'title' => $teacher->degree,
                 'area' => $primary[$teacher->id] ?? null,
                 // El correo institucional va para todo el que tiene sesión, alumnos incluidos (confirmado por el usuario el 20 de noviembre de 2026).
                 'email' => $teacher->institutional_email,

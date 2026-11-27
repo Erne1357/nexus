@@ -93,15 +93,15 @@ Mientras llegan, cada módulo trabaja con factories y un `DemoSeeder` que reprod
 | 1.44 ✅ [#863](https://github.com/Erne1357/nexus/pull/863), [#870](https://github.com/Erne1357/nexus/pull/870) | El jefe del departamento dueño de la materia y el admin cambian su tipo de espacio desde Catálogos › Materias (permiso `academic.subject.set_space`, SEL-17) | | | | |
 | 1.45 ✅ [#872](https://github.com/Erne1357/nexus/pull/872) | Elección previa con más horas que su base (pedido del usuario del 25 de noviembre de 2026): al publicar la orden, a quien queda arriba de su base más 2 horas se le pide confirmar con una casilla en su pantalla de la orden (aviso en la campana y por correo); al confirmar se justifica su HC-08 a su nombre y queda en la bitácora; si sus horas cambiaron entre que vio la pantalla y confirmó, se le pide revisar de nuevo (SEL-16) | | | | |
 | 1.46 ⬜ [#878](https://github.com/Erne1357/nexus/issues/878) | Mapa del alumno (pedido del usuario del 26 de noviembre de 2026; riel `riel/seleccion`): el alumno solo ve las clases de los grupos que cursa en el periodo de consulta y los docentes de su departamento académico («Solo los grupos que cursa, y maestros de su departamento académico, nada más», confirmado); el grupo de cada materia inscrita sale de `seleccion_materias` del SII | | | | |
-| 1.47 ⬜ [#879](https://github.com/Erne1357/nexus/issues/879) | Mapa: un periodo pasado se lee en pasado y sin «clase actual»; un periodo futuro tampoco muestra «ahora» | | | | |
-| 1.48 ⬜ [#880](https://github.com/Erne1357/nexus/issues/880) | Mapa: los docentes sin grado académico antes del nombre (el grado no considera el género) | | | | |
+| 1.47 ✅ [#904](https://github.com/Erne1357/nexus/pull/904) | Mapa: un periodo pasado se lee en pasado y sin «clase actual»; un periodo futuro tampoco muestra «ahora» | | | | |
+| 1.48 ✅ [#904](https://github.com/Erne1357/nexus/pull/904) | Mapa: los docentes sin grado académico antes del nombre (el grado no considera el género) | | | | |
 | 1.49 ⬜ [#881](https://github.com/Erne1357/nexus/issues/881) | Horas frente a grupo por plaza según el Reglamento Interior de Trabajo del Personal Docente (arts. 143, 147 y 149): categoría de la plaza del SII, banda de la orden de selección y documento de lineamientos | | | | |
 | 1.50 ⬜ [#882](https://github.com/Erne1357/nexus/issues/882) | HC-08 deja de ser tope duro: pasar la banda se permite con aviso y queda pendiente el oficio de conformidad del docente («aquí aún no firmarán el oficio», confirmado) | | | | |
 | 1.51 ⬜ [#883](https://github.com/Erne1357/nexus/issues/883) | Orden de selección: los grupos ya elegidos resaltan y el docente no ve quién los eligió, solo que ya está asignado | | | | |
-| 1.52 ⬜ [#884](https://github.com/Erne1357/nexus/issues/884) | Orden de selección: el drawer de la orden, compacto y sin scroll horizontal | | | | |
+| 1.52 ✅ [#906](https://github.com/Erne1357/nexus/pull/906) | Orden de selección: el drawer de la orden, compacto y sin scroll horizontal | | | | |
 | 1.53 ⬜ [#885](https://github.com/Erne1357/nexus/issues/885) | Orden de selección: solo salones confirmados del departamento en su validación de catálogos y, por ahora, sin préstamos de salón | | | | |
 | 1.54 ⬜ [#886](https://github.com/Erne1357/nexus/issues/886) | Orden de selección: los docentes con puesto administrativo eligen primero («Además, puestos administrativos primero», confirmado) | | | | |
-| 1.55 ⬜ [#887](https://github.com/Erne1357/nexus/issues/887) | Demo 8095: carga académica y elecciones previas cargadas, orden de selección sin cargar (operación con respaldo, sin PR) | | | | |
+| 1.55 ✅ [#887](https://github.com/Erne1357/nexus/issues/887) | Demo 8095: carga académica y elecciones previas cargadas, orden de selección sin cargar (operación con respaldo, sin PR) | | | | |
 
 ## Pruebas de la fase
 
