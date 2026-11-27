@@ -1784,6 +1784,43 @@ document.addEventListener('livewire:navigated', () => {
 */
 window.nexusConfirm = (detail) => window.dispatchEvent(new CustomEvent('nexus-confirm', { detail }));
 
+/*
+| Cambio de tema con la liebre (DESIGN.md «Movimiento»). Envuelve el cambio de MaryUI (que aplica y recuerda el tema)
+| en una transición de vista; mientras dura, `<html data-theme-switch>` activa en resources/css/app.css la liebre como
+| máscara del tema nuevo. Sin la API o con movimiento reducido, aplica el cambio directo. Si ya corre una transición,
+| el cambio nuevo se aplica directo: el tema final es siempre el último elegido y nunca queda el atributo puesto.
+*/
+let themeTransition = null;
+
+window.nexusSwitchTheme = (apply) => {
+    if (typeof document.startViewTransition !== 'function' || themeTransition || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        apply();
+
+        return;
+    }
+
+    const root = document.documentElement;
+    root.dataset.themeSwitch = '';
+
+    let transition;
+
+    try {
+        transition = document.startViewTransition(apply);
+    } catch (error) {
+        delete root.dataset.themeSwitch;
+        apply();
+
+        return;
+    }
+
+    themeTransition = transition;
+    transition.ready.catch(() => {});
+    transition.finished.catch(() => {}).finally(() => {
+        delete root.dataset.themeSwitch;
+        themeTransition = null;
+    });
+};
+
 document.addEventListener('alpine:init', () => {
     window.Alpine.directive('confirm', (el, _directive, { cleanup }) => {
         const intercept = (event) => {
