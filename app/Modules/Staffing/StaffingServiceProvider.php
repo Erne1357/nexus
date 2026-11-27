@@ -307,6 +307,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 StaffingPermission::SelectionView,
                 StaffingPermission::ChangeRequestDecide,
                 StaffingPermission::ChangeRequestApplyRoom,
+                StaffingPermission::HonorariosAuthorize,
             ],
             Role::JefeProyectoDocente->value => [
                 StaffingPermission::RankingView,

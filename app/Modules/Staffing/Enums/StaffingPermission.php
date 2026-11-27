@@ -31,6 +31,7 @@ enum StaffingPermission: string implements Permission
     case SelectionManage = 'staffing.selection.manage';
     case SelectionView = 'staffing.selection.view';
     case SelectionPickOwn = 'staffing.selection.pick_own';
+    case HonorariosAuthorize = 'staffing.honorarios.authorize';
 
     public function label(): string
     {
@@ -49,6 +50,7 @@ enum StaffingPermission: string implements Permission
             self::SelectionManage => 'Manejar el orden de selección de carga',
             self::SelectionView => 'Ver el orden de selección de carga de un departamento',
             self::SelectionPickOwn => 'Elegir mis grupos en mi turno de selección',
+            self::HonorariosAuthorize => 'Autorizar las horas extra (honorarios) de los docentes de un departamento',
         };
     }
 
@@ -59,7 +61,7 @@ enum StaffingPermission: string implements Permission
         }
 
         return match ($this) {
-            self::RankingView, self::TeacherLoadView, self::ChangeRequestView, self::ChangeRequestDecide, self::SelectionManage, self::SelectionView => [Dimension::Modality, Dimension::Unit],
+            self::RankingView, self::TeacherLoadView, self::HonorariosAuthorize, self::ChangeRequestView, self::ChangeRequestDecide, self::SelectionManage, self::SelectionView => [Dimension::Modality, Dimension::Unit],
             self::TeacherAssign, self::ChangeRequestApplyRoom => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
             self::ChangeRequestRequest, self::ChangeRequestApplySchedule => [Dimension::Modality, Dimension::Campus, Dimension::Career],
             self::OfferView, self::MyLoadView, self::ChangeRequestRequestOwn, self::SelectionPickOwn => [],

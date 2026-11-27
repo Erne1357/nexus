@@ -104,6 +104,7 @@ final class ActivityEvents
         'selection_load_confirmed' => 'Carga confirmada después de la orden de selección',
         'prior_choice_hours_confirmed' => 'Horas de la elección previa confirmadas',
         'hour_allowance_granted' => 'Horas autorizadas',
+        'extra_hours_decided' => 'Horas extra decididas',
         'group_history_imported' => 'Historial de grupos importado',
         'load_projection_imported' => 'Proyección de carga importada',
         'launched' => 'Lanzado',
