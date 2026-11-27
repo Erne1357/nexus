@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\AcademicLoad\Rules\AgreementSettings;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -147,7 +148,11 @@ new class extends Component
         $this->sessionId = $result->session->id;
         $this->panel = $editor->sessionPanel($context, $term, $campus, $result->session->id);
         $this->fill($this->saved());
-        $this->roomNotice = $result->roomDropped ? "Quitamos el salón {$room}: estaba ocupado a esa hora." : null;
+        $this->roomNotice = match (true) {
+            $result->loanUnavailable => "Quitamos el salón {$room}: ".AgreementSettings::ROOM_LOANS_UNAVAILABLE,
+            $result->roomDropped => "Quitamos el salón {$room}: estaba ocupado a esa hora.",
+            default => null,
+        };
         $this->dispatch('schedule-changed');
 
         if ($this->roomNotice !== null) {

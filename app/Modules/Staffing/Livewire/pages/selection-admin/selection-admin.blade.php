@@ -175,13 +175,16 @@
                 {{-- 4. Tipo de los salones --}}
                 @if ($step === 4)
                     <h2 class="text-xl font-bold"><span class="font-mono text-neutral">4.</span> Tipo de los salones</h2>
-                    <p class="mb-4 text-sm text-neutral">Los salones que se ofrecen: los del departamento y los sin dueño del campus de los grupos.</p>
+                    <p class="mb-4 text-sm text-neutral">Los salones que se ofrecen: los del departamento, confirmados en su revisión de salones validada, en el campus de los grupos. Los salones sin dueño ya no se ofrecen.</p>
+                    @unless ($roomsValidated)
+                        <x-alert title="El catálogo de salones del departamento aún no está validado" description="Mientras no lo esté no se ofrece ningún salón: los docentes toman los grupos sin salón y la jefatura lo asigna." icon="o-exclamation-triangle" class="alert-warning mb-4" data-testid="rooms-not-validated" />
+                    @endunless
                     <ul class="mb-4 list-disc pl-5 text-sm text-neutral">
                         <li>Le cabe el grupo y le sobran 10 lugares o menos; si ninguno queda, se ofrece el más chico libre que le cabe.</li>
                         <li>Los laboratorios son solo para materias de laboratorio.</li>
                         <li>Las salas se apartan para las materias de sala.</li>
                     </ul>
-                    @foreach (['Del departamento' => $ownRooms, 'Sin dueño' => $freeRooms] as $title => $rooms)
+                    @foreach (['Del departamento, confirmados' => $ownRooms] as $title => $rooms)
                         <h3 class="mt-4 font-semibold">{{ $title }} <span class="font-mono text-neutral">{{ $rooms->count() }}</span></h3>
                         <div class="mt-2 overflow-x-auto rounded-box border border-base-300">
                             <table class="table table-sm">
@@ -313,7 +316,7 @@
                             ['Alcance', $facts['groups'].' grupos, '.$facts['hours'].' h', $loads->isNotEmpty()],
                             ['CSV', $csvRows->count().' filas'.($unresolved > 0 ? ", {$unresolved} sin docente" : ', todas ligadas a un docente').'; '.$appended->count().' al final', $csvRows->isNotEmpty() && $unresolved === 0],
                             ['Tipo de espacio', $subjects->count().' materias'.($subjects->whereNull('required_space')->count() > 0 ? ', '.$subjects->whereNull('required_space')->count().' sin revisar' : ''), $subjects->whereNull('required_space')->isEmpty()],
-                            ['Salones', $ownRooms->count().' del departamento y '.$freeRooms->count().' sin dueño', true],
+                            ['Salones', $roomsValidated ? $ownRooms->count().' confirmados del departamento' : 'el catálogo de salones del departamento aún no está validado: no se ofrece ninguno', $roomsValidated],
                             ['Horario de turnos', $selection->starts_at ? $selection->starts_at->locale('es')->isoFormat('dddd D [de] MMMM, H:mm') : 'sin fecha de inicio', $selection->starts_at?->isFuture() ?? false],
                         ];
                     @endphp

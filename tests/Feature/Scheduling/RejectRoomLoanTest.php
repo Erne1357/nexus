@@ -21,6 +21,9 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
+// Estas pruebas piden préstamos de salón, apagados por omisión (tarea 1.53).
+beforeEach(fn () => roomLoans());
+
 /*
 | RejectRoomLoan y RejectSharedGroup (tarea 3.7, HC-10): rechazar un préstamo quita el salón de las sesiones del grupo
 | que cubre el préstamo; rechazar un grupo compartido solo rechaza el acuerdo.
