@@ -193,7 +193,8 @@
                 </div>
             </div>
 
-            {{-- Pie del panel: el aviso de privacidad del TecNM (LG-03), en otra pestaña para no perder lo escrito --}}
+            {{-- Pie del panel: el aviso de privacidad del TecNM (AC-23), siempre a la vista; fuera de la credencial para que el giro de los
+                 atajos no lo esconda, y en otra pestaña para no perder lo escrito --}}
             <p class="mt-5 flex justify-center lg:mt-[clamp(18px,3vh,28px)]">
                 <a href="{{ route('privacy-notice') }}" target="_blank" rel="noopener" data-testid="login-privacy-notice" class="inline-flex min-h-11 items-center gap-1.5 px-2 text-[13.5px] text-neutral underline decoration-base-300 underline-offset-[3px] hover:text-base-content hover:decoration-current">
                     <x-icon name="o-shield-check" class="h-4 w-4" />Aviso de privacidad<span class="sr-only"> (se abre en otra pestaña)</span>

@@ -1,14 +1,15 @@
 <?php
 
+use App\Modules\Core\Models\LoginShortcut;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\PrivacyNotice;
 
 /*
-| LG-03 (tarea 1.65): el aviso de privacidad del TecNM, simplificado e integral, en una página pública que se lee sin
+| AC-23 (tarea 1.65): el aviso de privacidad del TecNM, simplificado e integral, en una página pública que se lee sin
 | sesión, con la fuente y los PDF oficiales; la pantalla de acceso y la de cambio de contraseña la enlazan.
 */
 
-it('LG-03: muestra los dos avisos del TecNM sin sesión, con la fecha de realización', function () {
+it('AC-23: muestra los dos avisos del TecNM sin sesión, con la fecha de realización', function () {
     $this->assertGuest();
 
     $this->get('/aviso-de-privacidad')
@@ -28,7 +29,7 @@ it('LG-03: muestra los dos avisos del TecNM sin sesión, con la fecha de realiza
         ->assertSee('Iniciar sesión');
 });
 
-it('LG-03: copia el texto tal cual, sin los encabezados ni los pies de página del PDF', function () {
+it('AC-23: copia el texto tal cual, sin los encabezados ni los pies de página del PDF', function () {
     $text = preg_replace('/\s+/u', ' ', strip_tags($this->get(route('privacy-notice'))->getContent()));
 
     expect($text)
@@ -44,7 +45,7 @@ it('LG-03: copia el texto tal cual, sin los encabezados ni los pies de página d
     expect(substr_count($text, 'FECHA DE REALIZACIÓN: 03/MARZO/2026.'))->toBe(2);
 });
 
-it('LG-03: dice de dónde sale el aviso y enlaza los PDF oficiales del TecNM', function () {
+it('AC-23: dice de dónde sale el aviso y enlaza los PDF oficiales del TecNM', function () {
     $this->get(route('privacy-notice'))
         ->assertOk()
         ->assertSee('href="'.PrivacyNotice::SOURCE_URL.'"', false)
@@ -54,7 +55,7 @@ it('LG-03: dice de dónde sale el aviso y enlaza los PDF oficiales del TecNM', f
         ->assertSee('Protección de Datos Personales');
 });
 
-it('LG-03: con sesión, la banda lleva a Nexus en lugar de iniciar sesión', function () {
+it('AC-23: con sesión, la banda lleva a Nexus en lugar de iniciar sesión', function () {
     $this->actingAs(User::factory()->create(['name' => 'Ana Torres']))
         ->get(route('privacy-notice'))
         ->assertOk()
@@ -63,21 +64,28 @@ it('LG-03: con sesión, la banda lleva a Nexus en lugar de iniciar sesión', fun
         ->assertDontSee('Iniciar sesión');
 });
 
-it('LG-03: quien todavía debe cambiar su contraseña también puede leer el aviso', function () {
+it('AC-23: quien todavía debe cambiar su contraseña también puede leer el aviso', function () {
     $this->actingAs(User::factory()->create(['must_change_password' => true]))
         ->get(route('privacy-notice'))
         ->assertOk()
         ->assertSee('AVISO DE PRIVACIDAD SIMPLIFICADO');
 });
 
-it('LG-03: la pantalla de acceso enlaza el aviso de privacidad', function () {
-    $this->get(route('login'))
-        ->assertOk()
-        ->assertSee('href="'.route('privacy-notice').'"', false)
-        ->assertSee('Aviso de privacidad');
-});
+it('AC-23: la pantalla de acceso siempre enlaza el aviso de privacidad, fuera de la credencial que voltean los atajos', function (bool $withShortcuts) {
+    if ($withShortcuts) {
+        LoginShortcut::factory()->create(['title' => 'Sitio del TecNM', 'url' => 'https://www.tecnm.mx']);
+    }
 
-it('LG-03: la pantalla de cambio de contraseña enlaza el aviso, en el primer acceso y en un cambio voluntario', function (bool $firstAccess) {
+    $response = $this->get(route('login'))->assertOk()->assertSee('Aviso de privacidad');
+    $link = domOf($response)->querySelector('[data-testid="login-privacy-notice"]');
+
+    expect($link)->not->toBeNull()
+        ->and($link->getAttribute('href'))->toBe(route('privacy-notice'))
+        ->and($link->closest('main'))->not->toBeNull()
+        ->and($link->closest('[data-login-badge]'))->toBeNull();
+})->with(['sin atajos' => false, 'con atajos' => true]);
+
+it('AC-23: la pantalla de cambio de contraseña enlaza el aviso, en el primer acceso y en un cambio voluntario', function (bool $firstAccess) {
     $this->actingAs(User::factory()->create(['must_change_password' => $firstAccess]))
         ->get(route('user-password.edit'))
         ->assertOk()

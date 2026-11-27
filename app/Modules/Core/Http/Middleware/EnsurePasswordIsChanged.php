@@ -19,7 +19,7 @@ final class EnsurePasswordIsChanged
 {
     /**
      * Rutas permitidas antes de cambiar la contraseña: también las del restablecimiento por correo (AC-17), que sirven
-     * con o sin sesión, y la página pública del aviso de privacidad (LG-03), que la pantalla de cambio enlaza.
+     * con o sin sesión, y la página pública del aviso de privacidad (AC-23), que la pantalla de cambio enlaza.
      *
      * @var list<string>
      */

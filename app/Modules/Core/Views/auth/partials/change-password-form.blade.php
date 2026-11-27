@@ -13,7 +13,7 @@
     <x-button label="Guardar contraseña" type="submit" class="btn-primary mt-1 h-12 text-base" x-bind:disabled="! ready" />
 </form>
 
-{{-- Abajo, salir (primer acceso) o volver (cambio voluntario) y el aviso de privacidad del TecNM (LG-03), que se abre en otra pestaña para no perder lo escrito --}}
+{{-- Abajo, salir (primer acceso) o volver (cambio voluntario) y el aviso de privacidad del TecNM (AC-23), que se abre en otra pestaña para no perder lo escrito --}}
 @php($privacyLink = 'inline-flex items-center gap-1.5 py-1 text-[14.5px] text-neutral underline decoration-base-300 underline-offset-[3px] hover:text-base-content hover:decoration-current')
 
 <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
