@@ -61,7 +61,7 @@ it('toma el periodo dado y junta las sesiones del SII en clases por hora con sus
         ->and($map['subjects'])->toBe([['id' => 'AED-1285', 'name' => 'Fundamentos de Programación', 'area' => '110600', 'cred' => 5]])
         ->and($map['groups'])->toHaveCount(1)
         ->and($map['groups'][0])->toMatchArray(['id' => 'AED-1285·C', 'code' => 'C', 'area' => '110600', 'turno' => 'Matutino'])
-        ->and($map['profs'])->toBe([['id' => $this->teacher->id, 'name' => 'Docente Uno', 'title' => $this->teacher->degree, 'area' => '110600', 'email' => 'uno@cdjuarez.tecnm.mx']])
+        ->and($map['profs'])->toBe([['id' => $this->teacher->id, 'name' => 'Docente Uno', 'area' => '110600', 'email' => 'uno@cdjuarez.tecnm.mx']])
         ->and($map['classes'])->toBe([[
             'subject' => 'AED-1285',
             'group' => 'AED-1285·C',
@@ -171,17 +171,17 @@ it('MP-01: un periodo estable se guarda 30 días y uno reciente 10 minutos', fun
 
     $this->travelTo(CarbonImmutable::parse('2026-08-20 10:00', 'America/Ciudad_Juarez'));
     $query->forTerm($this->term);
-    $recent = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v3:'));
+    $recent = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v4:'));
 
     $this->travelTo(CarbonImmutable::parse('2026-08-24 10:00', 'America/Ciudad_Juarez'));
     $ttls = [];
     $query->forTerm($this->term);
-    $sevenDays = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v3:'));
+    $sevenDays = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v4:'));
 
     $this->travelTo(CarbonImmutable::parse('2027-01-10 10:00', 'America/Ciudad_Juarez'));
     $ttls = [];
     $query->forTerm($this->term);
-    $ended = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v3:'));
+    $ended = collect($ttls)->first(fn ($ttl, $key) => str_contains($key, ':v4:'));
 
     expect($recent)->toBe(CampusMapQuery::LIVE_TTL_SECONDS)
         ->and($sevenDays)->toBe(CampusMapQuery::STABLE_TTL_SECONDS)
@@ -216,7 +216,7 @@ it('MP-01: un cambio en una sesión de la carga publicada se ve pasada la ventan
 it('MP-01: una sola llave por periodo y campus guarda la huella con el mapa, y un cambio la sobrescribe', function () {
     $this->travelTo(CarbonImmutable::parse('2026-11-20 10:00', 'America/Ciudad_Juarez'));
     $query = app(CampusMapQuery::class);
-    $key = 'scheduling:campus-map:v3:'.$this->term->code.':'.$this->campus->id;
+    $key = 'scheduling:campus-map:v4:'.$this->term->code.':'.$this->campus->id;
 
     $query->forTerm($this->term);
     $first = Cache::get($key);
@@ -228,4 +228,35 @@ it('MP-01: una sola llave por periodo y campus guarda la huella con el mapa, y u
     expect($first['fp'])->not->toBe($second['fp'])
         ->and($second['fp'])->toBe($query->fingerprint($this->term, (string) $this->campus->id))
         ->and(collect($second['map']['rooms'])->firstWhere('code', '701')['name'])->toBe('Laboratorio nuevo');
+});
+
+it('MP-02: el tiempo del periodo es past, current o future según hoy, sin caché de por medio', function () {
+    $query = app(CampusMapQuery::class);
+
+    $this->travelTo(CarbonImmutable::parse('2026-11-20 10:00', 'America/Ciudad_Juarez'));
+    expect($query->forTerm($this->term)['time'])->toBe('current');
+
+    // El último día del periodo todavía es en curso; el siguiente ya es pasado (la caché del mapa sigue siendo la misma).
+    $this->travelTo(CarbonImmutable::parse('2026-12-11 23:30', 'America/Ciudad_Juarez'));
+    expect($query->forTerm($this->term)['time'])->toBe('current');
+    $this->travelTo(CarbonImmutable::parse('2026-12-12 00:30', 'America/Ciudad_Juarez'));
+    expect($query->forTerm($this->term)['time'])->toBe('past');
+
+    $this->travelTo(CarbonImmutable::parse('2026-08-16 23:30', 'America/Ciudad_Juarez'));
+    expect($query->forTerm($this->term)['time'])->toBe('future');
+    $this->travelTo(CarbonImmutable::parse('2026-08-17 00:30', 'America/Ciudad_Juarez'));
+    expect($query->forTerm($this->term)['time'])->toBe('current')
+        ->and($query->forTerm(null)['time'])->toBe('current');
+});
+
+it('MP-03: el mapa no manda el grado del docente', function () {
+    siiGroup(
+        ['term_code' => '20263', 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'group_code' => 'C'],
+        [['day' => 1, 'starts_at' => '09:00', 'ends_at' => '10:00', 'room_code' => '701', 'teacher_rfc' => 'AAAA800101AA1']],
+    );
+    $this->teacher->update(['degree' => 'maestria']);
+
+    $prof = app(CampusMapQuery::class)->forTerm($this->term)['profs'][0];
+
+    expect($prof)->not->toHaveKey('title')->and($prof)->not->toHaveKey('degree')->and(json_encode($prof))->not->toContain('maestria');
 });
