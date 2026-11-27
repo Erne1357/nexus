@@ -87,14 +87,14 @@ it('cada regla dura da su choque en memoria, sin base y sin contenedor', functio
     expect(evaluatorRules((new HardRuleEvaluator)->evaluate($state, ValidationScope::groups('A'))->violations()))->toBe([$rule]);
 })->with('one scenario per hard rule');
 
-it('corre de HC-01 a HC-13 y deja fuera el aviso de traslado (SC-09), que es blando', function () {
+it('corre de HC-01 a HC-13 y HC-22 y deja fuera el aviso de traslado (SC-09), que es blando', function () {
     $state = evaluatorBuilder()
         ->group(States::group('A', teacher: 'T1', campus: 'C1'))->group(States::group('B', teacher: 'T1', semester: 2))
         ->teacher(States::teacher('T1'))
         ->session('A', 2, '07:00', '09:00')->session('B', 2, '09:00', '10:00')
         ->build();
 
-    expect((new HardRuleEvaluator)->rules())->toBe(['HC-01', 'HC-02', 'HC-03', 'HC-04', 'HC-05', 'HC-06', 'HC-07', 'HC-08', 'HC-09', 'HC-10', 'HC-11', 'HC-12', 'HC-13'])
+    expect((new HardRuleEvaluator)->rules())->toBe(['HC-01', 'HC-02', 'HC-03', 'HC-04', 'HC-05', 'HC-06', 'HC-07', 'HC-08', 'HC-22', 'HC-09', 'HC-10', 'HC-11', 'HC-12', 'HC-13'])
         ->and(evaluatorRules((new CampusTravel)->check($state, ValidationScope::groups('A', 'B'))))->toBe(['SC-09'])
         ->and((new HardRuleEvaluator)->evaluate($state, ValidationScope::groups('A', 'B'))->isEmpty())->toBeTrue();
 });
