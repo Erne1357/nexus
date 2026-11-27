@@ -45,7 +45,7 @@
                     </p>
                 </div>
                 <div class="text-end" data-testid="load-hours-{{ $key }}">
-                    <span class="font-mono text-2xl font-semibold tabular-nums {{ $over ? 'text-error' : 'text-success' }}">{{ $week['hours'] }}</span>
+                    <span class="font-mono text-2xl font-semibold tabular-nums {{ $over ? 'text-warning' : 'text-success' }}">{{ $week['hours'] }}</span>
                     <span class="text-neutral">h</span>
                     <p class="text-sm text-neutral" data-testid="load-band-{{ $key }}">
                         @if ($week['honorarios_cap'] !== null)
@@ -54,12 +54,12 @@
                             Frente a grupo: {{ $week['teaching'] }} h ({{ $week['band_from'] }} a {{ $week['band_to'] }})
                         @endif
                     </p>
-                    <p class="text-xs font-semibold {{ $over ? 'text-error' : 'text-success' }}">
+                    <p class="text-xs font-semibold {{ $over ? 'text-warning' : 'text-success' }}">
                         <x-icon :name="$over ? 'o-exclamation-triangle' : 'o-check-circle'" class="inline w-3.5 h-3.5" />
                         {{ $over ? 'Pasa su banda' : 'Dentro de su banda' }}
                     </p>
                     @if ($week['notice'])
-                        <p class="mt-1 max-w-sm text-xs text-error" data-testid="load-notice-{{ $key }}">{{ $week['notice'] }}</p>
+                        <p class="mt-1 max-w-sm text-xs text-warning" data-testid="load-notice-{{ $key }}">{{ $week['notice'] }}</p>
                     @endif
                 </div>
             </header>
