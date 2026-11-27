@@ -51,13 +51,23 @@
                         @if ($week['administrative'] !== null)
                             {{-- PL-03 y HC-22: con plaza administrativa no hay banda de ±2, sino el tope duro de 42 h. --}}
                             {{ $week['administrative_summary'] }}
+                        @elseif ($week['no_plaza'])
+                            {{-- PL-04 (tarea 1.83): sin plaza docente todas sus horas son de honorarios; no hay banda. --}}
+                            {{ \App\Modules\Faculty\Rules\TeachingHours::NO_PLAZA_LABEL }}
                         @elseif ($week['honorarios_cap'] !== null)
                             Tope de honorarios: {{ $week['honorarios_cap'] }} h
                         @else
                             Frente a grupo: {{ $week['teaching'] }} h ({{ $week['band_from'] }} a {{ $week['band_to'] }})
                         @endif
                     </p>
-                    @if ($week['administrative'] === null)
+                    @if ($week['no_plaza'])
+                        @if ($week['extra_label'])
+                            <p class="text-xs font-semibold text-warning" data-testid="load-extra-{{ $key }}">
+                                <x-icon name="o-document-text" class="inline w-3.5 h-3.5" />
+                                {{ $week['extra_label'] }}
+                            </p>
+                        @endif
+                    @elseif ($week['administrative'] === null)
                         <p class="text-xs font-semibold {{ $over ? 'text-warning' : 'text-success' }}">
                             <x-icon :name="$over ? 'o-exclamation-triangle' : 'o-check-circle'" class="inline w-3.5 h-3.5" />
                             {{ $over ? 'Con horas extra' : 'Dentro de su banda' }}

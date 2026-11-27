@@ -111,7 +111,7 @@
                             @php
                                 $scale = max(48, $row->assignedHours + $row->externalHours, $row->limitHours);
                                 $pct = fn (int $hours): string => round($hours / $scale * 100, 2).'%';
-                                $target = $row->isAdministrative() ? 0 : ($row->teachingHours ?? $row->baseHours);
+                                $target = $row->isAdministrative() || $row->isNoPlaza() ? 0 : ($row->teachingHours ?? $row->baseHours);
                                 $notice = $row->hourNotice();
                                 $figure = match ($status) {
                                     'over' => ['+'.$row->excessHours(), 'h de más', 'text-warning'],
@@ -154,7 +154,9 @@
                                     @if ($row->externalHours)
                                         <span>ext. <b class="font-mono text-base-content">{{ $row->externalHours }}</b></span>
                                     @endif
-                                    @if ($row->isAdministrative())
+                                    @if ($row->isNoPlaza())
+                                        <span data-testid="tile-no-plaza" class="whitespace-nowrap">sin plaza docente</span>
+                                    @elseif ($row->isAdministrative())
                                         <span data-testid="tile-band" class="whitespace-nowrap">plaza administrativa <b class="font-mono text-base-content">{{ $row->administrativeHours }} h</b></span>
                                     @elseif ($row->bandLabel() !== null)
                                         <span data-testid="tile-band" class="whitespace-nowrap">frente a grupo <b class="font-mono text-base-content">{{ $row->bandLabel() }}</b></span>
@@ -163,7 +165,13 @@
                                     @endif
                                     <span><b class="font-mono text-base-content">{{ $row->groupsCount }}</b> {{ $row->groupsCount === 1 ? 'grupo' : 'grupos' }}</span>
                                 </span>
-                                @if ($notice !== null)
+                                @if ($row->isNoPlaza())
+                                    {{-- PL-04 (tarea 1.83): sin plaza docente todas sus horas son de honorarios; su estado es el de las horas extra. --}}
+                                    <span class="flex items-start gap-1 text-xs text-neutral" data-testid="tile-notice">
+                                        <x-icon name="o-pencil-square" class="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                        <span>{{ \App\Modules\Scheduling\Rules\TeacherHourLimit::NO_PLAZA_LABEL }}@if ($row->extraLabel() !== null)<br>{{ $row->extraLabel() }}@endif</span>
+                                    </span>
+                                @elseif ($notice !== null)
                                     <span @class(['flex items-start gap-1 text-xs', 'text-warning' => $status === 'over', 'text-neutral' => $status !== 'over']) data-testid="tile-notice">
                                         <x-icon :name="$status === 'over' ? 'o-document-text' : 'o-check-circle'" class="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                                         {{ $status === 'over' ? ($row->extraLabel() ?? 'Honorarios por autorizar (jefe de depto)') : 'Aceptado por el docente (casilla)' }}
