@@ -82,6 +82,28 @@ describe('especialidades', function () {
             ->toMatchArray(['subjects_pending' => ['R1', 'R2', 'S1'], 'subjects_available' => ['R1', 'R2', 'S1']]);
     });
 
+    it('sin especialidad solo le faltan las de las especialidades activas (confirmado el 26 de noviembre de 2026)', function () {
+        $grid = new PlanGrid(
+            credits: ['A' => 20, 'R1' => 4, 'S1' => 4],
+            specialtyOf: ['R1' => 'redes', 'S1' => 'software'],
+            inactiveSpecialties: ['redes'],
+        );
+
+        expect($grid->progressFor(['A']))->toMatchArray(['subjects_pending' => ['S1'], 'subjects_available' => ['S1']])
+            ->and($grid->totalFor([]))->toBe(24);
+    });
+
+    it('la especialidad asignada por el SII vale si el kárdex no dice otra, aunque esté inactiva (supuesto por confirmar)', function () {
+        $grid = new PlanGrid(
+            credits: ['A' => 20, 'R1' => 4, 'S1' => 4],
+            specialtyOf: ['R1' => 'redes', 'S1' => 'software'],
+            inactiveSpecialties: ['redes'],
+        );
+
+        expect($grid->progressFor(['A'], assignedSpecialty: 'redes')['subjects_pending'])->toBe(['R1'])
+            ->and($grid->progressFor(['A', 'S1'], assignedSpecialty: 'redes')['subjects_pending'])->toBe([]);
+    });
+
     it('la especialidad sale de lo que aprobó o está cursando: las de las otras ya no cuentan', function (array $approved, array $taken, array $pending) {
         expect(specialtyGrid()->progressFor($approved, $taken)['subjects_pending'])->toBe($pending);
     })->with([

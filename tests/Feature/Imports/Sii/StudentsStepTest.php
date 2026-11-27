@@ -193,7 +193,7 @@ it('un alumno de una retícula excluida se reporta sin datos personales', functi
 
 it('solo lee las columnas que usa', function () {
     expect(StudentsStep::COLUMNS)->toEqualCanonicalizing([
-        'no_de_control', 'carrera', 'reticula', 'semestre', 'estatus_alumno', 'apellido_paterno', 'apellido_materno', 'nombre_alumno', 'campus',
+        'no_de_control', 'carrera', 'reticula', 'semestre', 'estatus_alumno', 'apellido_paterno', 'apellido_materno', 'nombre_alumno', 'campus', 'especialidad',
     ]);
 });
 
