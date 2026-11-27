@@ -195,6 +195,7 @@
 #ubicatec-root #compass{border:0;padding:0;cursor:pointer}
 #ubicatec-root .ut-empty{margin:12px 8px 4px;padding:14px 16px;border-radius:12px;background:var(--soft);display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.5;color:var(--ink2)}
 #ubicatec-root .ut-empty b{font-size:14px;color:var(--ink)}
+#ubicatec-root .ut-empty.ut-mine{border-left:3px solid var(--g);border-radius:4px 12px 12px 4px}
 #ubicatec-root #ut-loading{position:absolute;inset:0;display:grid;place-items:center;z-index:1;pointer-events:none;font-size:14px;font-weight:600;color:var(--ink2);transition:opacity .4s}
 #ubicatec-root #ut-loading span{background:var(--paper);padding:10px 16px;border-radius:10px;box-shadow:0 4px 16px rgba(9,45,72,.14)}
 #ubicatec-root.ut-ready #ut-loading{opacity:0}

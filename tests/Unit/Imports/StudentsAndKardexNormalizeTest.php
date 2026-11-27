@@ -71,6 +71,7 @@ describe('kardex', function () {
             'result' => 'aprobada',
             'attempt' => 2,
             'sii_subject_code' => null,
+            'sii_group_code' => null,
         ]);
     });
 

@@ -3,6 +3,7 @@
 namespace App\Modules\Scheduling\Queries;
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Term;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -58,6 +59,79 @@ final class CampusMapQuery
     {
         // El tiempo del periodo va fuera de la caché (que vive hasta 30 días): depende de la fecha de hoy (MP-02).
         return [...$this->cachedMap($term), 'time' => $this->timeOf($term)];
+    }
+
+    /**
+     * El mapa del periodo de consulta del Actor. Con el puesto de alumno activo se recorta después de la caché
+     * compartida (la caché no lleva datos de ningún alumno): solo las clases de los grupos que cursa en el periodo, los
+     * docentes de su departamento académico y de sus propias clases, y los grupos y materias de esas clases; los
+     * lugares (edificios, salones y departamentos) quedan completos (MP-04). `scope` es `student` en ese caso.
+     *
+     * @return array<string, mixed>
+     */
+    public function forActor(Actor $actor): array
+    {
+        $term = $actor->viewTerm();
+        $map = $this->forTerm($term);
+
+        if (! $actor->actsAsStudent() || $term === null) {
+            return [...$map, 'scope' => null];
+        }
+
+        return $this->forStudent($map, $term, (string) $actor->user()?->getKey());
+    }
+
+    /**
+     * @param  array<string, mixed>  $map
+     * @return array<string, mixed>
+     */
+    private function forStudent(array $map, Term $term, string $userId): array
+    {
+        $student = DB::table('students')
+            ->leftJoin('careers', 'careers.id', '=', 'students.career_id')
+            ->leftJoin('departments', 'departments.id', '=', 'careers.department_id')
+            ->where('students.user_id', $userId)
+            ->whereNull('students.deleted_at')
+            ->first(['students.id', 'departments.code as department']);
+
+        // Las clases de la carga publicada de Nexus no tienen inscripción todavía (fase 9): el alumno no las ve (supuesto por confirmar).
+        $keys = $student === null || $map['source'] !== 'sii' ? [] : $this->studentGroupKeys($student->id, $term);
+        $classes = array_values(array_filter($map['classes'], fn (array $class): bool => isset($keys[$class['group']])));
+        $subjects = array_flip(array_column($classes, 'subject'));
+        $teachers = array_flip(array_filter(array_column($classes, 'prof')));
+
+        return [
+            ...$map,
+            'scope' => 'student',
+            'classes' => $classes,
+            'groups' => array_values(array_filter($map['groups'], fn (array $group): bool => isset($keys[$group['id']]))),
+            'subjects' => array_values(array_filter($map['subjects'], fn (array $subject): bool => isset($subjects[$subject['id']]))),
+            'profs' => array_values(array_filter($map['profs'], fn (array $prof): bool => isset($teachers[$prof['id']]) || ($student?->department !== null && $prof['area'] === $student->department))),
+        ];
+    }
+
+    /**
+     * Las llaves del mapa (`clave de la materia·grupo`) de los grupos del SII que el alumno cursa en el periodo: su
+     * kárdex del periodo lleva la clave y el grupo del SII, que se buscan entre los grupos históricos del periodo.
+     *
+     * @return array<string, true>
+     */
+    private function studentGroupKeys(string $studentId, Term $term): array
+    {
+        return DB::table('kardex_records as kr')
+            ->join('historical_groups as hg', function ($join): void {
+                $join->on('hg.term_code', '=', 'kr.term_code')
+                    ->on('hg.sii_subject_code', '=', 'kr.sii_subject_code')
+                    ->on('hg.group_code', '=', 'kr.sii_group_code');
+            })
+            ->join('subjects', 'subjects.id', '=', 'hg.subject_id')
+            ->where('kr.student_id', $studentId)
+            ->where('kr.term_code', $term->code)
+            ->whereNull('kr.deleted_at')
+            ->where('hg.source', 'sii')
+            ->get(['subjects.code', 'hg.group_code'])
+            ->mapWithKeys(fn (object $row): array => [$this->groupKey($row->code, $row->group_code) => true])
+            ->all();
     }
 
     /**
