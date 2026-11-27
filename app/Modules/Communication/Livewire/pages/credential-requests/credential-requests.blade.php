@@ -54,6 +54,8 @@
                     <tr>
                         <th>Alumno</th>
                         <th>Pidió</th>
+                        <th class="max-[1023px]:hidden">Motivo</th>
+                        <th class="max-[1023px]:hidden">En el SIISAE</th>
                         <th class="max-[1023px]:hidden">Solicitada</th>
                         <th>Cita</th>
                         <th class="w-px"></th>
@@ -67,6 +69,8 @@
                                 <p class="font-mono text-sm tabular-nums text-neutral">{{ $row->student->control_number }}</p>
                             </td>
                             <td class="text-sm">{{ $asked($row) }}</td>
+                            <td class="text-sm max-[1023px]:hidden" data-testid="row-reason">{{ $row->reposition_reason?->label() ?? '—' }}</td>
+                            <td class="max-[1023px]:hidden" data-testid="row-siisae">@include('communication::credential-requests.siisae-badges', ['row' => $row])</td>
                             <td class="whitespace-nowrap text-sm text-neutral max-[1023px]:hidden">{{ $when($row->requested_at) }}</td>
                             <td class="text-sm text-neutral">
                                 @if ($row->scheduled_at !== null && in_array($row->status, [Status::Citada, Status::Lista], true))
@@ -86,6 +90,10 @@
                     <li wire:key="card-{{ $row->id }}" class="space-y-1 px-4 py-3">
                         <p class="font-semibold">{{ $row->student->name }}</p>
                         <p class="text-sm text-neutral"><span class="font-mono tabular-nums">{{ $row->student->control_number }}</span> · {{ $asked($row) }}</p>
+                        @if ($row->reposition_reason !== null)
+                            <p class="text-sm text-neutral">{{ $row->reposition_reason->label() }}</p>
+                            @include('communication::credential-requests.siisae-badges', ['row' => $row])
+                        @endif
                         @if ($row->scheduled_at !== null && in_array($row->status, [Status::Citada, Status::Lista], true))
                             <p class="text-sm text-neutral">{{ $when($row->scheduled_at) }} · {{ $row->place }}</p>
                         @endif
@@ -125,6 +133,17 @@
                         <dd><x-core::status-badge :tone="$tone($current->status)" :label="$current->status->label()" data-testid="request-status" /></dd>
                         <dt class="text-neutral">Pidió</dt>
                         <dd>{{ $asked($current) }}</dd>
+                        @if ($current->reposition_reason !== null)
+                            <dt class="text-neutral">Motivo</dt>
+                            <dd data-testid="request-reason">{{ $current->reposition_reason->label() }}</dd>
+                            <dt class="text-neutral">En el SIISAE</dt>
+                            <dd>
+                                @include('communication::credential-requests.siisae-badges', ['row' => $current])
+                                @if ($current->photoAddedBySiisae())
+                                    <p class="mt-1.5 text-neutral" data-testid="photo-auto-note">La foto se agregó sola porque no ve su foto en el SIISAE.</p>
+                                @endif
+                            </dd>
+                        @endif
                         <dt class="text-neutral">Solicitada</dt>
                         <dd>{{ $when($current->requested_at) }}</dd>
                         @if ($current->scheduled_at !== null)
@@ -132,7 +151,7 @@
                             <dd>{{ $when($current->scheduled_at) }} · {{ $current->place }}</dd>
                         @endif
                         @if ($current->status === Status::Rechazada)
-                            <dt class="text-neutral">Motivo</dt>
+                            <dt class="text-neutral">Motivo del rechazo</dt>
                             <dd>{{ $current->rejection_reason }}</dd>
                         @endif
                     </dl>

@@ -14,6 +14,7 @@ use App\Modules\Students\Actions\ScheduleCredentialRequest;
 use App\Modules\Students\Actions\SetStudentPhoto;
 use App\Modules\Students\Actions\TouchOpenPhotoRequests;
 use App\Modules\Students\Enums\CredentialRequestStatus as S;
+use App\Modules\Students\Enums\RepositionReason;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\CredentialRequest;
 use App\Modules\Students\Models\Student;
@@ -41,7 +42,7 @@ function studentWithUser(array $attributes = []): array
 test('CO-07: pide reposición y foto a la vez', function () {
     [$student, $user] = studentWithUser();
 
-    $request = app(RequestCredential::class)->handle($student, true, true, $user);
+    $request = app(RequestCredential::class)->handle($student, true, true, $user, 'first_time', true, true);
 
     expect($request->status)->toBe(S::Solicitada)
         ->and($request->wants_reposition)->toBeTrue()
@@ -57,9 +58,9 @@ test('CO-07: pedir sin elegir un tipo lanza ValidationException', function () {
 
 test('CO-07: no deja dos abiertas del mismo tipo, también con dos peticiones concurrentes (índice parcial)', function () {
     [$student, $user] = studentWithUser();
-    app(RequestCredential::class)->handle($student, true, false, $user);
+    app(RequestCredential::class)->handle($student, true, false, $user, 'first_time', true, true);
 
-    expect(fn () => app(RequestCredential::class)->handle($student, true, true, $user))->toThrow(ValidationException::class, 'Ya tienes una abierta.');
+    expect(fn () => app(RequestCredential::class)->handle($student, true, true, $user, 'first_time', true, true))->toThrow(ValidationException::class, 'Ya tienes una abierta.');
 
     // El otro tipo sí se puede pedir.
     app(RequestCredential::class)->handle($student, false, true, $user);
@@ -87,10 +88,10 @@ test('CO-07: el plazo bloquea la solicitud y dice desde cuándo', function () {
 test('CO-S4: sin credencial vigente no puede pedir', function () {
     [$student, $user] = studentWithUser(['status' => StudentStatus::BajaDefinitiva]);
 
-    expect(fn () => app(RequestCredential::class)->handle($student, true, false, $user))->toThrow(ValidationException::class);
+    expect(fn () => app(RequestCredential::class)->handle($student, true, false, $user, 'first_time', true, true))->toThrow(ValidationException::class);
 
     $egresado = Student::factory()->create(['status' => StudentStatus::Egresado]);
-    expect(app(RequestCredential::class)->handle($egresado, true, false, $user)->status)->toBe(S::Solicitada);
+    expect(app(RequestCredential::class)->handle($egresado, true, false, $user, 'first_time', true, true)->status)->toBe(S::Solicitada);
 });
 
 /**
@@ -283,4 +284,81 @@ it('CO-S9: no se cita en el pasado', function () {
     expect(fn () => app(ScheduleCredentialRequest::class)->handle($request, CarbonImmutable::now()->subDay(), 'Edificio A', communicationStaff()))
         ->toThrow(ValidationException::class, 'La cita debe ser posterior a este momento.');
     expect($request->fresh()->status)->toBe(S::Solicitada);
+});
+
+test('CO-12: la reposición exige el motivo y las dos respuestas del SIISAE', function (?string $reason, ?bool $photoVisible, ?bool $dataCorrect, string $field) {
+    [$student, $user] = studentWithUser();
+
+    try {
+        app(RequestCredential::class)->handle($student, true, false, $user, $reason, $photoVisible, $dataCorrect);
+        $this->fail('Debió lanzar ValidationException.');
+    } catch (ValidationException $exception) {
+        expect($exception->errors())->toHaveKey($field);
+    }
+
+    expect(CredentialRequest::query()->count())->toBe(0);
+})->with([
+    'sin motivo' => [null, true, true, 'reason'],
+    'motivo inventado' => ['otro', true, true, 'reason'],
+    'sin respuesta de la foto' => ['first_time', null, true, 'photo_visible'],
+    'sin respuesta de los datos' => ['first_time', true, null, 'data_correct'],
+]);
+
+test('CO-12: guarda el motivo y las respuestas, con los tres motivos', function (RepositionReason $reason) {
+    [$student, $user] = studentWithUser();
+
+    $request = app(RequestCredential::class)->handle($student, true, false, $user, $reason->value, true, true);
+
+    expect($request->fresh()->reposition_reason)->toBe($reason)
+        ->and($request->siisae_photo_visible)->toBeTrue()
+        ->and($request->siisae_data_correct)->toBeTrue()
+        ->and($request->wants_photo)->toBeFalse();
+})->with(RepositionReason::cases());
+
+test('CO-12: con los datos incorrectos no se pide la reposición, ni sola ni con la foto', function (bool $photo) {
+    [$student, $user] = studentWithUser();
+
+    expect(fn () => app(RequestCredential::class)->handle($student, true, $photo, $user, 'first_time', true, false))
+        ->toThrow(ValidationException::class, 'Valida tus datos en el SIISAE');
+
+    expect(CredentialRequest::query()->count())->toBe(0);
+})->with([false, true]);
+
+test('CO-12: sin foto en el SIISAE la reposición lleva también la foto', function () {
+    [$student, $user] = studentWithUser();
+
+    $request = app(RequestCredential::class)->handle($student, true, false, $user, 'lost_was_santander', false, true);
+
+    expect($request->wants_reposition)->toBeTrue()
+        ->and($request->wants_photo)->toBeTrue()
+        ->and($request->siisae_photo_visible)->toBeFalse()
+        ->and($request->photoAddedBySiisae())->toBeTrue();
+});
+
+test('CO-12 (supuesto por confirmar): sin foto en el SIISAE pero con la foto no disponible, la reposición sigue sin la foto', function () {
+    [$student, $user] = studentWithUser();
+    CredentialRequest::factory()->for($student)->create(['wants_reposition' => false, 'wants_photo' => true]);
+
+    $request = app(RequestCredential::class)->handle($student, true, false, $user, 'first_time', false, true);
+
+    expect($request->wants_reposition)->toBeTrue()->and($request->wants_photo)->toBeFalse();
+});
+
+test('CO-12 (supuesto por confirmar): la foto sola no pregunta nada del SIISAE y no guarda respuestas', function () {
+    [$student, $user] = studentWithUser();
+
+    $request = app(RequestCredential::class)->handle($student, false, true, $user, 'first_time', false, false);
+
+    expect($request->reposition_reason)->toBeNull()
+        ->and($request->siisae_photo_visible)->toBeNull()
+        ->and($request->siisae_data_correct)->toBeNull();
+});
+
+test('CO-12: la base solo admite los tres motivos', function () {
+    [$student] = studentWithUser();
+
+    $request = CredentialRequest::factory()->for($student)->create();
+
+    expect(fn () => DB::transaction(fn () => DB::table('credential_requests')->where('id', $request->id)->update(['reposition_reason' => 'otro'])))
+        ->toThrow(QueryException::class);
 });
