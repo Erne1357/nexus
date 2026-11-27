@@ -7,10 +7,10 @@
     alumnos, desactivarla se rechaza con un toast que dice cuántos. «Tipo de espacio» (SEL-17) lo ve solo quien puede
     cambiarlo en esa materia (el jefe de su departamento y el admin): quien ve el catálogo lo tiene en «Acciones»; quien solo
     puede eso (sin `viewCatalog`) lo tiene como único botón visible y no ve «Editar» ni «Acciones»; en la tabla su texto
-    aparece desde 1536 px (como la columna «Espacio») y debajo queda solo el icono con su título, para no encimarse con «Estado».
+    aparece desde 1800 px y debajo queda solo el icono con su título, para no encimarse con «Estado».
     «Carga del docente» (PL-02, tarea 1.73) va igual que «Tipo de espacio», con el mismo permiso.
 --}}
-<div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
+<div @class(['flex gap-1', 'justify-end whitespace-nowrap' => $inTable, '-ms-3' => ! $inTable])>
     @cannot('viewCatalog', \App\Modules\Academic\Models\Subject::class)
         @can('setSpace', $subject)
             <x-button
@@ -22,7 +22,7 @@
                 class="btn-ghost btn-sm"
                 spinner="editSpace('{{ $subject->id }}')"
             >
-                <span @class(['max-[1535px]:hidden' => $inTable])>Tipo de espacio</span>
+                <span @class(['max-[1799px]:hidden' => $inTable])>Tipo de espacio</span>
             </x-button>
         @endcan
         @can('setTeacherHours', $subject)
@@ -35,7 +35,7 @@
                 class="btn-ghost btn-sm"
                 spinner="editTeacherHours('{{ $subject->id }}')"
             >
-                <span @class(['max-[1535px]:hidden' => $inTable])>Carga del docente</span>
+                <span @class(['max-[1799px]:hidden' => $inTable])>Carga del docente</span>
             </x-button>
         @endcan
     @endcannot
