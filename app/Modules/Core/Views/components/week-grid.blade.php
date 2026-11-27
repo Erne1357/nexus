@@ -2,13 +2,14 @@
     Semana de un docente (o de cualquier horario): una cuadrícula días x horas en pantallas anchas y, en celular, día
     por día (lista de bloques). `days` es la forma de MyLoadQuery: por número de día `{name, short, hours, blocks}`;
     cada bloque trae `start` y `end` (minutos desde medianoche), `time`, `subject_code`, `group_code`, `subject_name`
-    y `room`. Muestra de 7:00 a 20:00 y se amplía si un bloque cae fuera. Solo lectura. Las posiciones de los bloques
+    y `room`; un bloque con `tone` (1 a 12) se colorea con el token `chain-N` (el departamento, ficha del docente). Muestra de 7:00 a 20:00 y se amplía si un bloque cae fuera. Solo lectura. Las posiciones de los bloques
     son valores calculados (top y height en rem), no estilo a mano.
 --}}
 @props(['days', 'label' => 'Semana'])
 
 @php
     $row = 3.375;
+    $tones = [1 => 'border-chain-1 bg-chain-1/10', 'border-chain-2 bg-chain-2/10', 'border-chain-3 bg-chain-3/10', 'border-chain-4 bg-chain-4/10', 'border-chain-5 bg-chain-5/10', 'border-chain-6 bg-chain-6/10', 'border-chain-7 bg-chain-7/10', 'border-chain-8 bg-chain-8/10', 'border-chain-9 bg-chain-9/10', 'border-chain-10 bg-chain-10/10', 'border-chain-11 bg-chain-11/10', 'border-chain-12 bg-chain-12/10'];
     $all = collect($days)->flatMap(fn ($day) => $day['blocks']);
     $from = min(7, $all->isEmpty() ? 7 : (int) floor($all->min('start') / 60));
     $to = max(21, $all->isEmpty() ? 21 : (int) ceil($all->max('end') / 60));
@@ -33,7 +34,7 @@
                     <div class="border-b border-base-300 last:border-b-0" style="height: {{ $row }}rem"></div>
                 @endforeach
                 @foreach ($day['blocks'] as $block)
-                    <div class="absolute inset-x-1 overflow-hidden rounded-field border border-info/30 bg-info/10 px-2 py-1 text-xs leading-snug"
+                    <div class="absolute inset-x-1 overflow-hidden rounded-field border {{ isset($block['tone']) ? $tones[$block['tone']] : 'border-info/30 bg-info/10' }} px-2 py-1 text-xs leading-snug"
                         style="top: {{ ($block['start'] / 60 - $from) * $row }}rem; height: calc({{ ($block['end'] - $block['start']) / 60 * $row }}rem - 0.25rem)"
                         title="{{ $block['subject_name'] }} · {{ $block['time'] }}" data-testid="week-block">
                         <div class="flex items-center justify-between gap-1 font-mono font-semibold"><span class="truncate">{{ $block['subject_code'] }} · {{ $block['group_code'] }}</span>@if ($block['room'])<span class="shrink-0"><x-icon name="o-map-pin" class="inline w-3 h-3" /> {{ $block['room'] }}</span>@endif</div>
