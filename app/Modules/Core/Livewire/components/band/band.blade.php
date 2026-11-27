@@ -139,8 +139,8 @@
                         x-on:theme-changed.window="theme = $event.detail"
                         class="join"
                     >
-                        <input type="radio" name="nexus-theme" value="nexus" aria-label="Claro" x-model="theme" x-on:change="$dispatch('mary-toggle-theme')" class="btn join-item h-[34px] px-3.5 text-sm font-normal not-checked:[--btn-bg:var(--color-base-100)] not-checked:[--btn-border:var(--color-base-300)]" />
-                        <input type="radio" name="nexus-theme" value="nexus-dark" aria-label="Oscuro" x-model="theme" x-on:change="$dispatch('mary-toggle-theme')" class="btn join-item h-[34px] px-3.5 text-sm font-normal not-checked:[--btn-bg:var(--color-base-100)] not-checked:[--btn-border:var(--color-base-300)]" />
+                        <input type="radio" name="nexus-theme" value="nexus" aria-label="Claro" x-model="theme" x-on:change="nexusSwitchTheme(() => $dispatch('mary-toggle-theme'))" class="btn join-item h-[34px] px-3.5 text-sm font-normal not-checked:[--btn-bg:var(--color-base-100)] not-checked:[--btn-border:var(--color-base-300)]" />
+                        <input type="radio" name="nexus-theme" value="nexus-dark" aria-label="Oscuro" x-model="theme" x-on:change="nexusSwitchTheme(() => $dispatch('mary-toggle-theme'))" class="btn join-item h-[34px] px-3.5 text-sm font-normal not-checked:[--btn-bg:var(--color-base-100)] not-checked:[--btn-border:var(--color-base-300)]" />
                     </div>
                 </div>
 
