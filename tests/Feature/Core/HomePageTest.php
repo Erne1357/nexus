@@ -37,8 +37,9 @@ it('saluda al usuario y muestra solo el bloque del perfil activo', function () {
 
     actingAsRole($user, Role::Docente);
 
+    // IN-03 (1.85): con el perfil de docente el Inicio es el tablero del docente (HomePanels de Staffing), no el bloque de siempre.
     Livewire::test('core::pages.home')
-        ->assertSee('Consultas tu propia carga')
+        ->assertSeeHtml('data-testid="teacher-summary"')
         ->assertDontSee('Validas los catálogos');
 });
 
@@ -181,7 +182,7 @@ describe('calendario en Inicio', function () {
         $this->actingAs(User::factory()->withRole(Role::Docente)->create());
 
         Livewire::test('core::pages.home')
-            ->assertSee(Role::Docente->label())
+            ->assertSeeHtml('data-testid="teacher-summary"')
             ->assertDontSee('Calendario')
             ->assertDontSee('Propuesta por carrera');
     });

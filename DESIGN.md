@@ -518,6 +518,16 @@ El «Resumen» del alumno (`/resumen`) y la pestaña «Resumen» de su ficha (pr
 - **Credencial y acceso:** la credencial lleva la insignia «Credencial vigente» o «no vigente», las solicitudes abiertas con su estado, la cita con fecha, hora y lugar, y «Ver credencial»; «Tu acceso» (usuario, correo institucional, de dónde sale su contraseña y «Cambiar contraseña») solo la ve el alumno.
 - Los enlaces del tablero llevan a otra pestaña: el alumno, a `students.my-record?tab=…`; en la ficha, el componente avisa a la página con el evento `student-tab`.
 
+### Resumen del docente
+El «Resumen» del docente (`/resumen` con el perfil Docente; tarea 1.85, IN-03) es un **tablero** de solo lectura con la misma forma que el del alumno (maqueta C «Tablero como el del alumno», elegida por el usuario el 27 de noviembre de 2026, `.impeccable/mocks/decision/resumen-docente-2026-11/c-tablero.html`; los momentos de selección y publicada, `a2-seleccion.html` y `a3-publicada.html`). Es el componente `staffing::components.teacher-summary`, que Staffing registra con `HomePanels`.
+
+- **Orden:** ficha (iniciales en 3:4, nombre, insignia, departamento, plaza, grado e ingreso) → cuatro cifras → «Hoy» y «Atención» lado a lado desde 1200 px (`desktop:`) → «Tu semana» → el periodo en planeación a la izquierda y, a la derecha, experiencia académica, disponibilidad y «Tu acceso». Cada caja sale solo cuando aplica; entre semestres «Hoy» es una línea y la semana es la del periodo en planeación.
+- **Cifras:** una caja dividida en cuatro (dos por dos en celular), número en Mono 26 px y etiqueta 11.5 px en versalitas. La del periodo en planeación lleva `progress-success` contra el tope y, debajo, la franja de la banda; si pasa su banda, `warning` con `o-exclamation-triangle`.
+- **Hoy:** renglones con hora en Mono, materia y «clave · Grupo · Salón · Campus»; «Terminó» en neutro, «Ahora» y «Siguiente · en 3 h 50 min» en `info` (la siguiente con tinte `bg-info/10`), huecos y traslados como en Mi carga.
+- **Atención:** a lo más 5 renglones con icono, título y línea; vacía, `o-check-circle` y «Nada que atender».
+- **Tu semana:** columnas por día cuando su caja mide 56 rem o más (`@container`); antes, un día debajo de otro. La de hoy en `bg-base-200` con «Hoy».
+- **Experiencia:** las primeras 6 materias como etiquetas y «y N más» las despliega en el lugar. **Disponibilidad:** «Disponible en todo el horario.» o las excepciones por día.
+
 ### Retícula del plan (editor)
 El admin edita la retícula de un plan en `academic::pages.plan` (`/academic/plans/{plan}`). De tres maquetas, el usuario eligió la variante A, columnas por semestre con un panel lateral: «para cosas densas, haya drawers» (aprobado el 29 de octubre de 2026). Las maquetas están en `.impeccable/mocks/decision/reticula/`.
 
