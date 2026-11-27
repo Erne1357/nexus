@@ -64,10 +64,12 @@ describe('lista', function () {
             ->assertSeeHtml('data-subject="SCC-1013"');
     });
 
-    it('cada grupo enlaza a Horarios y a Asignación docente con su grupo', function () {
+    it('SEL-18: cada grupo abre su cajón en lugar de los enlaces provisionales a Horarios y Asignación', function () {
         currentLoadPage($this->jefe)
-            ->assertSeeHtml(e(route('scheduling.editor', ['modalidad' => 'PRES', 'campus' => 'C2', 'grupo' => $this->d->id])))
-            ->assertSeeHtml(e(route('staffing.assign', ['modalidad' => 'PRES', 'depto' => 'SC', 'grupo' => $this->d->id])));
+            ->assertSeeHtml('data-testid="open-group"')
+            ->assertSeeHtml('current-load-drawer')
+            ->assertDontSeeHtml(e(route('scheduling.editor', ['modalidad' => 'PRES', 'campus' => 'C2', 'grupo' => $this->d->id])))
+            ->assertDontSeeHtml(e(route('staffing.assign', ['modalidad' => 'PRES', 'depto' => 'SC', 'grupo' => $this->d->id])));
     });
 
     it('los filtros rápidos cuentan y filtran: sin docente, sin salón, con choque y espacio sin marcar', function () {

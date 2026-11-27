@@ -130,10 +130,7 @@
                                     @else
                                         <span class="text-neutral" data-testid="no-teacher">Sin docente</span>
                                     @endif
-                                    <div class="mt-0.5 flex gap-3">
-                                        <a class="link" wire:navigate href="{{ route('scheduling.editor', array_filter(['modalidad' => $board->modality->code, 'campus' => $group->campus?->code, 'grupo' => $group->id])) }}">Horarios</a>
-                                        <a class="link" wire:navigate href="{{ route('staffing.assign', array_filter(['modalidad' => $board->modality->code, 'depto' => $board->department->code, 'grupo' => $group->id])) }}">Asignación</a>
-                                    </div>
+                                    <button type="button" class="link mt-0.5" wire:click="$dispatchTo('staffing::components.current-load-drawer', 'open-load-group', { id: '{{ $group->id }}' })" data-testid="open-group">Editar grupo</button>
                                 </div>
                                 @error('capacities.'.$group->id)
                                     <p id="cupo-error-{{ $group->id }}" class="text-sm text-error md:col-span-4" role="alert">{{ $message }}</p>
@@ -144,5 +141,7 @@
                 </section>
             @endforeach
         </div>
+
+        <livewire:staffing::components.current-load-drawer :term-id="$termId" :modality-id="$modalityId" :department-id="$departmentId" wire:key="drawer-{{ $departmentId }}" />
     @endif
 </div>
