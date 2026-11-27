@@ -6,6 +6,7 @@ use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Imports\Console\BackfillKardexGroups;
 use App\Modules\Imports\Console\ExportDemoFiles;
 use App\Modules\Imports\Console\FillPositionCategoriesCommand;
 use App\Modules\Imports\Console\MigrateSii;
@@ -129,7 +130,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([ExportDemoFiles::class, FillPositionCategoriesCommand::class, MigrateSii::class]);
+            $this->commands([BackfillKardexGroups::class, ExportDemoFiles::class, FillPositionCategoriesCommand::class, MigrateSii::class]);
         }
 
         // Como Navigation: se arma al arrancar, antes de la primera petición, para que Octane lo cree

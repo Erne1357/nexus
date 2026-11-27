@@ -26,6 +26,6 @@ new class extends Component
 
     public function with(CampusMapQuery $query, Actor $context): array
     {
-        return ['map' => $query->forTerm($context->viewTerm())];
+        return ['map' => $query->forActor($context)];
     }
 };

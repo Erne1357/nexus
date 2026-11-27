@@ -175,13 +175,16 @@
                 {{-- 4. Tipo de los salones --}}
                 @if ($step === 4)
                     <h2 class="text-xl font-bold"><span class="font-mono text-neutral">4.</span> Tipo de los salones</h2>
-                    <p class="mb-4 text-sm text-neutral">Los salones que se ofrecen: los del departamento y los sin dueño del campus de los grupos.</p>
+                    <p class="mb-4 text-sm text-neutral">Los salones que se ofrecen: los del departamento, confirmados en su revisión de salones validada, en el campus de los grupos. Los salones sin dueño ya no se ofrecen.</p>
+                    @unless ($roomsValidated)
+                        <x-alert title="El catálogo de salones del departamento aún no está validado" description="Mientras no lo esté no se ofrece ningún salón: los docentes toman los grupos sin salón y la jefatura lo asigna." icon="o-exclamation-triangle" class="alert-warning mb-4" data-testid="rooms-not-validated" />
+                    @endunless
                     <ul class="mb-4 list-disc pl-5 text-sm text-neutral">
                         <li>Le cabe el grupo y le sobran 10 lugares o menos; si ninguno queda, se ofrece el más chico libre que le cabe.</li>
                         <li>Los laboratorios son solo para materias de laboratorio.</li>
                         <li>Las salas se apartan para las materias de sala.</li>
                     </ul>
-                    @foreach (['Del departamento' => $ownRooms, 'Sin dueño' => $freeRooms] as $title => $rooms)
+                    @foreach (['Del departamento, confirmados' => $ownRooms] as $title => $rooms)
                         <h3 class="mt-4 font-semibold">{{ $title }} <span class="font-mono text-neutral">{{ $rooms->count() }}</span></h3>
                         <div class="mt-2 overflow-x-auto rounded-box border border-base-300">
                             <table class="table table-sm">
@@ -285,7 +288,29 @@
                             </table>
                         </div>
                     @endif
-                    @foreach ($entries->whereNull('prior_choice_at')->groupBy('tier') as $tier => $group)
+                    @php
+                        $queue = $entries->whereNull('prior_choice_at');
+                        $withPost = $queue->filter(fn ($entry) => $entry->administrative_post !== null);
+                    @endphp
+                    @if ($withPost->isNotEmpty())
+                        <h3 class="mt-4 text-xs font-semibold uppercase text-neutral">Puesto administrativo · {{ $withPost->count() }}</h3>
+                        <p class="text-xs text-neutral">Eligen primero (SEL-07); dentro de este grupo, el orden de siempre.</p>
+                        <div class="mt-1 overflow-x-auto rounded-box border border-base-300" data-testid="preview-admin">
+                            <table class="table table-sm">
+                                <tbody>
+                                    @foreach ($withPost as $entry)
+                                        <tr wire:key="admin-{{ $entry->id }}">
+                                            <td class="w-10 font-mono">{{ $entry->position }}</td>
+                                            <td class="font-semibold">{{ $entry->teacher?->name ?? $entry->csv_name }} <x-core::status-badge tone="info" label="Puesto administrativo" class="badge-sm" /></td>
+                                            <td class="text-xs text-neutral">{{ $entry->administrative_post }}@if ($entry->source === \App\Modules\Staffing\Enums\SelectionEntrySource::Csv) · {{ [0 => 'TC', 1 => '¾', 2 => '½'][$entry->plaza_tier] ?? 'Asignatura' }}@if ($entry->failed_criteria > 0) · {{ $entry->failed_criteria }} {{ $entry->failed_criteria === 1 ? 'criterio fallido' : 'criterios fallidos' }}@endif @endif</td>
+                                            <td class="text-right font-mono text-xs">{{ $entry->slot_starts_at?->locale('es')->isoFormat('ddd D, H:mm') ?? '—' }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                    @foreach ($queue->reject(fn ($entry) => $entry->administrative_post !== null)->groupBy('tier') as $tier => $group)
                         <h3 class="mt-4 text-xs font-semibold uppercase text-neutral">Escalón {{ $tier + 1 }} · {{ $group->count() }}</h3>
                         <div class="mt-1 overflow-x-auto rounded-box border border-base-300">
                             <table class="table table-sm">
@@ -313,7 +338,7 @@
                             ['Alcance', $facts['groups'].' grupos, '.$facts['hours'].' h', $loads->isNotEmpty()],
                             ['CSV', $csvRows->count().' filas'.($unresolved > 0 ? ", {$unresolved} sin docente" : ', todas ligadas a un docente').'; '.$appended->count().' al final', $csvRows->isNotEmpty() && $unresolved === 0],
                             ['Tipo de espacio', $subjects->count().' materias'.($subjects->whereNull('required_space')->count() > 0 ? ', '.$subjects->whereNull('required_space')->count().' sin revisar' : ''), $subjects->whereNull('required_space')->isEmpty()],
-                            ['Salones', $ownRooms->count().' del departamento y '.$freeRooms->count().' sin dueño', true],
+                            ['Salones', $roomsValidated ? $ownRooms->count().' confirmados del departamento' : 'el catálogo de salones del departamento aún no está validado: no se ofrece ninguno', $roomsValidated],
                             ['Horario de turnos', $selection->starts_at ? $selection->starts_at->locale('es')->isoFormat('dddd D [de] MMMM, H:mm') : 'sin fecha de inicio', $selection->starts_at?->isFuture() ?? false],
                         ];
                     @endphp
@@ -448,7 +473,7 @@
                                 @foreach ($monitor['rows'] as $row)
                                     <tr wire:key="mon-{{ $row['entry']->id }}" @class(['bg-info/10' => $row['current']])>
                                         <td class="font-mono">{{ $row['entry']->position }}</td>
-                                        <td class="font-semibold">{{ $row['name'] }}</td>
+                                        <td class="font-semibold">{{ $row['name'] }}@if ($row['admin_post'] !== null) <x-core::status-badge tone="info" label="Puesto administrativo" class="badge-sm" title="{{ $row['admin_post'] }}" data-testid="monitor-admin-post" />@endif</td>
                                         <td class="whitespace-nowrap font-mono text-xs">{{ $row['entry']->slot_starts_at?->locale('es')->isoFormat('ddd D, H:mm') }}</td>
                                         <td>{{ $row['current'] ? 'En turno' : $row['entry']->status->label() }}</td>
                                         <td><span class="font-mono">{{ $row['hours'] }}</span> <span class="text-neutral">· frente a grupo: {{ $row['target'] }} h ({{ $row['target'] - 2 }} a {{ $row['target'] + 2 }})</span></td>

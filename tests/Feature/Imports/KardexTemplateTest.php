@@ -107,6 +107,13 @@ it('guarda la clave del SII con la que el alumno cursó la materia, que es opcio
     expect(KardexRecord::query()->orderBy('term_code')->pluck('sii_subject_code')->all())->toBe(['3EB', null]);
 });
 
+it('MP-04: guarda el grupo del SII en mayúsculas, que es opcional', function () {
+    $this->template->apply(kardexRow(['sii_group_code' => ' b2 ']), $this->context);
+    $this->template->apply(kardexRow(['term_code' => '20261']), $this->context);
+
+    expect(KardexRecord::query()->orderBy('term_code')->pluck('sii_group_code')->all())->toBe(['B2', null]);
+});
+
 it('busca al alumno y la materia una sola vez por corrida, aunque se repitan en muchas filas', function () {
     DB::enableQueryLog();
 

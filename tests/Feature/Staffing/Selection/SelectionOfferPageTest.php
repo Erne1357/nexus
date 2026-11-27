@@ -166,6 +166,19 @@ it('todos ven el desglose de criterios del orden', function () {
         ->toContain('TC → ¾');
 });
 
+it('SEL-07: el drawer del orden agrupa y marca a quien tiene puesto administrativo', function () {
+    $this->world->entryOf($this->dos)->update(['administrative_post' => 'Jefe de departamento académico', 'position' => 1]);
+    $this->world->entryOf($this->uno)->update(['position' => 2]);
+
+    $page = Livewire::actingAs($this->uno->user)->test('staffing::pages.offer')
+        ->set('showOrder', true)
+        ->assertSee('Puesto administrativo · eligen primero')
+        ->assertSeeHtml('data-testid="order-admin-post"');
+    $row = domOf($page->html())->querySelector('[data-testid="order-row-1"]');
+
+    expect(preg_replace('/\s+/u', ' ', $row->textContent))->toContain('Docente Dos')->toContain('Puesto administrativo')->toContain('Jefe de departamento académico');
+});
+
 it('un docente de otro departamento no ve el horario de selección', function () {
     $other = Teacher::factory()->create(['name' => 'Docente Ajeno', 'user_id' => User::factory()->create()->id]);
     TeacherDepartment::factory()->create(['teacher_id' => $other->id, 'department_id' => Department::factory()->create()->id]);

@@ -103,7 +103,7 @@ export async function load(srv=readServer()){
   const DEPTS=srv.departments.filter(d=>d.b&&BK[norm(d.b)]).map(d=>{const bb=BK[norm(d.b)];const sp=SPACES.find(s=>s.building===bb.id&&(s.raw===d.room||s.name===d.room));
     return{id:d.id,name:d.name,area:d.id,b:bb.id,room:d.room,location:d.location||null,phone:d.phone||null,email:d.email||null,web:d.web||null,space:sp?.id||null,img:DEPT_IMG[d.id]?IMG+DEPT_IMG[d.id]:(bb.img||null)}});
   const DB=Object.fromEntries(DEPTS.map(d=>[d.area,d]));
-  const PROFS=srv.profs.map(p=>{const d=DB[p.area];return{id:p.id,name:p.name,title:p.title||null,area:p.area&&AREAS[p.area]?p.area:null,email:p.email||null,building:d?.b||null,cub:d?.space||null,loc:d?(d.location||d.room||null):null}});
+  const PROFS=srv.profs.map(p=>{const d=DB[p.area];return{id:p.id,name:p.name,area:p.area&&AREAS[p.area]?p.area:null,email:p.email||null,building:d?.b||null,cub:d?.space||null,loc:d?(d.location||d.room||null):null}});
   const DAYS_ALL=['Lun','Mar','Mié','Jue','Vie','Sáb'],LONG_ALL=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
   const nd=Math.max(5,...srv.classes.flatMap(c=>c.days.map(d=>d+1)));
   const h0=Math.min(7,...srv.classes.map(c=>c.hour)),h1=Math.max(21,...srv.classes.map(c=>c.end));

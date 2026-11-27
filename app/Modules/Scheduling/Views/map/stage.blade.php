@@ -11,7 +11,7 @@
     <div id="tip"></div>
     <aside id="panel">
       <div class="ut-ph">
-        <div class="ut-grab" id="grab"></div><div class="ut-brand"><img class="ut-mk" src="{{ asset('ubicatec/img/logo_itcj.webp') }}" alt="ITCJ"><div><h1>Mapa del campus</h1><p>{{ collect([$map['campus'], isset($map['term']['name']) ? ($map['classes'] === [] ? 'sin clases publicadas en ' : ($map['time'] === 'past' ? 'clases que se impartieron en ' : ($map['time'] === 'future' ? 'clases que se impartirán en ' : 'clases de '))).$map['term']['name'] : null])->filter()->implode(' · ') }}</p></div></div>
+        <div class="ut-grab" id="grab"></div><div class="ut-brand"><img class="ut-mk" src="{{ asset('ubicatec/img/logo_itcj.webp') }}" alt="ITCJ"><div><h1>Mapa del campus</h1><p>{{ collect([$map['campus'], isset($map['term']['name']) ? ($map['classes'] === [] ? (($map['scope'] ?? null) === 'student' ? 'sin clases inscritas en ' : 'sin clases publicadas en ') : ($map['time'] === 'past' ? 'clases que se impartieron en ' : ($map['time'] === 'future' ? 'clases que se impartirán en ' : 'clases de '))).$map['term']['name'] : null])->filter()->implode(' · ') }}</p></div></div>
         @if (($map['time'] ?? 'current') !== 'current')
           <p class="ut-timenote" role="note" data-testid="map-time-note"><b>{{ $map['time'] === 'past' ? 'Periodo terminado' : 'Periodo por empezar' }}</b> La ocupación por hora y «En clase ahora» solo existen en el periodo en curso.</p>
         @endif
