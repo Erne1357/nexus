@@ -113,7 +113,7 @@ Mientras llegan, cada módulo trabaja con factories y un `DemoSeeder` que reprod
 | 1.74 ✅ [#930](https://github.com/Erne1357/nexus/pull/930) | Validación de catálogos: el jefe corrige del docente nombre, grado, correos, fecha de ingreso y sus plazas (tipo, horas, agregar y cerrar), directo y con bitácora; el RFC no (CV17, pedido del usuario del 26 de noviembre de 2026) | CatalogValidation, Faculty | | | |
 | 1.75 ✅ [#933](https://github.com/Erne1357/nexus/pull/933) | Fotos del personal y de alumnos (reporte del usuario del 26 de noviembre de 2026 desde producción): un fallo del disco (por ejemplo, la carpeta del host recreada después de arrancar los contenedores) ya no da error 500: se avisa «No se pudo guardar la foto» y queda en el log; síntoma y arreglo en la tabla de problemas de `despliegue.md` | | | | |
 | 1.76 ✅ [#939](https://github.com/Erne1357/nexus/pull/939) | Integración de los rieles del 26 de noviembre de 2026: la categoría de la plaza (PL-01) en el formulario de la validación del jefe (CV17) y la pestaña «Carga» de la ficha del docente con las horas frente a grupo y el aviso de HC-08 | | | | |
-| 1.77 ⬜ [#941](https://github.com/Erne1357/nexus/issues/941) | Mapa del Inicio sin el submenú de otra sección (pedido del usuario del 26 de noviembre de 2026) | | | | |
+| 1.77 ✅ [#942](https://github.com/Erne1357/nexus/pull/942) | Mapa del Inicio sin el submenú de otra sección (pedido del usuario del 26 de noviembre de 2026) | | | | |
 
 ## Pruebas de la fase
 
