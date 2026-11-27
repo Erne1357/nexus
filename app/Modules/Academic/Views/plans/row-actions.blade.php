@@ -5,7 +5,7 @@
     1199 px y lleva el data-testid del browser test. No hay «Borrar»: un plan se desactiva. Quien no edita planes (el
     jefe de Servicios Escolares, que entra a validar materias) ve «Editar» y «Desactivar» deshabilitados con su motivo.
 --}}
-<div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
+<div @class(['flex gap-1', 'justify-end whitespace-nowrap' => $inTable, '-ms-3' => ! $inTable])>
     @if (Route::has('academic.plans.show'))
         <x-button
             icon="o-rectangle-group"

@@ -8,7 +8,7 @@
 --}}
 @php($hasDependents = $department->careers_count > 0 || $department->subjects_count > 0)
 
-<div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
+<div @class(['flex gap-1', 'justify-end whitespace-nowrap' => $inTable, '-ms-3' => ! $inTable])>
     <x-button
         icon="o-pencil-square"
         wire:click="edit('{{ $department->id }}')"
