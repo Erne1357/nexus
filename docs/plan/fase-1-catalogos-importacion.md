@@ -125,6 +125,7 @@ Mientras llegan, cada módulo trabaja con factories y un `DemoSeeder` que reprod
 | 1.76 ✅ [#939](https://github.com/Erne1357/nexus/pull/939) | Integración de los rieles del 26 de noviembre de 2026: la categoría de la plaza (PL-01) en el formulario de la validación del jefe (CV17) y la pestaña «Carga» de la ficha del docente con las horas frente a grupo y el aviso de HC-08 | | | | |
 | 1.77 ✅ [#942](https://github.com/Erne1357/nexus/pull/942) | Mapa del Inicio sin el submenú de otra sección (pedido del usuario del 26 de noviembre de 2026) | | | | |
 | 1.78 ✅ [#947](https://github.com/Erne1357/nexus/pull/947) | Pasada final de diseño con Impeccable del riel de selección y mapa (1.46 a 1.77) con datos reales en 390, 768, 1280 y 1440 px | | | | |
+| 1.79 | Ícono de Nexus (pedido del usuario del 27 de noviembre de 2026; riel `riel/favicon`): `public/favicon.ico` estaba vacío; ahora la liebre blanca en el cuadro rojo Tec en 16, 32 y 48 px, el ícono de Apple de 180 px y los `<link rel="icon">` en el `<head>` de cada layout (`core::favicon`) | Core | | | |
 
 ## Pruebas de la fase
 
