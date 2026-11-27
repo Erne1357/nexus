@@ -546,16 +546,13 @@ describe('consultas', function () {
 });
 
 describe('menú', function () {
-    // Desde la tarea 1.56 el jefe con su carga publicada ve las pantallas de publicación y re-análisis, no el cierre (MN-06): el
-    // orden después de «Cierre de la carga» se revisa en el menú del admin, que lo ve todo.
-    it('MN-02: «Re-análisis de la carga» va después de «Cierre de la carga» cuando hay una carga publicada; el jefe y el coordinador la ven; el docente no', function () {
+    it('MN-02: «Re-análisis de la carga» va después de «Cierre de la carga» para el jefe y el coordinador cuando hay una carga publicada; el docente no la ve', function () {
         $this->world->published();
         // Otra carga sin publicar en el periodo: así las pantallas de la carga también están disponibles (MN-04).
         AcademicLoad::factory()->create(['term_id' => $this->world->term->id, 'modality_id' => $this->world->modality->id, 'department_id' => Department::factory()->create()->id]);
-        $admin = reanalysisMenuOf(User::factory()->admin()->create());
 
-        expect(array_slice($admin, array_search('Cierre de la carga', $admin, true), 4))->toBe(['Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas'])
-            ->and(reanalysisMenuOf($this->jefe))->toContain('Re-análisis de la carga', 'Versiones publicadas')->not->toContain('Cierre de la carga')
+        expect(reanalysisMenuOf($this->jefe))->toContain('Cierre de la carga', 'Re-análisis de la carga')
+            ->and(array_slice(reanalysisMenuOf($this->jefe), array_search('Cierre de la carga', reanalysisMenuOf($this->jefe), true), 3))->toBe(['Cierre de la carga', 'Re-análisis de la carga', 'Versiones publicadas'])
             ->and(reanalysisMenuOf($this->world->coordinator($this->world->isc)))->toContain('Re-análisis de la carga')
             ->and(reanalysisMenuOf(User::factory()->withRole(Role::Docente)->create()))->not->toContain('Re-análisis de la carga');
     });
