@@ -137,18 +137,18 @@ describe('MN-06: las etapas de cada pantalla', function () {
 
         expect(headStagesMenuOf($this->jefe))->toBe($expected);
     })->with([
-        'borrador' => [LoadStatus::Draft, ['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio']],
-        'propuesta' => [LoadStatus::Proposed, ['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio']],
-        'asignación' => [LoadStatus::Staffing, ['Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga']],
-        'cerrada' => [LoadStatus::Closed, ['Solicitudes de cambio', 'Cierre de la carga', 'Versiones publicadas', 'Horarios publicados']],
+        'borrador' => [LoadStatus::Draft, ['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio']],
+        'propuesta' => [LoadStatus::Proposed, ['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio']],
+        'asignación' => [LoadStatus::Staffing, ['Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga']],
+        'cerrada' => [LoadStatus::Closed, ['Carga actual', 'Solicitudes de cambio', 'Cierre de la carga', 'Versiones publicadas', 'Horarios publicados']],
     ]);
 
     it('MN-06: el JPD también ve solo las de su etapa', function () {
-        expect(headStagesMenuOf($this->jpd))->toBe(['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio']);
+        expect(headStagesMenuOf($this->jpd))->toBe(['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio']);
 
         headStagesMove($this->load, LoadStatus::Closed);
 
-        expect(headStagesMenuOf($this->jpd))->toBe(['Solicitudes de cambio', 'Versiones publicadas', 'Horarios publicados']);
+        expect(headStagesMenuOf($this->jpd))->toBe(['Carga actual', 'Solicitudes de cambio', 'Versiones publicadas', 'Horarios publicados']);
     });
 
     it('MN-06: el jefe de otro departamento, con su carga en otro estado, ve su etapa y no la de Sistemas', function () {
@@ -228,7 +228,7 @@ describe('MN-06: con la carga oculta', function () {
     beforeEach(fn () => headStagesSet(AcademicLoadVisibility::SETTING, false));
 
     it('el jefe y el JPD siguen viendo y abriendo las pantallas de su etapa, sin la marca del admin', function () {
-        expect(headStagesMenuOf($this->jefe))->toBe(['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio'])
+        expect(headStagesMenuOf($this->jefe))->toBe(['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio'])
             ->and(headStagesMenuOf($this->jpd))->toContain('Asignación docente');
 
         $this->actingAs($this->jefe);

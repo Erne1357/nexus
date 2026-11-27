@@ -94,6 +94,7 @@ final class AcademicLoadVisibility
         'scheduling.agreements',
         'scheduling.parallels',
         'scheduling.reanalysis',
+        'staffing.current-load',
         'staffing.assign',
         'staffing.teacher-loads',
         'staffing.change-requests',
@@ -134,6 +135,8 @@ final class AcademicLoadVisibility
         'staffing.change-requests' => [Stage::Staffing, Stage::Closing, Stage::Publication, Stage::Reanalysis],
         'staffing.closing' => [Stage::Closing],
         'staffing.closing-board' => [Stage::Closing],
+        // «Carga actual» (tarea 1.57, SEL-18): la carga del departamento en cualquier etapa.
+        'staffing.current-load' => [Stage::CatalogValidation, Stage::Proposal, Stage::Scheduling, Stage::Staffing, Stage::Rooms, Stage::Closing, Stage::Publication, Stage::Reanalysis],
         'solver.runs' => [],
     ];
 
