@@ -106,6 +106,22 @@ final class CurrentLoadQuery
     }
 
     /**
+     * Los choques duros vigentes de un grupo (los mismos que muestra la lista), por regla.
+     *
+     * @return list<array{rule: string, message: string}>
+     */
+    public function conflictsOf(Group $group): array
+    {
+        return ScheduleConflict::query()->open()
+            ->where('severity', ConflictSeverity::Hard->value)
+            ->where('group_id', $group->getKey())
+            ->orderBy('rule')
+            ->get(['rule', 'message'])
+            ->map(fn (ScheduleConflict $conflict): array => ['rule' => $conflict->rule, 'message' => $conflict->message])
+            ->all();
+    }
+
+    /**
      * La materia de un id del cliente si algún grupo no cancelado del departamento, periodo y modalidad la tiene; si no,
      * 404 (no se edita la materia de otra carga).
      */

@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -27,8 +28,8 @@ use Mary\Traits\Toast;
  * ven quienes ven la carga del departamento (AcademicLoadPermission::LoadView). Edita ahí mismo, con las Actions y las
  * policies de siempre: el tipo de espacio de la materia (SetSubjectRequiredSpace, SubjectPolicy::setSpace, SEL-17) y el
  * cupo de cada grupo (SetGroupCapacity, GroupPolicy::manage); quien no puede las ve de solo lectura y llamarlas es 403.
- * Horario y docente se cambian por ahora en Horarios y Asignación docente (enlaces por grupo, `?grupo=`). Lee con
- * CurrentLoadQuery. La modalidad, el campus y el departamento se resuelven como en Asignación docente.
+ * Horario, salones y docente se cambian en el cajón del grupo (`staffing::components.current-load-drawer`, tarea 1.61),
+ * que avisa con `current-load-changed` para que la fila se refresque. Lee con CurrentLoadQuery. La modalidad, el campus y el departamento se resuelven como en Asignación docente.
  */
 new #[Title('Carga actual')] class extends Component
 {
@@ -166,6 +167,10 @@ new #[Title('Carga actual')] class extends Component
         $this->capacities[$group->id] = (string) $group->capacity;
         $this->success('Cupo guardado', e("Grupo {$group->code}: {$group->capacity} lugares."));
     }
+
+    /** El cajón del grupo guardó algo: la lista se vuelve a pintar con lo guardado. */
+    #[On('current-load-changed')]
+    public function refreshed(): void {}
 
     public function with(CurrentLoadQuery $query, CampusGroupCountsQuery $counts): array
     {
