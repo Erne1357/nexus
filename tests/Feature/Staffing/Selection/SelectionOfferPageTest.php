@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Actions\UpdateSetting;
 use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Settings\SettingRegistry;
@@ -345,4 +346,59 @@ it('cada refresco busca una sola vez la ficha del docente y su renglón en la co
     $entryLookups = count(array_filter($queries, fn (string $sql): bool => preg_match('/from "staffing_selection_entries" where "selection_id" (= \?|in \([^)]*\)) and "teacher_id" = \?/', $sql) === 1));
 
     expect($teacherLookups)->toBe(1)->and($entryLookups)->toBe(1);
+});
+
+it('SEL-05: el docente ve «Asignado» y no el nombre de quien lo tiene, ni en la ficha ni en el estado de Livewire', function () {
+    selectionDrawer($this->uno->user)->call('open', $this->group->id)->call('take');
+
+    $page = Livewire::actingAs($this->dos->user)->test('staffing::pages.offer')->assertSeeHtml('data-testid="selection-taken"');
+    preg_match('/data-testid="selection-card-'.$this->group->id.'".*?<\/button>/s', $page->html(), $card);
+    expect($card[0])->toContain('Asignado')->not->toContain('Docente Uno')
+        ->and(json_encode($page->snapshot))->not->toContain($this->uno->id);
+
+    $drawer = selectionDrawer($this->dos->user)
+        ->call('open', $this->group->id)
+        ->assertSee('Este grupo ya fue asignado')
+        ->assertDontSee('Docente Uno', escape: false)
+        ->assertDontSee($this->uno->id);
+    expect(json_encode($drawer->snapshot))->not->toContain('Docente Uno')->not->toContain($this->uno->id);
+});
+
+it('SEL-05: a quien lo tomó el grupo le dice «Tú»', function () {
+    selectionDrawer($this->uno->user)->call('open', $this->group->id)->call('take');
+
+    Livewire::actingAs($this->uno->user)->test('staffing::pages.offer')->assertSee('Tú')->assertDontSeeHtml('data-testid="selection-taken"');
+});
+
+it('SEL-05: el jefe sí ve el nombre de quien tiene el grupo', function () {
+    selectionDrawer($this->uno->user)->call('open', $this->group->id)->call('take');
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id])->create();
+
+    Livewire::actingAs($jefe)->test('staffing::pages.offer')->assertSee('Docente Uno');
+    selectionDrawer($jefe)->call('open', $this->group->id)->assertSee('Docente Uno')->assertSee('Quitar docente');
+});
+
+it('SEL-05: la lista de la orden muestra a los docentes pero no qué grupos tomó cada uno', function () {
+    selectionDrawer($this->uno->user)->call('open', $this->group->id)->call('take');
+
+    $page = Livewire::actingAs($this->dos->user)->test('staffing::pages.offer')->call('$set', 'showOrder', true);
+    preg_match('/data-testid="selection-order">.*/s', $page->html(), $order);
+    expect($order[0])->toContain('Docente Uno')->not->toContain($this->group->subject->name)->not->toContain($this->group->subject->code);
+});
+
+it('SEL-05 (alcance): el jefe de otro campus ve «Asignado» en el horario y no el nombre; el de otro departamento no ve la selección', function () {
+    selectionDrawer($this->uno->user)->call('open', $this->group->id)->call('take');
+    $otherCampus = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id, 'campus_id' => Campus::factory()->create()->id])->create();
+    $otherDepartment = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => Department::factory()->create()->id])->create();
+
+    $page = Livewire::actingAs($otherCampus)->test('staffing::pages.offer');
+    preg_match('/data-testid="selection-card-'.$this->group->id.'".*?<\/button>/s', $page->html(), $card);
+    expect($card[0])->toContain('Asignado')->not->toContain('Docente Uno')->not->toContain('Asignar a');
+
+    $drawer = selectionDrawer($otherCampus)->call('open', $this->group->id);
+    $drawer->assertSee('Este grupo ya fue asignado')->assertDontSee('Docente Uno', escape: false)->assertDontSee($this->uno->id)->assertDontSee('Quitar docente');
+    expect(json_encode($drawer->snapshot))->not->toContain($this->uno->id);
+
+    Livewire::actingAs($otherDepartment)->test('staffing::pages.offer')->assertForbidden();
+    selectionDrawer($otherDepartment)->assertForbidden();
 });

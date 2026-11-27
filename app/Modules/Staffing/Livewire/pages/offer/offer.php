@@ -280,7 +280,7 @@ new #[Title('Oferta del departamento')] class extends Component
             && ($this->semester === '' || (string) $group['semester'] === $this->semester)));
         $byState = [
             'todos' => $matching,
-            'sin' => array_values(array_filter($matching, fn (array $group): bool => $group['teacher_name'] === null)),
+            'sin' => array_values(array_filter($matching, fn (array $group): bool => ! $group['taken'])),
             'top' => array_values(array_filter($matching, fn (array $group): bool => $group['top'])),
         ];
         $selected = $this->groupId === null ? null : collect($all)->firstWhere('id', $this->groupId);
@@ -356,19 +356,21 @@ new #[Title('Oferta del departamento')] class extends Component
             && $context->allows(StaffingPermission::SelectionView, Target::of(modality: $selection->modality_id, unit: $selection->department_id));
         $entry = $managing ? null : $this->entryMemo;
         $teacher = $entry === null ? null : $this->teacherMemo;
-        $data = $timetable->forTeacher($selection, $teacher, $now, $entry);
         $assignable = [];
-        $canAssign = function (array $card) use (&$assignable): bool {
-            $key = "{$card['modality_id']}|{$card['campus_id']}|{$card['department_id']}";
+        $canAssignIn = function (?string $modality, ?string $campus, ?string $department) use (&$assignable): bool {
+            $key = "{$modality}|{$campus}|{$department}";
 
-            return $assignable[$key] ??= Gate::allows('create', [GroupTeacherAssignment::class, new Group(['modality_id' => $card['modality_id'], 'campus_id' => $card['campus_id'], 'department_id' => $card['department_id']])]);
+            return $assignable[$key] ??= Gate::allows('create', [GroupTeacherAssignment::class, new Group(['modality_id' => $modality, 'campus_id' => $campus, 'department_id' => $department])]);
         };
+        $canAssign = fn (array $card): bool => $canAssignIn($card['modality_id'], $card['campus_id'], $card['department_id']);
+        // SEL-05: el nombre de quien tiene un grupo solo sale para quien asigna; el docente ve «Asignado».
+        $data = $timetable->forTeacher($selection, $teacher, $now, $entry, fn (Group $group): bool => $canAssignIn($group->modality_id, $group->campus_id, $group->department_id));
 
         $needle = self::fold($this->search);
         $matches = fn (array $card): bool => $needle === '' || str_contains(self::fold("{$card['subject_name']} {$card['subject_code']} {$card['group_code']}"), $needle);
         $filters = [
             'todos' => fn (array $card): bool => true,
-            'libres' => fn (array $card): bool => $card['teacher'] === null,
+            'libres' => fn (array $card): bool => ! $card['taken'],
             'mios' => fn (array $card): bool => $card['mine'],
         ];
         $strips = array_map(fn (array $strip): array => $strip + [
