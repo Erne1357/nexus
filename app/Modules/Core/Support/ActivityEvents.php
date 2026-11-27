@@ -66,6 +66,7 @@ final class ActivityEvents
         'student-accounts-synced' => 'Cuentas de alumnos',
         'email-change-notified' => 'Aviso de cambio de correo',
         'password-changed' => 'Contraseña cambiada',
+        'privacy-notice-accepted' => 'Aviso de privacidad aceptado',
         'password-change-required' => 'Cambio de contraseña pedido',
         'password-reset-link-issued' => 'Enlace de contraseña',
         'password-reset-link-failed' => 'Enlace de contraseña sin enviar',

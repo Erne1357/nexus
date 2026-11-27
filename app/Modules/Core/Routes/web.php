@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Http\Controllers\AcceptPrivacyNoticePage;
 use App\Modules\Core\Http\Controllers\AccessInvitationPage;
 use App\Modules\Core\Http\Controllers\ChangePasswordPage;
 use App\Modules\Core\Http\Controllers\ForgotPasswordPage;
@@ -41,6 +42,13 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::post('/reset-password', [ResetPasswordPage::class, 'update'])->name('password.update');
 });
 
+/*
+| El aviso de privacidad del TecNM (AC-23, tarea 1.65): página pública, sin sesión, con el mismo tope holgado que la
+| consulta de lo publicado (240 por minuto por usuario con sesión o por IP sin ella), porque los alumnos de un campus
+| comparten IP. EnsurePasswordIsChanged la deja ver a quien todavía debe cambiar su contraseña.
+*/
+Route::view('/aviso-de-privacidad', 'core::privacy-notice.show')->middleware('throttle:240,1')->name('privacy-notice');
+
 Route::middleware('auth')->group(function () {
     // La foto vigente de una persona (CO-04): solo con la URL firmada que arma StaffPhotoUrl y vence a las 2 horas.
     Route::get('/personal/{user}/foto/{version}', StaffPhoto::class)->middleware('signed')->name('core.staff-photo');
@@ -49,6 +57,9 @@ Route::middleware('auth')->group(function () {
     // —saludo, bloque del puesto, calendario y tarjetas— queda como «Resumen» en Mi espacio.
     Route::livewire('/resumen', 'core::pages.home')->name('core.summary');
     Route::get('/user/password', ChangePasswordPage::class)->name('user-password.edit');
+    // AC-22: la pantalla «Aviso de privacidad» del alumno que no ha aceptado la versión vigente (EnsurePrivacyNoticeAccepted).
+    Route::get('/aviso-de-privacidad/aceptar', [AcceptPrivacyNoticePage::class, 'show'])->name('privacy-notice.accept');
+    Route::post('/aviso-de-privacidad/aceptar', [AcceptPrivacyNoticePage::class, 'accept'])->name('privacy-notice.accept.store');
     Route::livewire('/campus', 'core::pages.campuses')->name('core.campuses');
     Route::livewire('/modalidades', 'core::pages.modalities')->name('core.modalities');
     Route::livewire('/notifications', 'core::pages.notifications')->name('core.notifications');

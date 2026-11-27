@@ -20,6 +20,7 @@ use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Notifications\PersonMailAddresses;
 use App\Modules\Core\Support\PhotoNormalizer;
+use App\Modules\Students\Console\SyncSiiSpecialtiesCommand;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use App\Modules\Students\Enums\StudentsPermission;
 use App\Modules\Students\Enums\StudentStatus;
@@ -51,6 +52,10 @@ final class StudentsServiceProvider extends ModuleServiceProvider
     public function boot(): void
     {
         parent::boot();
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([SyncSiiSpecialtiesCommand::class]);
+        }
 
         Event::listen(SubjectDeactivating::class, BlockSubjectDeactivationWhileNeeded::class);
         Event::listen(PlanCareerChanging::class, BlockPlanCareerChangeWithStudents::class);

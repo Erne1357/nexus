@@ -31,8 +31,9 @@ use Illuminate\Notifications\Notification;
  * `deactivated_by` dicen cuándo y quién dio de baja la cuenta en el panel (DeactivateUser, CF-05): mientras estén, solo
  * el admin la reactiva (CF-09).
  * `photo_path` es la foto vigente del personal en el disco `staff_photos` y `photo_updated_at` cuándo se puso (CO-03; solo
- * SetStaffPhoto y RemoveStaffPhoto las escriben). Su correo de avisos es su correo institucional (PersonMailAddresses, CE-01),
- * salvo que la notificación elija otro (RoutesMailAddress, CV11).
+ * SetStaffPhoto y RemoveStaffPhoto las escriben). `privacy_notice_accepted_at` y `privacy_notice_version` dicen cuándo y qué
+ * versión del aviso de privacidad aceptó (AC-22; solo AcceptPrivacyNotice las escribe). Su correo de avisos es su correo
+ * institucional (PersonMailAddresses, CE-01), salvo que la notificación elija otro (RoutesMailAddress, CV11).
  */
 #[Fillable(['username', 'name', 'email', 'password', 'password_origin', 'is_active', 'must_change_password', 'last_login_at'])]
 #[Hidden(['password', 'remember_token'])]
@@ -57,6 +58,7 @@ class User extends Authenticatable
             'access_invited_at' => 'immutable_datetime',
             'deactivated_at' => 'immutable_datetime',
             'photo_updated_at' => 'immutable_datetime',
+            'privacy_notice_accepted_at' => 'immutable_datetime',
             'last_role' => Role::class,
             'staff_type' => StaffType::class,
             'authz_version' => 'integer',

@@ -3,6 +3,7 @@
 namespace App\Modules\Academic;
 
 use App\Modules\Academic\Authorization\AcademicScopeLabels;
+use App\Modules\Academic\Console\MarkCurrentSpecialtiesCommand;
 use App\Modules\Academic\Console\PositionMailboxesFromDepartmentsCommand;
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
@@ -45,7 +46,7 @@ final class AcademicServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([PositionMailboxesFromDepartmentsCommand::class]);
+            $this->commands([MarkCurrentSpecialtiesCommand::class, PositionMailboxesFromDepartmentsCommand::class]);
         }
     }
 
