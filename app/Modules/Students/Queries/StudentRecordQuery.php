@@ -180,7 +180,7 @@ final class StudentRecordQuery
     }
 
     /**
-     * Por periodo, del más reciente al más antiguo (AL-KX); dentro de cada uno, por código de materia. Lo que no tiene
+     * Por periodo, del más reciente al más antiguo; dentro de cada uno, por código de materia. Lo que no tiene
      * periodo (la historia del SII trae periodos que no existen) va al final, como «Sin periodo».
      *
      * @param  Collection<int, KardexRecord>  $records

@@ -189,7 +189,7 @@ it('resume los créditos, las materias acreditadas, lo que cursa y lo que puede 
         ->approvedBySemester->toBe([1 => 1, 2 => 0, 4 => 0]);
 });
 
-it('el kárdex va del periodo más reciente al más antiguo y «Sin periodo» al final (AL-KX), también con materias de fuera del plan y sin las filas borradas', function () {
+it('el kárdex va del periodo más reciente al más antiguo y «Sin periodo» al final, también con materias de fuera del plan y sin las filas borradas', function () {
     $outside = Subject::factory()->create(['code' => 'Z-9']);
     recordKardex($this->student, $this->subjects['A'], 'reprobada', '20251', grade: 50);
     recordKardex($this->student, $this->subjects['A'], 'aprobada', '20253', 2, 80);
