@@ -2,8 +2,8 @@
     «Mis datos» del alumno (AC-15), con cuatro pestañas (`?tab=`). «Mis datos»: sus datos escolares como los ficha del alumno (nombre, número de control, estatus y
     la línea de carrera, plan, campus y semestre) y, debajo, su acceso: usuario, correo institucional, de dónde sale su
     contraseña y el enlace para cambiarla.
-    «Retícula» y «Kárdex» (1.42): cada una en su pestaña, solo lectura (students::reticula y students::kardex, las mismas de la ficha
-    del personal, sin resaltado ni barra de selección), con las cifras arriba de ambas (S5). `?tab=perfil` (enlaces viejos) abre «Retícula».
+    «Retícula» y «Kárdex» (1.42): cada una en su pestaña (students::reticula y students::kardex, las mismas de la ficha
+    del personal; la retícula es interactiva, con resaltado de cadenas, leyenda y barra de selección, 1.68), con las cifras arriba de ambas (S5). `?tab=perfil` (enlaces viejos) abre «Retícula».
     «Credencial»: su credencial de alumno con la plantilla del ITCJ, su foto y el QR verificable (AC-20, tarea 1.27).
 --}}
 <div class="space-y-5">
@@ -36,7 +36,7 @@
                 @if ($tab === 'kardex')
                     <x-students::kardex :record="$record" audience="alumno" />
                 @else
-                    <x-students::reticula :record="$record" :interactive="false" audience="alumno" />
+                    <x-students::reticula :record="$record" audience="alumno" />
                 @endif
             </section>
         @endif
