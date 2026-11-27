@@ -1,7 +1,7 @@
 {{--
     El drawer de un grupo del horario de selección (maqueta B: «b-drawer», «b-mapa» y «b-asignar»; `x-drawer` a la
     derecha, `max-w-xl`). Encabezado con la clave, la materia y su horario; los datos en cuatro casillas (horas, lugares,
-    espacio y días); quién lo tiene; los avisos (fuera de tu perfil, choque, solo consulta). En su turno y con el grupo
+    espacio y días); quién lo tiene; los avisos (fuera de tu experiencia académica, choque, solo consulta). En su turno y con el grupo
     libre: «Con este grupo llevarías…» y el salón en pestañas Lista y Mapa; al pie, «Tomar en 704». Si es suyo y está en
     su turno, «Soltar grupo». «Asignar a…» (jefatura): el docente en el orden, el salón y el motivo opcional; desde ahí,
     «Quitar docente» pide el motivo en el mismo drawer. Con la selección terminada, el docente solo consulta.
@@ -113,8 +113,8 @@
                             <div role="note" class="alert alert-warning alert-soft items-start text-sm" data-testid="selection-out-of-profile">
                                 <x-icon name="o-exclamation-triangle" class="mt-0.5 h-5 w-5" aria-hidden="true" />
                                 <div>
-                                    <p class="font-semibold">Fuera de tu perfil</p>
-                                    <p>No está en tu perfil ni en tu historial. Puedes tomarla; queda en tu historial.</p>
+                                    <p class="font-semibold">Fuera de tu experiencia académica</p>
+                                    <p>No está en tu experiencia académica ni en tu historial. Puedes tomarla; queda en tu historial.</p>
                                 </div>
                             </div>
                         @endif

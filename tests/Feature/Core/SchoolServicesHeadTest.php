@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\SwitchRole;
@@ -12,6 +13,7 @@ use App\Modules\Core\Authorization\UnitApplicability;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
@@ -40,15 +42,19 @@ beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2027-02-01 10:00', 'America/Ciudad_Juarez'));
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-05-28']);
-    // Validación abierta y carga en curso (MN-03 y MN-04): así el menú depende solo del permiso de cada puesto.
+    // Validación abierta y carga en curso (MN-03 y MN-04): así el menú depende solo del permiso de cada puesto. Al jefe y al
+    // JPD también los acota la etapa de la carga de su departamento (MN-06): Sistemas tiene una en borrador en Presencial y
+    // otra cerrada en otra modalidad, que juntas le abren al jefe todas las etapas de sus pantallas; el JPD, que es de
+    // Presencial, ve solo las del borrador.
     CatalogReview::factory()->for($term)->create();
-    AcademicLoad::factory()->for($term)->create();
     $this->services = OrgUnit::factory()->create([
         'code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento,
         'parent_id' => OrgUnit::factory()->create(['code' => 'SUB-PLANEACION', 'name' => 'Subdirección de Planeación y Vinculación', 'kind' => OrgUnitKind::Subdireccion, 'parent_id' => app(OrgTree::class)->idOf(OrgTree::ROOT)])->id,
     ]);
     $this->systems = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->isc = Career::factory()->create(['code' => 'ISC', 'department_id' => $this->systems->id]);
+    AcademicLoad::factory()->for($term)->create(['department_id' => $this->systems->id]);
+    AcademicLoad::factory()->for($term)->inStatus(LoadStatus::Closed)->create(['department_id' => $this->systems->id, 'modality_id' => Modality::factory()->create()->id]);
 
     $this->servicesHead = User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => $this->services->id])->create(['name' => 'Sara Escolar']);
     $this->academicHead = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->systems->id])->create(['name' => 'Juan Pérez']);
@@ -70,16 +76,17 @@ describe('AZ-02: menú', function () {
     });
 
     // Las listas van en el orden del menú (MN-01): Mi espacio (con «Resumen» para todo el que tiene puesto, 1.24.1), Académico (la validación), Carga académica por etapas (MN-05), Servicios escolares,
-    // Recursos humanos y Administración. Inicio no es una entrada: el menú lo pinta aparte.
+    // Recursos humanos y Administración. Inicio no es una entrada: el menú lo pinta aparte. Desde la tarea 1.56 el jefe ya no
+    // ve «Corridas del motor» (MN-06).
     it('AZ-S16: cada puesto ve su menú, en el orden de MN-01', function (Closure $user, array $menu) {
         expect(menuOf($user($this)))->toBe($menu);
     })->with([
-        'jefe de un departamento académico' => [fn ($test) => $test->academicHead, ['Resumen', 'Validar catálogos', 'Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Docentes', 'Materias']],
-        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Resumen', 'Validación de catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Docentes', 'Campus', 'Modalidades', 'Periodos', 'Edificios', 'Salones', 'Parámetros']],
-        'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Resumen', 'Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Versiones publicadas', 'Horarios publicados', 'Docentes']],
+        'jefe de un departamento académico' => [fn ($test) => $test->academicHead, ['Resumen', 'Validar catálogos', 'Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Docentes', 'Materias']],
+        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Resumen', 'Validación de catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Docentes', 'Campus', 'Modalidades', 'Periodos', 'Edificios', 'Salones', 'Parámetros']],
+        'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Resumen', 'Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Versiones publicadas', 'Horarios publicados', 'Docentes']],
         'coordinador' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->c2->id, 'career_id' => $test->isc->id])->create(), ['Resumen', 'Propuesta de carrera', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Corridas del motor', 'Solicitudes de cambio', 'Horarios publicados', 'Alumnos']],
         'docente' => [fn () => User::factory()->withRole(Role::Docente)->create(), ['Resumen', 'Mi carga', 'Oferta']],
-        'admin' => [fn () => User::factory()->admin()->create(), ['Resumen', 'Validación de catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Materias por colocar', 'Personal', 'Fotos del personal', 'Fotos de alumnos', 'Solicitudes de credencial', 'Docentes', 'Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones', 'Orden de selección', 'Puestos y permisos', 'Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas', 'Buzones de puesto']],
+        'admin' => [fn () => User::factory()->admin()->create(), ['Resumen', 'Validación de catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Materias por colocar', 'Personal', 'Fotos del personal', 'Fotos de alumnos', 'Solicitudes de credencial', 'Docentes', 'Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones', 'Orden de selección', 'Puestos y permisos', 'Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas', 'Buzones de puesto']],
     ]);
 });
 

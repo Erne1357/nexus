@@ -18,6 +18,11 @@ use Symfony\Component\HttpFoundation\Response;
  * consulta de horarios publicados y sus PDF), 404, como si no existieran, también con sesión. A un invitado en una que pide
  * sesión no le responde: de él se encarga `auth`, que lo manda al login.
  *
+ * MN-06: al jefe y al JPD, una ruta con sesión fuera de la etapa de su carga (o las corridas del motor) le responde 403
+ * también con la carga visible; con ella oculta, una pública fuera de su etapa le responde 404, como a todos. Con la carga
+ * visible, las públicas abren para cualquiera, también para ellos (supuesto por confirmar): son públicas, y solo salen de
+ * su menú (AcademicLoadVisibility::closesFor).
+ *
  * Va en el grupo `web` (bootstrap/app.php), como EnsurePasswordIsChanged, para que decida la lista y no el grupo de rutas de
  * cada módulo; y es middleware persistente de Livewire (CoreServiceProvider), así que una acción de un componente pintado
  * en una página de la carga también se niega. Cualquier otra ruta pasa sin leer nada.
@@ -36,16 +41,19 @@ final class EnsureAcademicLoadIsVisible
     public function handle(Request $request, Closure $next): Response
     {
         $route = $request->route();
+        $name = $route?->getName();
 
-        if ($route === null || ! AcademicLoadVisibility::isLoadRoute($route->getName()) || ! $this->visibility->hiddenFrom($this->context)) {
+        if ($route === null || $name === null || ! AcademicLoadVisibility::isLoadRoute($name)) {
             return $next($request);
         }
 
         if (! $this->needsLogin($route)) {
-            abort(Response::HTTP_NOT_FOUND);
+            abort_if($this->visibility->isHidden() && $this->visibility->closesFor($this->context, $name), Response::HTTP_NOT_FOUND);
+
+            return $next($request);
         }
 
-        if ($this->context->user() === null) {
+        if ($this->context->user() === null || ! $this->visibility->closesFor($this->context, $name)) {
             return $next($request);
         }
 

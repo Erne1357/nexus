@@ -13,7 +13,7 @@ use App\Modules\Faculty\Queries\TeacherBaseHoursQuery;
 use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
 
 /*
-| Qué le falta a cada docente de un departamento en un periodo (disponibilidad S12, perfil S17, horas fuera del
+| Qué le falta a cada docente de un departamento en un periodo (disponibilidad S12, experiencia académica S17, horas fuera del
 | ITCJ S16): solo informa, no bloquea validar el catálogo (CV6).
 */
 
@@ -48,7 +48,7 @@ it('la disponibilidad de otro periodo o borrada no cuenta como capturada', funct
         ->and($rows[$deleted->id]['has_availability'])->toBeFalse();
 });
 
-it('el perfil cuenta aptos y preferentes solo en materias del departamento', function () {
+it('la experiencia académica cuenta aptos y preferentes solo en materias del departamento', function () {
     $teacher = readinessTeacher($this->sis);
     $none = readinessTeacher($this->sis);
     TeacherSubjectQualification::factory()->apto()->for($teacher)->for(Subject::factory()->create(['department_id' => $this->sis->id]))->create();
@@ -79,7 +79,7 @@ it('trae las horas de plaza del periodo', function () {
     expect($this->query->forTeachers($this->sis, $this->term, [$teacher->id])[$teacher->id]['base_hours'])->toBe(40);
 });
 
-it('el perfil no cuenta materias inactivas ni borradas', function () {
+it('la experiencia académica no cuenta materias inactivas ni borradas', function () {
     $teacher = readinessTeacher($this->sis);
     TeacherSubjectQualification::factory()->for($teacher)->for(Subject::factory()->inactive()->create(['department_id' => $this->sis->id]))->create();
     TeacherSubjectQualification::factory()->for($teacher)->for(Subject::factory()->create(['department_id' => $this->sis->id, 'deleted_at' => now()]))->create();

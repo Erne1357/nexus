@@ -63,7 +63,7 @@ final class SessionRules
      */
     public function ensureEditable(Group $group): void
     {
-        $this->editability->ensure($group, 'horarios', 'session');
+        $this->editability->ensure($group, 'horarios', 'session', draft: true);
     }
 
     /**

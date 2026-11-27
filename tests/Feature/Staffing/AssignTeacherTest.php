@@ -282,3 +282,12 @@ it('una selección viva de otra carga no cambia las reglas del grupo', function 
 
     expect($errors)->toHaveKey('reason');
 });
+
+it('1.62: con la carga en borrador NO se asigna docente aunque sí se editen horarios y salones (confirmado el 26 de noviembre de 2026)', function () {
+    $this->load->update(['status' => LoadStatus::Draft]);
+
+    $errors = assignmentErrors(fn () => assignTeacher($this->group, $this->teachers[0], $this->actor));
+
+    expect($errors['group'])->toBe(['La carga está en Borrador: los docentes se asignan en Asignación, Ajustes o Re-análisis.'])
+        ->and($this->group->fresh()->teacher_id)->toBeNull();
+});

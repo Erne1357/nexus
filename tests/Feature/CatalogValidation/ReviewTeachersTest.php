@@ -55,14 +55,14 @@ function inTeachersReview(Teacher $teacher): bool
 }
 
 describe('correo institucional (CV1, AC-06)', function () {
-    it('CV1: corrige solo el correo institucional del docente con UpdateTeacher y lo marca como revisado', function () {
+    it('CV1 y CV17: corrige el correo institucional y, desde 1.74, también el nombre del docente con UpdateTeacher y lo marca como revisado', function () {
         $teacher = Teacher::factory()->adscribedTo($this->sc)->create(['name' => 'Ana Ruiz']);
 
         app(CorrectRecord::class)->handle($this->review, $teacher, ['institutional_email' => 'ANA.RUIZ@cdjuarez.tecnm.mx', 'name' => 'Otro nombre'], $this->jefe);
 
         expect($teacher->fresh())
             ->institutional_email->toBe('ana.ruiz@cdjuarez.tecnm.mx')
-            ->name->toBe('Ana Ruiz')
+            ->name->toBe('Otro nombre')
             ->and(CatalogReviewMark::query()->where('record_id', $teacher->id)->exists())->toBeTrue()
             ->and($this->review->fresh()->status)->toBe(ReviewStatus::InReview);
     });

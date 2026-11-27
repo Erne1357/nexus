@@ -129,7 +129,7 @@ final class FacultyServiceProvider extends ModuleServiceProvider
      * - a «catálogos», los docentes del volumen en modo proceso (FacultyDemoSeeder: más plantilla repartida por las
      *   horas de cada departamento y disponibilidad más holgada, para que en «salones» todo grupo tenga docente), sus
      *   usuarios y los jefes de proyecto docente;
-     * - a «validación», la variedad de captura de Ene-Jun 2027 (unos sin disponibilidad, sin perfil o con horas externas);
+     * - a «validación», la variedad de captura de Ene-Jun 2027 (unos sin disponibilidad, sin experiencia académica o con horas externas);
      * - a «propuesta», la captura completa, como la deja el jefe antes de validar.
      */
     public function demoSteps(): array

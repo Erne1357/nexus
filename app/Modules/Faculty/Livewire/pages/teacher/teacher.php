@@ -59,7 +59,7 @@ use Mary\Traits\Toast;
 /**
  * Ficha del docente (tarea 1.13, spec 4.3 y S8), con la forma de la ficha del alumno: encabezado con sus datos y
  * cifras, y seis pestañas: Datos (sus datos, sus adscripciones: quitar y hacer principal), Plazas (agregar,
- * editar y quitar), Perfil (las materias que puede dar, apto o preferente, y su «Carga académica en otra modalidad» del periodo
+ * editar y quitar), Experiencia académica (las materias que puede dar, apto o preferente, y su «Carga académica en otra modalidad» del periodo
  * activo; S16 y S17, supuestos por confirmar) e Historial (grupos por periodo y evaluaciones, de solo lectura).
  * Carga muestra la semana del periodo en curso y la del siguiente cuando ya tiene grupos en Nexus (D-03,
  * TeacherWeeklyLoad). Disponibilidad muestra la del periodo activo, de solo lectura (AvailabilityGridQuery), y lleva al editor
@@ -132,7 +132,7 @@ new #[Title('Ficha del docente')] class extends Component
 
     public bool $showQualificationModal = false;
 
-    /** La materia del perfil que se edita; null es una materia nueva. */
+    /** La materia de la experiencia académica que se edita; null es una materia nueva. */
     #[Locked]
     public ?string $editingQualificationId = null;
 
@@ -315,7 +315,7 @@ new #[Title('Ficha del docente')] class extends Component
                 'plazas' => ['Plazas', $record->positions->count()],
                 'carga' => ['Carga', null],
                 'disponibilidad' => ['Disponibilidad', null],
-                'perfil' => ['Perfil', null],
+                'perfil' => ['Experiencia académica', null],
                 'historial' => ['Historial', null],
             ],
         ];
@@ -797,7 +797,7 @@ new #[Title('Ficha del docente')] class extends Component
             return;
         }
 
-        $this->success('Perfil actualizado', e("{$subject->code} · {$subject->name}"));
+        $this->success('Experiencia académica actualizada', e("{$subject->code} · {$subject->name}"));
         $this->showQualificationModal = false;
     }
 
@@ -808,7 +808,7 @@ new #[Title('Ficha del docente')] class extends Component
         $this->authorize('manageQualification', [$teacher, Subject::withTrashed()->findOrFail($qualification->subject_id)]);
 
         if ($this->attempt(fn () => $removeQualification->handle($qualification), 'No se pudo quitar la materia')) {
-            $this->success('Materia quitada del perfil', 'Queda en la bitácora.');
+            $this->success('Materia quitada de la experiencia académica', 'Queda en la bitácora.');
         }
     }
 
@@ -909,7 +909,7 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
-     * Lo que pinta la pestaña Perfil: sus materias con quién puede cambiarlas, las horas fuera del ITCJ del periodo
+     * Lo que pinta la pestaña Experiencia académica: sus materias con quién puede cambiarlas, las horas fuera del ITCJ del periodo
      * activo y, con el modal abierto, las materias que el usuario puede declarar (S17: las de los departamentos que
      * cubre).
      *
@@ -932,7 +932,7 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
-     * Por materia del perfil, si el usuario puede cambiarla: cubre al docente (una vez) y el departamento de la
+     * Por materia de la experiencia académica, si el usuario puede cambiarla: cubre al docente (una vez) y el departamento de la
      * materia, la misma regla de TeacherPolicy::manageQualification sin preguntarle a la Gate por cada renglón.
      *
      * @param  iterable<int, TeacherSubjectQualification>  $profile

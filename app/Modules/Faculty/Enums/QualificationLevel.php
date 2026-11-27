@@ -3,7 +3,7 @@
 namespace App\Modules\Faculty\Enums;
 
 /**
- * `teacher_subject_qualifications.level`: nivel del perfil que el jefe declara para una materia.
+ * `teacher_subject_qualifications.level`: nivel de la experiencia académica que el jefe declara para una materia.
  */
 enum QualificationLevel: string
 {

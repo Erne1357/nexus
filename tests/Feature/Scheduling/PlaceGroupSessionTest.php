@@ -119,13 +119,13 @@ it('coloca la sesión sin salón, con el periodo y el campus del grupo, y la dev
         ->campus_id->toBe($this->campus->id);
 });
 
-it('acepta la carga en propuesta, asignación, ajustes o re-análisis (tarea 8.1)', function (LoadStatus $status) {
+it('acepta la carga en borrador (1.62), propuesta, asignación, ajustes o re-análisis (tarea 8.1)', function (LoadStatus $status) {
     $this->load->update(['status' => $status]);
 
     placeSession($this->group, 1, '07:00', '08:00');
 
     expect($this->group->sessions()->count())->toBe(1);
-})->with([LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Reanalysis]);
+})->with([LoadStatus::Draft, LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Reanalysis]);
 
 it('rechaza con la carga en cualquier otro estado, sin escribir', function (LoadStatus $status, string $label) {
     $this->load->update(['status' => $status]);
@@ -136,7 +136,6 @@ it('rechaza con la carga en cualquier otro estado, sin escribir', function (Load
         ->and($this->group->sessions()->count())->toBe(0)
         ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 })->with([
-    'borrador' => [LoadStatus::Draft, 'está en borrador'],
     'cerrada' => [LoadStatus::Closed, 'ya está cerrada'],
     'aprobada' => [LoadStatus::Approved, 'ya está aprobada'],
     'publicada' => [LoadStatus::Published, 'ya está publicada'],

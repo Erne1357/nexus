@@ -7,6 +7,8 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\AuthorizationSnapshots;
 use App\Modules\Core\Authorization\DefaultScopeLabels;
 use App\Modules\Core\Authorization\GrantTable;
+use App\Modules\Core\Authorization\LoadStages;
+use App\Modules\Core\Authorization\NoLoadStages;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionGrantRules;
 use App\Modules\Core\Authorization\PermissionRegistry;
@@ -166,7 +168,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // `scoped` por lo mismo: memoriza los snapshots de nombramientos de la petición en curso.
         $this->app->scoped(AuthorizationSnapshots::class, fn (Application $app): AuthorizationSnapshots => new AuthorizationSnapshots($app['cache.store']));
 
-        // `scoped` por lo mismo: lee una vez por petición si el admin ocultó la carga académica (MN-05).
+        // `scoped` por lo mismo: lee una vez por petición si el admin ocultó la carga académica (MN-05) y las etapas de la
+        // carga de cada jefe y JPD (MN-06).
         $this->app->scoped(AcademicLoadVisibility::class);
 
         // `scoped`: si lo que corre es un trabajo del worker de la cola (tarea 1.29); el worker la olvida entre trabajos.
@@ -190,6 +193,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         // Sin estado: quién está adscrito a cada unidad del Organigrama. Faculty lo reemplaza con sus adscripciones.
         $this->app->bindIf(UnitAdscriptions::class, NoUnitAdscriptions::class);
+
+        // Sin estado: las etapas de la carga del jefe y del JPD (MN-06). AcademicLoad lo reemplaza con sus cargas.
+        $this->app->bindIf(LoadStages::class, NoLoadStages::class);
 
         // Singleton porque es inmutable: los parámetros que declaran los módulos, sin valores ni nada de la petición.
         $this->app->singleton(SettingRegistry::class, fn (Application $app): SettingRegistry => SettingRegistry::fromModules(
@@ -388,11 +394,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * El interruptor de la carga académica (MN-05) y qué perfiles inician sesión (AC-21), que solo cambia el admin.
+     * El interruptor de la carga académica (MN-05), seguido del de los jefes y JPD por etapa (MN-06), y qué perfiles inician
+     * sesión (AC-21), que solo cambia el admin.
      */
     public function settings(): array
     {
-        return [AcademicLoadVisibility::definition(), RoleAccess::definition()];
+        return [AcademicLoadVisibility::definition(), AcademicLoadVisibility::headsDefinition(), RoleAccess::definition()];
     }
 
     /**

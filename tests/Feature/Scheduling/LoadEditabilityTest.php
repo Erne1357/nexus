@@ -42,6 +42,20 @@ it('deja pasar un grupo con la carga en propuesta, asignación, ajustes o re-an�
     expect($this->rule->blockedReasons([$this->group]))->toBe([$this->group->id => null]);
 })->with([LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Reanalysis]);
 
+it('borrador (1.62, confirmado el 26 de noviembre de 2026): horarios y cupos se editan, pero lo demás sigue sin editarse', function () {
+    AcademicLoad::factory()->inStatus(LoadStatus::Draft)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id]);
+
+    $this->rule->ensure($this->group, 'horarios', 'session', draft: true);
+
+    expect($this->rule->blockedReasons([$this->group]))->toBe([$this->group->id => null])
+        ->and(fn () => $this->rule->ensure($this->group, 'grupos', 'campus'))
+        ->toThrow(ValidationException::class, 'La carga de Sistemas y Computación en Presencial está en borrador: no se editan grupos.')
+        ->and($this->rule->loadReason(LoadStatus::Draft, $this->department->id, modalityOf('PRES')->id, 'paralelos'))
+        ->toBe('La carga de Sistemas y Computación en Presencial está en borrador: no se editan paralelos.')
+        ->and(LoadEditability::EDITABLE)->not->toContain(LoadStatus::Draft)
+        ->and(LoadEditability::SCHEDULE_EDITABLE)->toContain(LoadStatus::Draft);
+});
+
 it('blockedReasons da el motivo de cada grupo bloqueado', function () {
     $load = AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id]);
     $cancelled = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id, 'subject_id' => $this->subject->id, 'code' => 'E', 'status' => GroupStatus::Cancelled]);
@@ -62,7 +76,6 @@ it('el motivo dice el estado de la carga de forma gramatical en cada estado que 
     expect($this->rule->blockedReasons([$this->group], 'paralelos'))->toBe([$this->group->id => $reason])
         ->and(fn () => $this->rule->ensure($this->group))->toThrow(ValidationException::class, str_replace('paralelos', 'horarios', $reason));
 })->with([
-    'borrador' => [LoadStatus::Draft, 'La carga de Sistemas y Computación en Presencial está en borrador: no se editan paralelos.'],
     'cerrada' => [LoadStatus::Closed, 'La carga de Sistemas y Computación en Presencial ya está cerrada: no se editan paralelos.'],
     'aprobada' => [LoadStatus::Approved, 'La carga de Sistemas y Computación en Presencial ya está aprobada: no se editan paralelos.'],
     'publicada' => [LoadStatus::Published, 'La carga de Sistemas y Computación en Presencial ya está publicada: no se editan paralelos.'],

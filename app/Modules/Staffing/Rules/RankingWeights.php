@@ -7,7 +7,7 @@ use App\Modules\Core\Models\Setting;
 
 /**
  * Pesos del puntaje del ranking docente (reglas-de-negocio.md, «Ranking docente (desempate)», confirmado el 7 de
- * noviembre de 2026): 1 por grupo impartido, 3 por perfil preferente, 1 por apto y 2 por punto de evaluación. Salen
+ * noviembre de 2026): 1 por grupo impartido, 3 por experiencia académica preferente, 1 por apto y 2 por punto de evaluación. Salen
  * del parámetro global `staffing.weights` (objeto json con `per_group_taught`, `preferente`, `apto` y
  * `evaluation`); cada clave que falta o no es un número mayor o igual a cero usa su valor por omisión. Puro: solo
  * fromSettings() lee la base.

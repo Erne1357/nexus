@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Enums\StatusTone;
 
 /*
@@ -47,4 +48,18 @@ it('solo se asignan docentes en asignación, ajustes y re-análisis', function (
     [LoadStatus::Approved, false],
     [LoadStatus::Published, false],
     [LoadStatus::Reanalysis, true],
+]);
+
+it('MN-06: cada estado de la carga abre sus etapas para el jefe y el JPD (supuesto por confirmar)', function (LoadStatus $status, array $stages) {
+    expect($status->stages())->toBe($stages);
+})->with([
+    [LoadStatus::Draft, [Stage::Proposal, Stage::Scheduling, Stage::Staffing]],
+    // La bandeja sigue en propuesta: la carga pasa a propuesta al aceptar la primera parte y quedan las de otras carreras y los paralelos.
+    [LoadStatus::Proposed, [Stage::Proposal, Stage::Scheduling, Stage::Rooms, Stage::Staffing]],
+    [LoadStatus::Staffing, [Stage::Scheduling, Stage::Rooms, Stage::Staffing, Stage::Closing]],
+    [LoadStatus::Adjusting, [Stage::Scheduling, Stage::Rooms, Stage::Staffing, Stage::Closing]],
+    [LoadStatus::Closed, [Stage::Closing, Stage::Publication]],
+    [LoadStatus::Approved, [Stage::Closing, Stage::Publication]],
+    [LoadStatus::Published, [Stage::Publication, Stage::Reanalysis]],
+    [LoadStatus::Reanalysis, [Stage::Scheduling, Stage::Rooms, Stage::Staffing, Stage::Reanalysis, Stage::Publication]],
 ]);
