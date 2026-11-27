@@ -29,7 +29,7 @@ final readonly class GroupRanking
     }
 
     /**
-     * El bloque final: sin horas, choque o no disponible (reglas-de-negocio.md, «Un solo bloque final»).
+     * El bloque final: choque o no disponible (reglas-de-negocio.md, «Un solo bloque final»).
      *
      * @return list<RankingRow>
      */
@@ -39,8 +39,8 @@ final readonly class GroupRanking
     }
 
     /**
-     * Cuántos del bloque final tienen cada marca, en el orden de RankingRow::MARKS y sin las que nadie tiene: «1 sin
-     * horas, 2 choque, 1 no disponible». Un docente con dos marcas cuenta en las dos.
+     * Cuántos del bloque final tienen cada marca, en el orden de RankingRow::MARKS y sin las que nadie tiene: «2 choque,
+     * 1 no disponible». Un docente con dos marcas cuenta en las dos.
      */
     public function flaggedSummary(): string
     {

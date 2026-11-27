@@ -13,10 +13,13 @@ use App\Modules\Faculty\Enums\QualificationLevel;
 final readonly class RankingRow
 {
     /** Las marcas que bajan al docente al bloque final del ranking, con su nombre en pantalla. */
-    public const array MARKS = ['sin_horas' => 'Sin horas', 'choque' => 'Choque', 'no_disponible' => 'No disponible'];
+    public const array MARKS = ['choque' => 'Choque', 'no_disponible' => 'No disponible'];
 
-    /** Los avisos que se muestran discretos sin mover al docente de lugar (SC-09), con su nombre en pantalla. */
-    public const array NOTICES = ['traslado_justo' => 'traslado justo'];
+    /**
+     * Los avisos que se muestran discretos sin mover al docente de lugar, con su nombre en pantalla: con el grupo pasa su
+     * banda de horas frente a grupo (HC-08, aviso desde la tarea 1.50) y traslado justo (SC-09).
+     */
+    public const array NOTICES = ['sin_horas' => 'pasa su banda', 'traslado_justo' => 'traslado justo'];
 
     /**
      * @param  list<string>  $flags  `sin_horas`, `choque`, `no_disponible`, `sin_evaluacion`, `traslado_justo`
@@ -38,7 +41,7 @@ final readonly class RankingRow
     ) {}
 
     /**
-     * Si va en el bloque final: sin horas, choque o no disponible.
+     * Si va en el bloque final: choque o no disponible.
      */
     public function isFlagged(): bool
     {
@@ -56,7 +59,7 @@ final readonly class RankingRow
     }
 
     /**
-     * Los avisos discretos que tiene (traslado justo, SC-09), por su clave, con su nombre.
+     * Los avisos discretos que tiene (pasa su banda, HC-08; traslado justo, SC-09), por su clave, con su nombre.
      *
      * @return array<string, string>
      */

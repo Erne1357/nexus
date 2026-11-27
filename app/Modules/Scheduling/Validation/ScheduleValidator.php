@@ -127,11 +127,23 @@ final class ScheduleValidator
      * externas (TeacherHourLimit); null si el docente está borrado. La usa la orden de selección para autorizar al
      * cerrar justo las horas que HC-08 le cuenta (SEL-12).
      *
-     * @return array{base_hours: int, external_hours: int, assigned_hours: int, tolerance: int, limit: int, remaining_hours: int, groups: array<string, int>}|null
+     * @return array{base_hours: int, teaching_hours: int, band_from: int, band_to: int, external_hours: int, assigned_hours: int, tolerance: int, honorarios_cap: ?int, band_limit: int, allowance_hours: ?int, limit: int, remaining_hours: int, over_band: bool, accepted: bool, hard: bool, groups: array<string, int>}|null
      */
     public function teacherTermHours(Teacher $teacher, Term $term): ?array
     {
         return TeacherHourLimit::of($this->teacherState($teacher, $term), $teacher->id);
+    }
+
+    /**
+     * El aviso de HC-08 del docente en el periodo, sin su nombre («Pasa su banda de horas frente a grupo (22 h, de 20 a
+     * 24): lleva 26 h. Requiere oficio de conformidad del docente (pendiente).»), o null si no pasa su banda. La
+     * asignación lo muestra al asignar con horas de más (tarea 1.50).
+     */
+    public function teacherHoursNotice(Teacher $teacher, Term $term): ?string
+    {
+        $hours = $this->teacherTermHours($teacher, $term);
+
+        return $hours === null ? null : TeacherHourLimit::notice($hours);
     }
 
     /**

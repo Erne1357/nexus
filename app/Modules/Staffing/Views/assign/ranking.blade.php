@@ -1,7 +1,7 @@
 {{--
     El ranking completo de un grupo, el mismo en las dos vistas: arriba la leyenda del orden; luego quienes pueden
     tomarlo (staffing::assign.ranking-row) y, plegado en un renglón, el bloque final (reglas-de-negocio.md, «Un solo
-    bloque final»): «N docentes no pueden tomarlo (M sin horas, K choque, J no disponible)» con «Ver», que lo abre
+    bloque final»): «N docentes no pueden tomarlo (K choque, J no disponible)» con «Ver», que lo abre
     debajo (toggleFinalTier). Con la caja de 46rem o más es una tabla de nueve columnas; debajo, cada docente ocupa dos
     renglones. `capped` (en la vista por materia): desde 768 px la tabla mide a lo más 70vh, con su propio
     desplazamiento y el encabezado de columnas pegado arriba.

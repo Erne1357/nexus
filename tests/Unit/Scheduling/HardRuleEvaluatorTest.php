@@ -62,8 +62,9 @@ dataset('one scenario per hard rule', [
         ->session(new StateSession('a1', 'A', 1, Minutes::of('07:00'), Minutes::of('09:00'), 'R1', SessionKind::Practica))],
     'HC-07' => ['HC-07', fn () => evaluatorBuilder()
         ->group(States::group('A', capacity: 35))->quota(new StateQuota('A', 'ISC', 40, true))],
+    // HC-08 es choque duro solo con el límite que trae el motor (engineLimit, tarea 1.50); en la foto de la base es aviso.
     'HC-08' => ['HC-08', fn () => evaluatorBuilder()
-        ->group(States::group('A', teacher: 'T1', subject: 'S5'))->subject(States::subject('S5'))->teacher(States::teacher('T1', base: 2))],
+        ->group(States::group('A', teacher: 'T1', subject: 'S5'))->subject(States::subject('S5'))->teacher(States::teacher('T1', base: 2, engineLimit: 2))],
     'HC-09' => ['HC-09', fn () => evaluatorBuilder()
         ->group(States::group('A', teacher: 'T1'))->teacher(States::teacher('T1', unavailable: [[1, 420, 540]]))
         ->session('A', 1, '08:00', '09:00')],
@@ -96,6 +97,14 @@ it('corre de HC-01 a HC-13 y deja fuera el aviso de traslado (SC-09), que es bla
     expect((new HardRuleEvaluator)->rules())->toBe(['HC-01', 'HC-02', 'HC-03', 'HC-04', 'HC-05', 'HC-06', 'HC-07', 'HC-08', 'HC-09', 'HC-10', 'HC-11', 'HC-12', 'HC-13'])
         ->and(evaluatorRules((new CampusTravel)->check($state, ValidationScope::groups('A', 'B'))))->toBe(['SC-09'])
         ->and((new HardRuleEvaluator)->evaluate($state, ValidationScope::groups('A', 'B'))->isEmpty())->toBeTrue();
+});
+
+it('HC-08: sin el límite del motor (la foto de la base) el exceso de horas es aviso y no entra a las duras', function () {
+    $state = evaluatorBuilder()
+        ->group(States::group('A', teacher: 'T1', subject: 'S5'))->subject(States::subject('S5'))->teacher(States::teacher('T1', base: 2))
+        ->build();
+
+    expect((new HardRuleEvaluator)->evaluate($state, ValidationScope::groups('A'))->isEmpty())->toBeTrue();
 });
 
 it('corre solo las reglas que se le piden', function () {

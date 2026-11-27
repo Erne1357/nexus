@@ -360,7 +360,8 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
         $results = $this->validator->checkTeachers($group, $teachers);
 
         foreach ($teachers as $teacher) {
-            if ($results[$teacher->getKey()]->hasHard()) {
+            // HC-08 sin oficio cuenta como duro, como en el motor (tarea 1.50).
+            if ($results[$teacher->getKey()]->asEngine()->hasHard()) {
                 continue;
             }
 

@@ -30,7 +30,7 @@ use Illuminate\Validation\ValidationException;
  *
  * SEL-12: cada cierre que termina (`done`) le autoriza en el periodo (GrantHourAllowance) todo lo que HC-08 le cuenta en
  * ese momento: sus grupos de cualquier carga, modalidad o campus más sus horas externas (ScheduleValidator::
- * teacherTermHours). Así lo que cerró, dentro de la banda o con la casilla, no es choque duro de HC-08 aunque su base de
+ * teacherTermHours). Así lo que cerró, dentro de la banda o con la casilla, queda «aceptado por el docente» en HC-08 aunque su base de
  * Nexus sea menor que la del CSV; lo que le agreguen después sí.
  *
  * SEL-14: confirm() es el mismo cierre para quien quedó sin resolver al terminar la selección («Confirmar mi carga»).
@@ -68,7 +68,7 @@ final class FinishMyLoad
      * (`unresolved`) al terminar la ronda extra, con la selección ya terminada, fuera de cualquier turno. Es el mismo
      * cierre que «Terminar mi carga»: la banda de ±2 y, fuera de ella, la casilla obligatoria; con o sin ella termina
      * (`done`), porque ya no hay ronda, y le autoriza en el periodo el total de HC-08 de ese momento (SEL-12). Hasta
-     * entonces sus horas de más siguen siendo choque duro. No toma ni suelta grupos: eso sigue siendo solo en su turno.
+     * entonces sus horas de más son aviso con el oficio de conformidad pendiente (HC-08, tarea 1.50). No toma ni suelta grupos: eso sigue siendo solo en su turno.
      * Mismo candado de la selección y la misma regla de que solo actúa el propio docente.
      *
      * @throws AuthorizationException si el docente no es el del usuario

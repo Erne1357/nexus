@@ -10,6 +10,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\CampusGroupCountsQuery;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Actions\UnassignTeacher;
 use App\Modules\Staffing\Enums\RankingState;
@@ -791,7 +792,14 @@ new #[Title('Asignación docente')] class extends Component
         $this->pending = $this->failure = null;
         $this->reason = '';
         $this->expanded = array_values(array_diff($this->expanded, [$group->id]));
-        $this->success(e("Asignaste a {$teacher->name}"), e("{$group->code} · {$group->subject->name}. {$place}."));
+        $validator = app(ScheduleValidator::class);
+        $validator->forget();
+        $notice = $validator->teacherHoursNotice($teacher, $group->term);
+
+        // HC-08 es aviso desde la tarea 1.50: se asigna, pero el aviso dice que falta el oficio de conformidad.
+        $notice === null
+            ? $this->success(e("Asignaste a {$teacher->name}"), e("{$group->code} · {$group->subject->name}. {$place}."))
+            : $this->warning(e("Asignaste a {$teacher->name}"), e("{$group->code} · {$group->subject->name}. {$place}. {$notice}"));
     }
 
     /**

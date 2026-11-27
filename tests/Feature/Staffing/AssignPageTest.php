@@ -4,6 +4,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
@@ -83,6 +84,18 @@ describe('vista por materia', function () {
             ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Asignaste a Ana Ruiz')
             ->and(lastToastOf($page)['description'])->toContain('Lugar 1 de 4');
         $page->assertDontSeeHtml('data-testid="reason-box"');
+    });
+
+    it('HC-08: asignar a quien pasa su banda de horas frente a grupo se permite y el aviso dice que falta el oficio', function () {
+        TeacherExternalLoad::query()->create(['teacher_id' => $this->teachers[0]->id, 'term_id' => $this->open->term_id, 'source' => 'UACJ', 'hours' => 30]);
+
+        $page = assignPage($this->jefe)->call('assign', $this->open->id, $this->teachers[0]->id, 'tarjetas');
+
+        expect($this->open->fresh()->teacher_id)->toBe($this->teachers[0]->id)
+            ->and(lastToastOf($page))->type->toBe('warning')->title->toBe('Asignaste a Ana Ruiz')
+            ->and(lastToastOf($page)['description'])->toContain('Lugar 1 de 4')
+            ->toContain('Pasa su banda de horas frente a grupo (22 h, de 20 a 24): lleva ')
+            ->toContain('Requiere oficio de conformidad del docente (pendiente).');
     });
 
     it('HC-16: fuera del primer lugar pide el motivo con su lugar y no asigna sin él', function () {

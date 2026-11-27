@@ -96,6 +96,9 @@ final class TeacherLoadsBoardQuery
                 $mine->map(fn (object $group): array => ['code' => $group->code, 'subject' => $group->subject, 'subject_code' => $group->subject_code,
                     'campus' => $group->campus, 'hours' => (int) $group->hours])->values()->all(),
                 $weekly,
+                $load->teaching_hours,
+                $load->band_limit_hours,
+                $load->honorarios_cap_hours,
             );
         }
 

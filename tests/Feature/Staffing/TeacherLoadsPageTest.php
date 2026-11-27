@@ -14,6 +14,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use App\Modules\Faculty\Actions\GrantHourAllowance;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherPosition;
@@ -68,8 +69,9 @@ function boardSeed(): array
     $none = boardTeacher('Nora Sinclase', 'tiempoCompleto');
     $part = boardTeacher('Pablo Libre', 'tiempoCompleto');
     teacherLoadsGroup($part, test()->c2, 10, 'B1');
+    // Medio tiempo: 12 h frente a grupo (PL-01), banda de 10 a 14; tiempo completo: 22, de 20 a 24 (HC-08, tarea 1.50).
     $full = boardTeacher('Fabiola Completa', 'medioTiempo');
-    teacherLoadsGroup($full, test()->c2, 20, 'C1');
+    teacherLoadsGroup($full, test()->c2, 14, 'C1');
     Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'staffing.honorarios_max_hours', 'value' => 12]);
     $hon = boardTeacher('Hugo Honorarios', 'honorarios');
     teacherLoadsGroup($hon, test()->c2, 4, 'D1');
@@ -109,7 +111,7 @@ describe('mosaicos', function () {
 
         $figures = collect(domOf(loadsPage()->html())->querySelectorAll('[data-testid=tile-figure]'))->map(fn ($figure) => textOf($figure))->all();
 
-        expect($figures)->toEqualCanonicalizing(['+3', '0 / 40', '30', '0', '4']);
+        expect($figures)->toEqualCanonicalizing(['+9', '0 / 22', '14', '0', '4']);
 
         loadsPage()
             ->assertSeeHtml('data-testid="kpi-exceden"')
@@ -123,7 +125,28 @@ describe('mosaicos', function () {
         $html = loadsPage()->html();
         $tile = domOf($html)->querySelector('[data-testid=section-over] [data-testid=tile]');
 
-        expect(textOf($tile))->toContain('+3')->toContain('h de más')->not->toContain('−');
+        expect(textOf($tile))->toContain('+9')->toContain('h de más')->not->toContain('−');
+    });
+
+    it('HC-08: cada mosaico dice su banda frente a grupo y quien la pasa lleva el oficio pendiente; con la casilla, aceptado', function () {
+        $seed = boardSeed();
+        app(GrantHourAllowance::class)->handle($seed['full'], $this->term, 16, 'Cerró su carga con horas de más (SEL-05)', User::factory()->admin()->create());
+        teacherLoadsGroup($seed['full'], $this->c1, 2, 'C2');
+        app(RefreshTeacherTermLoads::class)->handle($this->term);
+        $dom = domOf(loadsPage()->html());
+        $tile = fn (Teacher $teacher) => $dom->querySelector("[data-testid=tile][data-teacher=\"{$teacher->id}\"]");
+
+        expect(textOf($tile($seed['over'])->querySelector('[data-testid=tile-band]')))->toBe('frente a grupo 12 h (10 a 14)')
+            ->and(textOf($tile($seed['over'])->querySelector('[data-testid=tile-notice]')))->toBe('Oficio de conformidad pendiente')
+            ->and(textOf($tile($seed['part'])->querySelector('[data-testid=tile-band]')))->toBe('frente a grupo 22 h (20 a 24)')
+            ->and($tile($seed['part'])->querySelector('[data-testid=tile-notice]'))->toBeNull()
+            ->and(textOf($tile($seed['full'])->querySelector('[data-testid=tile-notice]')))->toBe('Aceptado por el docente (casilla)')
+            ->and(textOf($tile($seed['hon'])->querySelector('[data-testid=tile-band]')))->toBe('frente a grupo 12 h (tope de honorarios)');
+
+        loadsPage()->call('open', $seed['over']->id)
+            ->assertSee('Pasa su banda de horas frente a grupo (12 h, de 10 a 14): lleva 23 h. Requiere oficio de conformidad del docente (pendiente).');
+        loadsPage()->call('open', $seed['full']->id)
+            ->assertSee('Pasa su banda de horas frente a grupo (12 h, de 10 a 14): lleva 16 h, aceptado por el docente (casilla).');
     });
 
     it('filtra por estado con el filtro segmentado y cuenta cada estado', function () {
@@ -173,7 +196,7 @@ describe('drawer', function () {
             ->assertSee('Materia A1')
             ->assertSee('Materia A2')
             ->assertSeeHtml('data-testid="drawer-week"')
-            ->assertSee('Excede +3 h');
+            ->assertSee('Excede +9 h');
     });
 
     it('un docente que no es del departamento da 404', function () {

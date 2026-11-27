@@ -3,7 +3,9 @@
     modalidad (como dato con una sola; con varias, el select «Modalidad», maqueta U2, opción A), «Todos los campus», el
     periodo y el estado de la carga del departamento en esa modalidad; la franja de totales; la búsqueda y el filtro de plaza; y los
     mosaicos por sección. Tocar un mosaico abre el drawer del docente (hoja completa en celular). Lo que se pinta viene
-    de TeacherLoadsBoardQuery.
+    de TeacherLoadsBoardQuery. HC-08 (tarea 1.50) se mide contra las horas frente a grupo: cada mosaico dice su banda
+    («frente a grupo 22 h (20 a 24)») y la marca de la barra es esa cifra; quien la pasa lleva el aviso del oficio
+    (pendiente) o de la casilla (aceptado por el docente).
 --}}
 @php
     $toneText = ['error' => 'text-error', 'warning' => 'text-warning', 'info' => 'text-info', 'success' => 'text-success', 'draft' => 'text-neutral'];
@@ -61,7 +63,7 @@
                         ['Asignadas', $totals['assigned'], collect($totals['byCampus'])->map(fn ($hours, $code) => "{$code} {$hours}")->implode(' · ').'|'.$totals['groups'].' grupos', ''],
                         ['Restantes', $totals['remaining'], 'sin contar honorarios', ''],
                         ['Sin carga', $totals['none'], 'sin grupos en el periodo', $totals['none'] > 0 ? 'text-warning' : ''],
-                        ['Exceden', $totals['over'], 'arriba de su tope (+2 h de tolerancia)', $totals['over'] > 0 ? 'text-error' : ''],
+                        ['Exceden', $totals['over'], 'pasan su banda frente a grupo · oficio pendiente', $totals['over'] > 0 ? 'text-warning' : ''],
                     ];
                 @endphp
                 @foreach ($kpis as [$label, $value, $note, $tone])
@@ -90,7 +92,7 @@
                     <span class="flex items-center gap-1.5"><i class="inline-block h-2.5 w-2.5 rounded-sm {{ $campusBar[$campusTones[$code] % count($campusBar)] }}"></i>{{ $code }}</span>
                 @endforeach
                 <span class="flex items-center gap-1.5"><i class="inline-block h-2.5 w-2.5 rounded-sm bg-base-content/35"></i>Otra modalidad</span>
-                <span class="flex items-center gap-1.5"><i class="inline-block h-3 w-0.5 bg-base-content"></i>Horas base</span>
+                <span class="flex items-center gap-1.5"><i class="inline-block h-3 w-0.5 bg-base-content"></i>Frente a grupo</span>
             </div>
 
             @forelse ($sections as $status => $section)
@@ -109,16 +111,18 @@
                             @php
                                 $scale = max(48, $row->assignedHours + $row->externalHours, $row->limitHours);
                                 $pct = fn (int $hours): string => round($hours / $scale * 100, 2).'%';
+                                $target = $row->teachingHours ?? $row->baseHours;
+                                $notice = $row->hourNotice();
                                 $figure = match ($status) {
-                                    'over' => ['+'.$row->excessHours(), 'h de más', 'text-error'],
-                                    'none' => ['0 / '.$row->baseHours, 'h', ''],
+                                    'over' => ['+'.$row->excessHours(), 'h de más', 'text-warning'],
+                                    'none' => ['0 / '.$target, 'h', ''],
                                     'part' => [$row->remainingHours, 'libres', ''],
                                     'full' => ['0', 'libres', 'text-success'],
                                     default => [$row->assignedHours, 'h asignadas', ''],
                                 };
                             @endphp
                             <button type="button" wire:click="open('{{ $row->teacherId }}')" wire:key="tile-{{ $row->teacherId }}" data-testid="tile" data-teacher="{{ $row->teacherId }}"
-                                @class(['flex min-h-11 min-w-0 flex-col gap-2.5 rounded-box border p-3.5 text-left transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary', 'border-error' => $status === 'over', 'border-base-300' => $status !== 'over', 'bg-secondary' => $teacherId === $row->teacherId, 'bg-base-100' => $teacherId !== $row->teacherId])>
+                                @class(['flex min-h-11 min-w-0 flex-col gap-2.5 rounded-box border p-3.5 text-left transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary', 'border-warning' => $status === 'over', 'border-base-300' => $status !== 'over', 'bg-secondary' => $teacherId === $row->teacherId, 'bg-base-100' => $teacherId !== $row->teacherId])>
                                 <span class="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
                                     <span class="min-w-0 flex-1 basis-40 break-words font-semibold">{{ $row->name }}</span>
                                     <span class="flex shrink-0 flex-wrap gap-1">
@@ -132,7 +136,7 @@
                                     <span class="text-sm text-neutral">{{ $figure[1] }}</span>
                                 </span>
                                 <span class="relative block h-2 rounded-full bg-base-300" role="img"
-                                    aria-label="{{ collect($row->hoursByCampus)->map(fn ($hours, $code) => "{$hours} horas en {$code}")->implode(', ') }}{{ $row->externalHours ? ", {$row->externalHours} externas" : '' }}, base {{ $row->baseHours }}">
+                                    aria-label="{{ collect($row->hoursByCampus)->map(fn ($hours, $code) => "{$hours} horas en {$code}")->implode(', ') }}{{ $row->externalHours ? ", {$row->externalHours} externas" : '' }}, frente a grupo {{ $target }}">
                                     <span class="absolute inset-y-0 left-0 flex w-full overflow-hidden rounded-full">
                                         @foreach ($row->hoursByCampus as $code => $hours)
                                             <i class="{{ $campusBar[$campusTones[$code] % count($campusBar)] }}" style="width: {{ $pct($hours) }}"></i>
@@ -141,8 +145,8 @@
                                             <i class="bg-base-content/35" style="width: {{ $pct($row->externalHours) }}"></i>
                                         @endif
                                     </span>
-                                    @if ($row->baseHours)
-                                        <i class="absolute -inset-y-0.5 w-0.5 bg-base-content" style="left: {{ $pct($row->baseHours) }}"></i>
+                                    @if ($target)
+                                        <i class="absolute -inset-y-0.5 w-0.5 bg-base-content" style="left: {{ $pct($target) }}"></i>
                                     @endif
                                 </span>
                                 <span class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-neutral">
@@ -150,9 +154,19 @@
                                     @if ($row->externalHours)
                                         <span>ext. <b class="font-mono text-base-content">{{ $row->externalHours }}</b></span>
                                     @endif
-                                    <span>base <b class="font-mono text-base-content">{{ $row->baseHours }}</b></span>
+                                    @if ($row->bandLabel() !== null)
+                                        <span data-testid="tile-band">frente a grupo <b class="font-mono text-base-content">{{ $row->bandLabel() }}</b></span>
+                                    @else
+                                        <span>base <b class="font-mono text-base-content">{{ $row->baseHours }}</b></span>
+                                    @endif
                                     <span><b class="font-mono text-base-content">{{ $row->groupsCount }}</b> {{ $row->groupsCount === 1 ? 'grupo' : 'grupos' }}</span>
                                 </span>
+                                @if ($notice !== null)
+                                    <span @class(['flex items-start gap-1 text-xs', 'text-warning' => $status === 'over', 'text-neutral' => $status !== 'over']) data-testid="tile-notice">
+                                        <x-icon :name="$status === 'over' ? 'o-document-text' : 'o-check-circle'" class="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                        {{ $status === 'over' ? 'Oficio de conformidad pendiente' : 'Aceptado por el docente (casilla)' }}
+                                    </span>
+                                @endif
                             </button>
                         @endforeach
                     </div>

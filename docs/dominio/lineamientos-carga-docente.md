@@ -1,6 +1,6 @@
 # Lineamientos de carga docente: horas frente a grupo
 
-Resumen de lo que dice la normativa oficial sobre cuántas horas debe dar un docente frente a grupo y de cómo las usa Nexus (regla **PL-01**, [reglas-de-negocio.md](reglas-de-negocio.md)). Lo que es de la norma va citado; lo que Nexus decidió por su cuenta va marcado **(supuesto por confirmar)**. Nada de esto cambia HC-08 todavía (tarea 1.50).
+Resumen de lo que dice la normativa oficial sobre cuántas horas debe dar un docente frente a grupo y de cómo las usa Nexus (regla **PL-01**, [reglas-de-negocio.md](reglas-de-negocio.md)). Lo que es de la norma va citado; lo que Nexus decidió por su cuenta va marcado **(supuesto por confirmar)**. Desde la tarea 1.50 HC-08 también se mide contra ellas (ver abajo).
 
 ## Fuentes oficiales
 
@@ -48,6 +48,7 @@ La categoría de cada plaza se guarda en `teacher_positions.category` (la import
 - Plaza de carrera sin categoría conocida: titular. **(supuesto por confirmar)**
 - Apoyo y asistencia: 0, porque no es plaza docente. **(supuesto por confirmar)**
 - Honorarios: 0, lo que ya valían sus horas base; su tope sigue siendo `staffing.honorarios_max_hours` en HC-08. **(supuesto por confirmar)**
+- HC-08 (tarea 1.50, confirmado el 26 de noviembre de 2026): se mide contra estas horas frente a grupo + 2 (art. 147), con el mismo respaldo del CSV que la selección, y dejó de ser tope duro: pasarse se permite con un oficio de conformidad del docente, que Nexus todavía no registra («oficio pendiente»). Ver HC-08 en [reglas-de-negocio.md](reglas-de-negocio.md).
 - Varias plazas: se suman las horas de cada una (tomadas por familia y jornada).
 - Sin plazas en Nexus, o con plazas que dan 0 h (solo apoyo u honorarios), el objetivo sale de las horas del CSV de la selección: 40 → 22, 30 → 16, 20 → 12 y cualquier otro valor n → n. **(supuesto por confirmar)**
 - El escalón de SEL-06 sigue saliendo de las horas del CSV: no cambia.

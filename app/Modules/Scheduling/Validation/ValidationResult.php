@@ -65,6 +65,19 @@ final readonly class ValidationResult
     }
 
     /**
+     * Las violaciones como las ve el motor (tarea 1.50): el aviso de HC-08 que pasa también lo que autorizó la casilla
+     * (`remaining_hours` negativo, el oficio pendiente) cuenta como choque duro, igual que en la foto del contrato
+     * (ContractState). Lo usan las demos, que como el motor no sobrecargan a nadie sin oficio.
+     */
+    public function asEngine(): self
+    {
+        return new self(array_map(fn (Violation $violation): Violation => $violation->rule === 'HC-08'
+            && $violation->severity === ConflictSeverity::Soft && ($violation->related['remaining_hours'] ?? 0) < 0
+            ? Violation::hard($violation->rule, $violation->message, $violation->subjectType, $violation->subjectId, $violation->groupId, $violation->related)
+            : $violation, $this->violations));
+    }
+
+    /**
      * Los mensajes, para mostrarlos juntos.
      *
      * @return list<string>

@@ -49,8 +49,10 @@ use App\Modules\Solver\Contract\TimeSlot;
  * - La ocupación de fuera de la corrida entra como grupos de contexto (ids con el prefijo CONTEXT), activos y sin horas:
  *   los `busy` de un docente, uno por docente y campus (sin `campus_code`, el campus de su primer grupo con él; supuesto
  *   por confirmar), y los `busy` de un salón, uno por salón. Ninguna violación de un grupo de contexto sale del adaptador.
- * - HC-08: las horas base del docente son sus `remaining_hours` más las horas de sus grupos fijos de la entrada, sin
- *   horas externas ni tolerancia, así que lo que le queda es lo mismo que en la base.
+ * - HC-08: el límite del docente (`engineLimit`) son sus `remaining_hours` más las horas de sus grupos fijos de la
+ *   entrada, sin horas externas ni tolerancia, así que lo que le queda es lo mismo que en la base. Con ese límite HC-08
+ *   es choque duro para el motor, aunque para las personas sea aviso (tarea 1.50: la propuesta automática no sobrecarga
+ *   a nadie sin oficio; supuesto por confirmar).
  * - HC-10: un préstamo aceptado (`agreements`) con `group_id` es solo de ese grupo, como lo revisa el validador
  *   (RoomLoan, por grupo); sin él, de todos los grupos del departamento al que se presta (las entradas de antes).
  * - HC-07 y HC-13 no se pueden revisar: el contrato no trae cupos ni catálogos (se verifican al armar la entrada; la foto
@@ -175,8 +177,9 @@ final readonly class ContractState
         $preferred = [];
 
         foreach ($input->teachers as $teacher) {
-            $builder->teacher(new StateTeacher($teacher->id, 'El docente', $teacher->remainingHours + ($fixedHours[$teacher->id] ?? 0), 0,
-                self::blocks($teacher->unavailable), $teacher->honorarios));
+            $limit = $teacher->remainingHours + ($fixedHours[$teacher->id] ?? 0);
+            $builder->teacher(new StateTeacher($teacher->id, 'El docente', $limit, 0,
+                self::blocks($teacher->unavailable), $teacher->honorarios, engineLimit: $limit));
             $preferred[$teacher->id] = self::blocks($teacher->preferred);
 
             $byCampus = [];

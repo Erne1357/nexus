@@ -10,11 +10,15 @@ use App\Modules\Core\Models\ModalityProfile;
  * justificación. `groups` son los grupos distintos que bloquean: uno sin docente ni salón cuenta en dos cifras y ahí
  * una vez. `byCampus` son las mismas cifras por el campus de cada grupo (su id; '' sin campus, MS4): el reparto de
  * «Para cerrar» y su filtro de campus (maqueta U2, opción A); la carga se cierra entera (M1).
+ *
+ * `hourNotices` no bloquea: son los avisos de HC-08 de los docentes de la carga que pasan su banda de horas frente a
+ * grupo (tarea 1.50: HC-08 dejó de impedir el cierre y queda visible en «Para cerrar»), uno por docente, con su mensaje.
  */
 final readonly class ClosingBlockers
 {
     /**
      * @param  array<string, array{conflicted: int, unscheduled: int, withoutTeacher: int, withoutRoom: int, inactiveTeacher: int, justified: int, groups: int}>  $byCampus
+     * @param  list<array{teacher_id: string, message: string}>  $hourNotices
      */
     public function __construct(
         public int $conflicted = 0,
@@ -25,6 +29,7 @@ final readonly class ClosingBlockers
         public int $justified = 0,
         public int $groups = 0,
         public array $byCampus = [],
+        public array $hourNotices = [],
     ) {}
 
     /**
@@ -67,11 +72,23 @@ final readonly class ClosingBlockers
     }
 
     /**
-     * Las cifras de los grupos de un campus (su id); un campus sin grupos en la carga, todo en cero.
+     * Las mismas cifras con los avisos de HC-08 de la carga.
+     *
+     * @param  list<array{teacher_id: string, message: string}>  $hourNotices
+     */
+    public function withHourNotices(array $hourNotices): self
+    {
+        return new self($this->conflicted, $this->unscheduled, $this->withoutTeacher, $this->withoutRoom, $this->inactiveTeacher,
+            $this->justified, $this->groups, $this->byCampus, $hourNotices);
+    }
+
+    /**
+     * Las cifras de los grupos de un campus (su id); un campus sin grupos en la carga, todo en cero. Los avisos de HC-08
+     * son de los docentes de toda la carga y se quedan.
      */
     public function forCampus(string $campusId): self
     {
-        return new self(...($this->byCampus[$campusId] ?? []));
+        return new self(...($this->byCampus[$campusId] ?? []), hourNotices: $this->hourNotices);
     }
 
     public function isClear(): bool

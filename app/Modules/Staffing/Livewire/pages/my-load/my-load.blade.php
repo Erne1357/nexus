@@ -39,11 +39,12 @@
     @else
         @php $h = $load['hours']; @endphp
         <div class="grid grid-cols-2 overflow-hidden rounded-box border border-base-300 bg-base-100 md:flex md:items-stretch" role="group" aria-label="Tus horas" data-testid="my-load-hours">
+            {{-- HC-08 (tarea 1.50): el tope es el de su banda de horas frente a grupo (+2, art. 147), el de honorarios o lo que autorizó su casilla. --}}
             <div class="min-w-0 px-4 py-3 md:flex-1">
-                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $h['tolerance'] > 0 ? 'Límite' : 'Horas base' }}</span>
-                <b class="block font-mono text-3xl leading-tight" data-testid="hours-base">{{ $h['tolerance'] > 0 ? $h['limit'] : $h['base'] }}<small class="text-sm font-normal text-neutral"> h</small></b>
-                @if ($h['tolerance'] > 0)
-                    <span class="text-sm text-neutral">base {{ $h['base'] }} + {{ $h['tolerance'] }} de tolerancia</span>
+                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $h['honorarios_cap'] !== null ? 'Tope de honorarios' : ($h['limit'] > $h['band_limit'] ? 'Autorizadas' : 'Tope de tu banda') }}</span>
+                <b class="block font-mono text-3xl leading-tight" data-testid="hours-base">{{ $h['limit'] }}<small class="text-sm font-normal text-neutral"> h</small></b>
+                @if ($h['honorarios_cap'] === null)
+                    <span class="text-sm text-neutral" data-testid="hours-band">frente a grupo <span class="font-mono">{{ $h['teaching'] }}</span> h ({{ $h['band_from'] }} a {{ $h['band_to'] }}){{ $h['tolerance'] > 0 ? " + {$h['tolerance']} de tolerancia" : '' }}{{ $h['limit'] > $h['band_limit'] ? ' · con tu casilla' : '' }}</span>
                 @endif
             </div>
             <div class="hidden items-center px-0.5 font-mono text-2xl text-neutral md:flex" aria-hidden="true">−</div>
@@ -65,14 +66,20 @@
                 <span class="text-sm text-neutral">{{ count($load['groups']) }} {{ count($load['groups']) === 1 ? 'grupo' : 'grupos' }}</span>
             </div>
             <div class="hidden items-center px-0.5 font-mono text-2xl text-neutral md:flex" aria-hidden="true">=</div>
-            <div @class(['min-w-0 px-4 py-3 max-md:border-t max-md:border-base-300 md:flex-1', 'bg-success/10 text-success' => $h['remaining'] >= 0, 'bg-error/10 text-error' => $h['remaining'] < 0])>
+            <div @class(['min-w-0 px-4 py-3 max-md:border-t max-md:border-base-300 md:flex-1', 'bg-success/10 text-success' => $h['remaining'] >= 0, 'bg-warning/10 text-warning' => $h['remaining'] < 0])>
                 <span class="text-[11.5px] font-medium uppercase tracking-[0.09em]">Restantes</span>
                 <b class="block font-mono text-3xl leading-tight" data-testid="hours-remaining">{{ $h['remaining'] }}<small class="text-sm font-normal"> h</small></b>
                 @if ($h['remaining'] < 0)
-                    <span class="text-sm">Pasas del límite</span>
+                    <span class="text-sm">Pasas de tu banda</span>
                 @endif
             </div>
         </div>
+        @if ($h['over_band'])
+            <p role="note" @class(['flex items-start gap-2 text-sm', 'text-warning' => ! $h['accepted'], 'text-neutral' => $h['accepted']]) data-testid="hours-notice">
+                <x-icon :name="$h['accepted'] ? 'o-check-circle' : 'o-document-text'" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                {{ $h['accepted'] ? 'Pasas de tu banda de horas frente a grupo; lo aceptaste con la casilla.' : 'Pasas de tu banda de horas frente a grupo: requiere tu oficio de conformidad (pendiente).' }}
+            </p>
+        @endif
 
         @if ($load['groups'] === [])
             <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="my-load-no-groups">Todavía no tienes grupos asignados en este periodo.</div>

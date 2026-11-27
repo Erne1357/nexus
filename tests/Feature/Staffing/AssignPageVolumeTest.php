@@ -56,7 +56,7 @@ describe('ranking completo', function () {
         volumeAssignPage($this->jefe)
             ->call('toggleRanking', $this->group->id)
             ->assertSeeHtmlInOrder(['Ana Ruiz', 'Beto Salas', 'Carla Díaz', 'data-testid="flagged-tier"'])
-            ->assertSeeText('3 docentes no pueden tomarlo (1 sin horas, 2 choque, 1 no disponible)')
+            ->assertSeeText('3 docentes no pueden tomarlo (2 choque, 1 no disponible)')
             ->assertDontSee('Dante Ortiz')
             ->assertDontSee('Fausto Gil')
             ->call('toggleFinalTier', $this->group->id)

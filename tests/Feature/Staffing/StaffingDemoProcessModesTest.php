@@ -16,6 +16,7 @@ use App\Modules\Faculty\Database\Seeders\DemoTeacherEmail;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Faculty\Models\TeacherDepartment;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Scheduling\Models\Group;
@@ -138,6 +139,10 @@ it('en modo staffed mueve un grupo a otro docente para que quepa uno que se qued
     $second = ($this->group)('A2', 1, '07:00', '09:00', 3);
     $ana = ($this->teacher)('Ana', 2);
     $beatriz = ($this->teacher)('Beatriz', 2);
+    // HC-08 (tarea 1.50): 2 h frente a grupo + 2 = 4; con 2 externas, a cada una le cabe un solo grupo de 2 h.
+    foreach ([$ana, $beatriz] as $teacher) {
+        TeacherExternalLoad::factory()->for($teacher)->create(['term_id' => $this->term->id, 'hours' => 2]);
+    }
     TeacherSubjectQualification::factory()->for($ana)->for($this->subject)->preferente()->create();
     TeacherAvailability::factory()->unavailable()->create(['teacher_id' => $beatriz->id, 'term_id' => $this->term->id, 'day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00']);
     ($this->seedMode)('start');

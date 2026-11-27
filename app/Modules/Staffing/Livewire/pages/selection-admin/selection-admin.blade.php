@@ -448,7 +448,7 @@
 
                 @if ($monitor['prior'] !== [])
                     <x-card title="Elección previa" shadow class="mt-4" data-testid="monitor-prior">
-                        <p class="text-sm text-neutral">Ya traen sus grupos escritos en la relación de materias: no tienen turno y su carga quedó cerrada al publicar. Quien quedó arriba de la banda de su base debe confirmar sus horas con la casilla; hasta entonces su HC-08 sigue como choque. Si necesitan más grupos, los asigna el jefe o el JPD.</p>
+                        <p class="text-sm text-neutral">Ya traen sus grupos escritos en la relación de materias: no tienen turno y su carga quedó cerrada al publicar. Quien quedó arriba de la banda de sus horas frente a grupo debe confirmar sus horas con la casilla; hasta entonces sus horas de más quedan como aviso, con el oficio de conformidad pendiente. Si necesitan más grupos, los asigna el jefe o el JPD.</p>
                         <ul class="mt-3 divide-y divide-base-300 rounded-box border border-base-300">
                             @foreach ($monitor['prior'] as $row)
                                 <li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2" wire:key="prior-{{ $row['entry']->id }}">

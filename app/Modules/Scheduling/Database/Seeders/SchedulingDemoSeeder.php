@@ -799,11 +799,12 @@ final class SchedulingDemoSeeder extends Seeder
                 continue;
             }
 
-            $result = new ValidationResult($validator->validate(
+            // El aviso de HC-08 sin oficio cuenta como duro, como en el motor (tarea 1.50).
+            $result = (new ValidationResult($validator->validate(
                 $state->withTeacher($group->id, $id),
                 new ValidationScope([$group->id], [$id]),
                 ScheduleValidator::TEACHER_RULES,
-            )->forGroup($group->id));
+            )->forGroup($group->id)))->asEngine();
 
             if ($deliberate ? $result->forRule('HC-01') !== [] || ! $result->hasHard() : $result->hasHard()) {
                 continue;

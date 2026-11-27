@@ -8,7 +8,7 @@ use App\Modules\Staffing\Rules\RankingWeights;
 
 /*
 | Ranking docente (desempate), reglas-de-negocio.md: horas base, puntaje, orden del periodo anterior, nombre, id;
-| los marcados (sin horas, choque, no disponible) van al final.
+| los marcados (choque, no disponible) van al final; pasar la banda de horas (HC-08) es aviso desde la tarea 1.50.
 */
 
 function rankingCandidate(string $id, array $with = []): RankingCandidate
@@ -93,14 +93,25 @@ it('Ranking docente: el último recurso es el id del docente', function () {
     ]))->toBe(['a', 'b']);
 });
 
-it('Ranking docente: sin horas, choque y no disponible van juntos al final, ordenados entre sí con los mismos criterios', function () {
+it('Ranking docente: choque y no disponible van juntos al final, ordenados entre sí con los mismos criterios', function () {
     expect(rankedIds([
-        rankingCandidate('flag-low', ['noHours' => true, 'baseHours' => 10]),
+        rankingCandidate('flag-low', ['clash' => true, 'unavailable' => true, 'baseHours' => 10]),
         rankingCandidate('ok-low', ['baseHours' => 5]),
         rankingCandidate('flag-high', ['clash' => true, 'baseHours' => 40]),
         rankingCandidate('flag-un', ['unavailable' => true, 'baseHours' => 20]),
         rankingCandidate('ok-high', ['baseHours' => 8]),
     ]))->toBe(['ok-high', 'ok-low', 'flag-high', 'flag-un', 'flag-low']);
+});
+
+it('HC-08: pasar su banda de horas es aviso y no baja al docente al bloque final (tarea 1.50)', function () {
+    $ranked = (new RankingScorer(new RankingWeights))->rank([
+        rankingCandidate('a', ['baseHours' => 40, 'noHours' => true]),
+        rankingCandidate('b', ['baseHours' => 20]),
+    ]);
+
+    expect(array_map(fn (RankedCandidate $r) => $r->candidate->teacherId, $ranked))->toBe(['a', 'b'])
+        ->and($ranked[0]->candidate->isFlagged())->toBeFalse()
+        ->and($ranked[0]->breakdown()['flags'])->toBe(['sin_horas']);
 });
 
 it('Ranking docente: asigna posiciones de 1 a n', function () {

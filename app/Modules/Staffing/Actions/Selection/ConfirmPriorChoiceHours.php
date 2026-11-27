@@ -19,7 +19,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * SEL-16 ampliada (tarea 1.45, 25 de noviembre de 2026): el docente con elección previa cuyas horas en las cargas de la
  * selección quedan arriba de la banda de su base (LoadBand, base + 2) confirma con la casilla de responsabilidad de
- * SEL-05 y SEL-12. Hasta entonces PublishSelection no le autorizó HC-08 y sus horas de más son choque. Al confirmar se
+ * SEL-05 y SEL-12. Hasta entonces PublishSelection no le autorizó HC-08 y sus horas de más son aviso con el oficio pendiente (1.50). Al confirmar se
  * guarda `out_of_band_acknowledged_at`, se le autoriza el total de HC-08 del periodo (GrantHourAllowance) y queda en la
  * bitácora.
  *

@@ -68,7 +68,7 @@ function loadOf(Teacher $teacher, Term $term): ?TeacherTermLoad
 }
 
 describe('RefreshTeacherTermLoads', function () {
-    it('HC-08: suma las horas de todos los campus y calcula el tope y lo que resta', function () {
+    it('HC-08: suma las horas de todos los campus y calcula frente a grupo, el tope de la banda y lo que resta', function () {
         $teacher = loadTeacher($this->department);
         teach($teacher, $this->term, $this->c1, 5);
         teach($teacher, $this->term, $this->c2, 10);
@@ -77,9 +77,10 @@ describe('RefreshTeacherTermLoads', function () {
 
         expect(app(RefreshTeacherTermLoads::class)->handle($this->term))->toBe(1);
 
+        // Tiempo completo (titular): 22 h frente a grupo (PL-01) + 2 (art. 147) + 3 de tolerancia = 27 (tarea 1.50).
         expect(loadOf($teacher, $this->term))
-            ->base_hours->toBe(40)->external_hours->toBe(6)->assigned_hours->toBe(15)
-            ->limit_hours->toBe(43)->remaining_hours->toBe(22)->groups_count->toBe(2);
+            ->base_hours->toBe(40)->teaching_hours->toBe(22)->band_limit_hours->toBe(27)->external_hours->toBe(6)->assigned_hours->toBe(15)
+            ->limit_hours->toBe(27)->remaining_hours->toBe(6)->groups_count->toBe(2);
     });
 
     it('usa la tolerancia configurada para el tope', function () {
@@ -88,7 +89,8 @@ describe('RefreshTeacherTermLoads', function () {
 
         app(RefreshTeacherTermLoads::class)->handle($this->term);
 
-        expect(loadOf($teacher, $this->term))->limit_hours->toBe(25)->remaining_hours->toBe(25);
+        // Medio tiempo: 12 h frente a grupo + 2 + 5.
+        expect(loadOf($teacher, $this->term))->teaching_hours->toBe(12)->limit_hours->toBe(19)->remaining_hours->toBe(19);
     });
 
     it('deja el restante negativo cuando rebasa su tope', function () {
@@ -98,7 +100,7 @@ describe('RefreshTeacherTermLoads', function () {
 
         app(RefreshTeacherTermLoads::class)->handle($this->term);
 
-        expect(loadOf($teacher, $this->term))->assigned_hours->toBe(26)->limit_hours->toBe(20)->remaining_hours->toBe(-6);
+        expect(loadOf($teacher, $this->term))->assigned_hours->toBe(26)->limit_hours->toBe(14)->remaining_hours->toBe(-12);
     });
 
     it('topa a los de honorarios con el máximo configurado', function () {
@@ -108,7 +110,7 @@ describe('RefreshTeacherTermLoads', function () {
 
         app(RefreshTeacherTermLoads::class)->handle($this->term);
 
-        expect(loadOf($teacher, $this->term))->limit_hours->toBe(12)->remaining_hours->toBe(8);
+        expect(loadOf($teacher, $this->term))->band_limit_hours->toBe(12)->honorarios_cap_hours->toBe(12)->limit_hours->toBe(12)->remaining_hours->toBe(8);
     });
 
     it('incluye al docente sin grupos con su base y las asignadas en cero', function () {
@@ -117,7 +119,7 @@ describe('RefreshTeacherTermLoads', function () {
 
         app(RefreshTeacherTermLoads::class)->handle($this->term);
 
-        expect(loadOf($teacher, $this->term))->base_hours->toBe(40)->assigned_hours->toBe(0)->groups_count->toBe(0)->remaining_hours->toBe(40);
+        expect(loadOf($teacher, $this->term))->base_hours->toBe(40)->assigned_hours->toBe(0)->groups_count->toBe(0)->remaining_hours->toBe(24);
     });
 
     it('no cuenta los grupos cancelados ni los de otro periodo', function () {

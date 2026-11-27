@@ -37,8 +37,9 @@ use Mary\Traits\Toast;
  * cifra) solo ocultan fichas en pantalla: la consulta trae todo y no hay forma de esconder un grupo.
  *
  * «Entre tus 3 primeros» son los grupos que no son suyos donde ocupa del lugar 1 al 3 sin una marca que lo baje al
- * bloque final (sin horas, choque, no disponible; reglas-de-negocio.md, «Oferta del departamento», supuesto por
- * confirmar): la cifra del filtro cuenta exactamente lo que muestra. Las marcas de cada ficha son las de la asignación
+ * bloque final (choque, no disponible; reglas-de-negocio.md, «Oferta del departamento», supuesto por confirmar; pasar
+ * su banda de horas, HC-08, es aviso desde la tarea 1.50 y no lo saca): la cifra del filtro cuenta exactamente lo que
+ * muestra. Las marcas de cada ficha son las de la asignación
  * (RankingMark). El panel muestra solo el desglose del propio docente y, con la marca «choque», con cuál de sus grupos
  * y a qué hora choca (TeacherOfferQuery::clashesWith).
  *
@@ -476,7 +477,8 @@ new #[Title('Oferta del departamento')] class extends Component
      */
     private static function isTopThree(array $group): bool
     {
-        return ! $group['is_mine'] && $group['rank'] !== null && $group['rank'] <= 3 && $group['marks'] === [];
+        return ! $group['is_mine'] && $group['rank'] !== null && $group['rank'] <= 3
+            && array_filter($group['marks'], fn (RankingMark $mark): bool => $mark->lowers()) === [];
     }
 
     private static function fold(string $text): string

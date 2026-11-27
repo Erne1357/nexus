@@ -55,8 +55,8 @@ final class States
     /**
      * @param  list<array{int, int, int}>  $unavailable
      */
-    public static function teacher(string $id, string $name = 'Docente', int $base = 40, int $external = 0, array $unavailable = [], bool $honorarios = false, ?int $allowance = null): StateTeacher
+    public static function teacher(string $id, string $name = 'Docente', int $base = 40, int $external = 0, array $unavailable = [], bool $honorarios = false, ?int $allowance = null, ?int $teaching = null, ?int $engineLimit = null): StateTeacher
     {
-        return new StateTeacher($id, $name, $base, $external, $unavailable, $honorarios, $allowance);
+        return new StateTeacher($id, $name, $base, $external, $unavailable, $honorarios, $allowance, $teaching ?? $base, $engineLimit);
     }
 }
