@@ -124,7 +124,7 @@ Mientras llegan, cada módulo trabaja con factories y un `DemoSeeder` que reprod
 | 1.75 ✅ [#933](https://github.com/Erne1357/nexus/pull/933) | Fotos del personal y de alumnos (reporte del usuario del 26 de noviembre de 2026 desde producción): un fallo del disco (por ejemplo, la carpeta del host recreada después de arrancar los contenedores) ya no da error 500: se avisa «No se pudo guardar la foto» y queda en el log; síntoma y arreglo en la tabla de problemas de `despliegue.md` | | | | |
 | 1.76 ✅ [#939](https://github.com/Erne1357/nexus/pull/939) | Integración de los rieles del 26 de noviembre de 2026: la categoría de la plaza (PL-01) en el formulario de la validación del jefe (CV17) y la pestaña «Carga» de la ficha del docente con las horas frente a grupo y el aviso de HC-08 | | | | |
 | 1.77 ✅ [#942](https://github.com/Erne1357/nexus/pull/942) | Mapa del Inicio sin el submenú de otra sección (pedido del usuario del 26 de noviembre de 2026) | | | | |
-| 1.78 ⬜ [#944](https://github.com/Erne1357/nexus/issues/944) | Pasada final de diseño con Impeccable del riel de selección y mapa (1.46 a 1.77) con datos reales en 390, 768, 1280 y 1440 px | | | | |
+| 1.78 ✅ [#947](https://github.com/Erne1357/nexus/pull/947) | Pasada final de diseño con Impeccable del riel de selección y mapa (1.46 a 1.77) con datos reales en 390, 768, 1280 y 1440 px | | | | |
 
 ## Pruebas de la fase
 
