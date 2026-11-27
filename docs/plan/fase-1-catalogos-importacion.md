@@ -102,6 +102,7 @@ Mientras llegan, cada módulo trabaja con factories y un `DemoSeeder` que reprod
 | 1.53 ⬜ [#885](https://github.com/Erne1357/nexus/issues/885) | Orden de selección: solo salones confirmados del departamento en su validación de catálogos y, por ahora, sin préstamos de salón | | | | |
 | 1.54 ⬜ [#886](https://github.com/Erne1357/nexus/issues/886) | Orden de selección: los docentes con puesto administrativo eligen primero («Además, puestos administrativos primero», confirmado) | | | | |
 | 1.55 ✅ [#887](https://github.com/Erne1357/nexus/issues/887) | Demo 8095: carga académica y elecciones previas cargadas, orden de selección sin cargar (operación con respaldo, sin PR) | | | | |
+| 1.73 ⬜ [#921](https://github.com/Erne1357/nexus/issues/921) | Tutorías (pedido del usuario del 26 de noviembre de 2026): la materia no cuenta horas en la carga del docente (HC-08, banda de la orden de selección, carga por docente); al alumno sus créditos sí le cuentan | | | | |
 
 ## Pruebas de la fase
 
