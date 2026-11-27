@@ -23,7 +23,7 @@
                 <dt class="text-neutral">Salón</dt><dd class="font-mono">{{ $group['rooms'] === [] ? '—' : implode(', ', $group['rooms']) }}</dd>
                 <dt class="text-neutral">Campus</dt><dd><span class="badge badge-neutral badge-soft badge-sm font-mono">{{ $group['campus_code'] }}</span> {{ $group['campus_name'] }}</dd>
                 <dt class="text-neutral">Docente</dt>
-                <dd>@if ($group['is_mine'])<b>Tú</b>@elseif ($group['teacher_name']){{ $group['teacher_name'] }}@else<span class="font-semibold text-warning">Sin docente</span>@endif</dd>
+                <dd>@if ($group['is_mine'])<b>Tú</b>@elseif ($group['taken'])<span class="badge badge-neutral badge-sm font-semibold" data-testid="offer-taken">Asignado</span>@else<span class="font-semibold text-warning">Sin docente</span>@endif</dd>
             </dl>
         </section>
 

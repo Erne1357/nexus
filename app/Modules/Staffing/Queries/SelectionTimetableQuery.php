@@ -24,6 +24,7 @@ use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
 use App\Modules\Staffing\Rules\ScheduleSummary;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Arr;
@@ -41,7 +42,7 @@ use Illuminate\Support\Facades\DB;
  * `cells` va por sesión con llave `"{día}|{H:i}"`; strips() lo junta en un renglón por hora con los días de cada grupo
  * como marcas, que es lo que pinta la pantalla.
  *
- * @phpstan-type Cell array{group_id: string, subject_code: string, subject_name: string, group_code: string, capacity: int, required_space: string, teacher: ?string, mine: bool, room: ?string, in_profile: bool, clashes: bool, clash_with: ?string, teacher_id: ?string, semester: ?int, hours: int, department_id: ?string, modality_id: ?string, campus_id: ?string, ends_at: string}
+ * @phpstan-type Cell array{group_id: string, subject_code: string, subject_name: string, group_code: string, capacity: int, required_space: string, teacher: ?string, taken: bool, mine: bool, room: ?string, in_profile: bool, clashes: bool, clash_with: ?string, teacher_id: ?string, semester: ?int, hours: int, department_id: ?string, modality_id: ?string, campus_id: ?string, ends_at: string}
  */
 final class SelectionTimetableQuery
 {
@@ -197,11 +198,13 @@ final class SelectionTimetableQuery
 
     /**
      * `$entry` es el renglón del docente si quien llama ya lo tiene (la pantalla lo busca una vez por refresco); si no,
-     * se busca aquí.
+     * se busca aquí. `$reveals` dice, por grupo, si quien mira puede ver el nombre de su docente (la jefatura que asigna);
+     * sin él, el nombre no sale de la consulta (SEL-05: el docente solo sabe que ya fue asignado).
      *
+     * @param  (Closure(Group): bool)|null  $reveals
      * @return array{days: list<int>, hours: list<string>, cells: array<string, list<Cell>>, my_hours: int, base_hours: int, my_groups: list<array<string, mixed>>, groups: int, free: int, turn: array<string, mixed>}
      */
-    public function forTeacher(Selection $selection, ?Teacher $teacher, CarbonImmutable $now, ?SelectionEntry $entry = null): array
+    public function forTeacher(Selection $selection, ?Teacher $teacher, CarbonImmutable $now, ?SelectionEntry $entry = null, ?Closure $reveals = null): array
     {
         $entry ??= $teacher === null ? null : $this->entryOf($selection, $teacher);
         $groups = $this->load($this->groups->of($selection));
@@ -212,7 +215,7 @@ final class SelectionTimetableQuery
         $mine = [];
 
         foreach ($groups as $group) {
-            $card = $this->describe($group, $teacher, $context);
+            $card = $this->describe($group, $teacher, $context, $reveals !== null && $reveals($group));
 
             if ($card['mine']) {
                 $mine[] = $this->summary($group, $card);
@@ -251,16 +254,15 @@ final class SelectionTimetableQuery
      *
      * @return array<string, mixed>
      */
-    public function card(Selection $selection, Group $group, ?Teacher $teacher): array
+    public function card(Selection $selection, Group $group, ?Teacher $teacher, bool $reveal = false): array
     {
         $group = $this->load(Group::query()->whereKey($group->getKey()))->firstOrFail();
-        $card = $this->describe($group, $teacher, $this->teacherContext($selection, $teacher));
+        $card = $this->describe($group, $teacher, $this->teacherContext($selection, $teacher), $reveal);
         $sessions = $group->sessions;
 
         return $card + $this->summary($group, $card) + [
             'days' => $sessions->pluck('day')->unique()->sort()->values()->all(),
             'department' => $group->department_id === $selection->department_id ? null : $group->department?->name,
-            'teacher_id' => $group->teacher_id,
         ];
     }
 
@@ -344,7 +346,7 @@ final class SelectionTimetableQuery
                 'hour' => $hour,
                 'until' => $until,
                 'groups' => $cards,
-                'free' => count(array_filter($cards, fn (array $card): bool => $card['teacher'] === null)),
+                'free' => count(array_filter($cards, fn (array $card): bool => ! $card['taken'])),
                 'mine' => in_array(true, array_column($cards, 'mine'), true),
             ];
         }, $timetable['hours']);
@@ -404,7 +406,7 @@ final class SelectionTimetableQuery
      * @param  array{profile: array<string, true>, own: BaseCollection<int, object>}  $context
      * @return array<string, mixed>
      */
-    private function describe(Group $group, ?Teacher $teacher, array $context): array
+    private function describe(Group $group, ?Teacher $teacher, array $context, bool $reveal): array
     {
         $mine = $teacher !== null && $group->teacher_id === $teacher->getKey();
         $clash = $teacher === null || $mine ? null : $context['own']->first(fn (object $own): bool => $own->group_id !== $group->id
@@ -418,12 +420,13 @@ final class SelectionTimetableQuery
             'group_code' => $group->code,
             'capacity' => (int) $group->capacity,
             'required_space' => $group->subject?->required_space?->value ?? 'aula',
-            'teacher' => $group->teacher?->name,
+            'teacher' => $reveal ? $group->teacher?->name : null,
+            'taken' => $group->teacher_id !== null,
             'mine' => $mine,
             'in_profile' => $teacher === null || isset($context['profile'][$group->subject_id]),
             'clashes' => $clash !== null,
             'clash_with' => $clash === null ? null : "{$clash->subject_code} {$clash->code}",
-            'teacher_id' => $group->teacher_id,
+            'teacher_id' => $reveal ? $group->teacher_id : null,
             'semester' => $group->semester,
             'hours' => (int) ($group->subject?->theory_hours ?? 0) + (int) ($group->subject?->practice_hours ?? 0),
             'department_id' => $group->department_id,
