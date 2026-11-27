@@ -43,11 +43,11 @@ final readonly class TeacherLoadsBoard
             'base' => array_sum(array_map(fn (TeacherLoadRow $row): int => $row->baseHours, $rows)),
             'external' => array_sum(array_map(fn (TeacherLoadRow $row): int => $row->externalHours, $rows)),
             'assigned' => array_sum(array_map(fn (TeacherLoadRow $row): int => $row->assignedHours, $rows)),
-            'remaining' => array_sum(array_map(fn (TeacherLoadRow $row): int => $row->isHonorarios ? 0 : max(0, $row->remainingHours), $rows)),
+            'remaining' => array_sum(array_map(fn (TeacherLoadRow $row): int => $row->isHonorariosLike() ? 0 : max(0, $row->remainingHours), $rows)),
             'groups' => array_sum(array_map(fn (TeacherLoadRow $row): int => $row->groupsCount, $rows)),
             'none' => count(array_filter($rows, fn (TeacherLoadRow $row): bool => $row->status() === TeacherLoadRow::NONE)),
             'over' => count(array_filter($rows, fn (TeacherLoadRow $row): bool => $row->status() === TeacherLoadRow::OVER)),
-            'honorarios' => count(array_filter($rows, fn (TeacherLoadRow $row): bool => $row->isHonorarios)),
+            'honorarios' => count(array_filter($rows, fn (TeacherLoadRow $row): bool => $row->isHonorariosLike())),
             'byCampus' => $byCampus,
         ];
     }

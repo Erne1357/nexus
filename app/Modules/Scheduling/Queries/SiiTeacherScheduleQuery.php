@@ -12,7 +12,9 @@ use Illuminate\Support\Facades\DB;
  * no se encuentra, se conserva la clave del SII) y el docente es el que trae su RFC en la sesión. Un grupo con sesiones
  * de varios docentes trae solo las del docente. Solo lectura: el SII sigue siendo la fuente de ese periodo. Las horas
  * del grupo son las que le cuenta al docente (PL-02: 0 si la materia no cuenta en su carga, como las tutorías), con la
- * marca en `counts_teacher_hours`, igual que los grupos de Nexus.
+ * marca en `counts_teacher_hours`, igual que los grupos de Nexus. Los renglones paralelos (`parallel_of`: el mismo grupo
+ * para otra carrera, con las mismas sesiones) no se toman, como en TermGroupsQuery: si no, un grupo se contaría una vez
+ * por carrera, con sus horas (tarea 1.82).
  */
 final class SiiTeacherScheduleQuery
 {
@@ -34,6 +36,7 @@ final class SiiTeacherScheduleQuery
             ->leftJoin('campuses', 'campuses.id', '=', 'g.campus_id')
             ->where('g.term_code', $termCode)
             ->where('g.source', 'sii')
+            ->whereNull('g.parallel_of')
             ->whereRaw('upper(s.teacher_rfc) = ?', [mb_strtoupper($rfc)])
             ->orderBy('g.group_code')
             ->orderBy('subjects.code')

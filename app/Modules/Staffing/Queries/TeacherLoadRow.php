@@ -64,12 +64,31 @@ final readonly class TeacherLoadRow
     public function status(): string
     {
         return match (true) {
+            $this->isNoPlaza() => self::HONORARIOS,
             $this->remainingHours < 0 => self::OVER,
             $this->isHonorarios => self::HONORARIOS,
             $this->assignedHours === 0 => self::NONE,
             $this->remainingHours === 0 => self::FULL,
             default => self::PART,
         };
+    }
+
+    /**
+     * PL-04 (tarea 1.83): no tiene plaza docente en Nexus ni horas frente a grupo del CSV (el mismo criterio de
+     * TeacherHourLimit::isNoPlaza), así que todas sus horas son de honorarios y no lleva banda. Una fila calculada antes de
+     * la tarea 1.50 (sin `teachingHours`) no se puede saber.
+     */
+    public function isNoPlaza(): bool
+    {
+        return ! $this->isAdministrative() && ! $this->isHonorarios && $this->teachingHours !== null && TeacherHourLimit::isNoPlaza($this->baseHours, $this->teachingHours);
+    }
+
+    /**
+     * Cuenta como «de honorarios» en el tablero: tiene plaza de honorarios o no tiene plaza docente (PL-04, tarea 1.83).
+     */
+    public function isHonorariosLike(): bool
+    {
+        return $this->isHonorarios || $this->isNoPlaza();
     }
 
     /**
@@ -106,7 +125,7 @@ final readonly class TeacherLoadRow
      */
     public function bandLabel(): ?string
     {
-        return $this->teachingHours === null || $this->isAdministrative() ? null : TeacherHourLimit::bandLabel($this->hourLimit());
+        return $this->teachingHours === null || $this->isAdministrative() || $this->isNoPlaza() ? null : TeacherHourLimit::bandLabel($this->hourLimit());
     }
 
     /**
@@ -121,7 +140,7 @@ final readonly class TeacherLoadRow
             ]);
         }
 
-        return $this->teachingHours === null || $this->bandLimitHours === null ? null : TeacherHourLimit::notice($this->hourLimit());
+        return $this->teachingHours === null || $this->bandLimitHours === null || $this->isNoPlaza() ? null : TeacherHourLimit::notice($this->hourLimit());
     }
 
     /**
