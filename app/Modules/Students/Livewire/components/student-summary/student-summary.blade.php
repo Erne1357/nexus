@@ -32,7 +32,7 @@
                         <div><dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Campus</dt><dd class="font-medium">{{ $student->campus->name }}</dd></div>
                         <div><dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Semestre</dt><dd class="font-mono font-medium">{{ $student->current_semester ?? '—' }}</dd></div>
                         @if ($summary['specialty'] !== null)
-                            <div><dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Especialidad</dt><dd class="font-medium">{{ $summary['specialty'] }}</dd></div>
+                            <div class="min-w-0"><dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Especialidad</dt><dd class="font-medium break-words">{{ $summary['specialty'] }}</dd></div>
                         @endif
                     </dl>
                 </div>
