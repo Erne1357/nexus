@@ -59,9 +59,12 @@
                                 <span class="badge badge-soft font-medium">{{ $openRequest->status->label() }}</span>
                                 <span class="text-neutral">{{ collect([$openRequest->wants_reposition ? 'Reposición de credencial' : null, $openRequest->wants_photo ? 'Foto' : null])->filter()->implode(' y ') }}</span>
                             </div>
+                            @if ($openRequest->reposition_reason !== null)
+                                <p class="text-sm text-neutral" data-testid="open-request-reason">Motivo: {{ $openRequest->reposition_reason->label() }}</p>
+                            @endif
                             <p class="text-sm text-neutral">Pedida el {{ $openRequest->requested_at->setTimezone('America/Ciudad_Juarez')->locale('es')->isoFormat('D [de] MMMM [de] YYYY') }}.</p>
                             @if ($openRequest->scheduled_at !== null)
-                                @php($at = $openRequest->scheduled_at->setTimezone('America/Ciudad_Juarez')->locale('es'))
+                                @php $at = $openRequest->scheduled_at->setTimezone('America/Ciudad_Juarez')->locale('es'); @endphp
                                 <dl class="grid gap-x-4 gap-y-1 sm:grid-cols-[auto_1fr]" data-testid="request-appointment">
                                     <dt class="text-neutral">Fecha</dt>
                                     <dd class="font-medium">{{ $at->isoFormat('dddd D [de] MMMM [de] YYYY') }}</dd>
@@ -88,24 +91,131 @@
             <h2 class="text-lg font-bold leading-tight">Historial de solicitudes</h2>
             <x-students::credential-requests-history :requests="$requests" />
 
+            {{-- CO-07, CO-12: el drawer «Solicitar», una sola hoja que se abre al contestar (maqueta A de .impeccable/mocks/decision/alumnos-2026-11). --}}
+            @php
+                $siisaeUrl = 'http://siisae.cdjuarez.tecnm.mx/login/login';
+                $dataBlocked = $wantsReposition && $siisaeDataCorrect === 'no';
+                $noPhotoInSiisae = $wantsReposition && $siisaePhotoVisible === 'no';
+                $photoLocked = $noPhotoInSiisae && $availability['photo'] === null;
+                $repositionIncomplete = $wantsReposition && ($repositionReason === null || $siisaePhotoVisible === null || $siisaeDataCorrect === null);
+                $footerWhy = match (true) {
+                    ! $wantsReposition && ! $wantsPhoto => ['information-circle', 'Elige qué necesitas.'],
+                    $dataBlocked => ['lock-closed', 'Primero valida tus datos en el SIISAE.'],
+                    $repositionIncomplete => ['information-circle', 'Contesta el motivo y las dos preguntas del SIISAE.'],
+                    default => null,
+                };
+                $summary = collect([$wantsReposition ? 'Reposición de credencial física' : null, $wantsPhoto ? 'Foto' : null])->filter()->implode(' y ');
+            @endphp
             <x-drawer wire:model="showRequest" right close-on-escape class="w-full max-w-md" role="dialog" aria-modal="true" aria-labelledby="request-title" data-testid="request-drawer">
                 <h2 id="request-title" class="text-lg font-bold leading-tight">Solicitar</h2>
                 <p class="mt-1 text-neutral">Elige qué necesitas. Comunicación y Difusión te avisará cuándo pasar.</p>
-                <div class="mt-4 space-y-4">
-                    @foreach (['reposition' => ['wantsReposition', 'Reposición de credencial física'], 'photo' => ['wantsPhoto', 'Tomarme o actualizar la foto']] as $type => [$model, $label])
-                        <div>
-                            <x-checkbox :label="$label" wire:model="{{ $model }}" :disabled="$availability[$type] !== null" data-testid="want-{{ $type }}" />
-                            @if ($availability[$type] !== null)
-                                <p class="ml-8 mt-1 text-sm text-neutral" data-testid="reason-{{ $type }}">{{ $availability[$type] }}</p>
-                            @endif
-                            @error($type) <p class="ml-8 mt-1 text-sm text-error">{{ $message }}</p> @enderror
-                        </div>
-                    @endforeach
+                <div class="mt-4 space-y-3">
+                    <div>
+                        <label @class(['flex cursor-pointer flex-col gap-0.5 rounded-box border-2 px-3.5 py-3', 'border-primary' => $wantsReposition, 'border-base-300' => ! $wantsReposition, 'cursor-not-allowed opacity-70' => $availability['reposition'] !== null])>
+                            <span class="flex items-center gap-3 font-semibold">
+                                <input type="checkbox" class="checkbox checkbox-sm" wire:model.live="wantsReposition" @disabled($availability['reposition'] !== null) data-testid="want-reposition" />
+                                Reposición de credencial física
+                            </span>
+                            <span class="ml-8 text-sm text-neutral">Sin costo. Te avisamos cuándo pasar por ella.</span>
+                        </label>
+                        @if ($availability['reposition'] !== null)
+                            <p class="ml-8 mt-1 text-sm text-neutral" data-testid="reason-reposition">{{ $availability['reposition'] }}</p>
+                        @endif
+                        @error('reposition') <p class="ml-8 mt-1 text-sm text-error">{{ $message }}</p> @enderror
+
+                        @if ($wantsReposition)
+                            <div class="ml-4 mt-3 space-y-4 border-l-2 border-base-300 pl-4" data-testid="reposition-questions">
+                                <fieldset data-testid="reposition-reason">
+                                    <legend class="mb-1 font-semibold">Motivo</legend>
+                                    @foreach ($reasons as $reason)
+                                        <label @class(['flex cursor-pointer items-start gap-3 rounded-field px-2 py-2', 'bg-primary/10' => $repositionReason === $reason->value])>
+                                            <input type="radio" class="radio radio-sm mt-0.5" wire:model.live="repositionReason" value="{{ $reason->value }}" data-testid="reason-{{ $reason->value }}" />
+                                            <span class="text-sm">{{ $reason->label() }}</span>
+                                        </label>
+                                    @endforeach
+                                    @error('reason') <p class="mt-1 text-sm text-error">{{ $message }}</p> @enderror
+                                </fieldset>
+
+                                @if ($repositionReason !== null)
+                                    <div data-testid="siisae-block">
+                                        <h3 class="mb-2 font-semibold">Verifica en el SIISAE</h3>
+                                        <div class="space-y-4 rounded-box border border-base-300 bg-base-200/50 p-3.5">
+                                            <p class="text-sm">Entra al <abbr title="Sistema Integral de Servicios Administrativos y Estudiantiles del TecNM-ITCJ" class="font-semibold">SIISAE</abbr> (Sistema Integral de Servicios Administrativos y Estudiantiles del TecNM-ITCJ) y revisa tu fotografía y tus datos.</p>
+                                            <a href="{{ $siisaeUrl }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" data-testid="siisae-link"><x-icon name="o-arrow-top-right-on-square" class="size-4" aria-hidden="true" />Abrir el SIISAE<span class="sr-only"> (se abre en otra pestaña)</span></a>
+
+                                            @foreach (['siisaePhotoVisible' => ['photo_visible', '¿En el SIISAE puedes ver tu fotografía?'], 'siisaeDataCorrect' => ['data_correct', '¿En el SIISAE tus datos son correctos?']] as $model => [$key, $question])
+                                                <fieldset data-testid="q-{{ $key }}">
+                                                    <legend class="mb-1.5 text-sm font-semibold">{{ $question }}</legend>
+                                                    <div class="join" role="radiogroup">
+                                                        @foreach (['si' => 'Sí', 'no' => 'No'] as $value => $label)
+                                                            <label @class(['btn join-item min-w-[5.5rem]', 'btn-primary' => $this->{$model} === $value])>
+                                                                <input type="radio" class="sr-only" wire:model.live="{{ $model }}" value="{{ $value }}" data-testid="{{ $key }}-{{ $value }}" />{{ $label }}
+                                                            </label>
+                                                        @endforeach
+                                                    </div>
+                                                    @error($key) <p class="mt-1 text-sm text-error">{{ $message }}</p> @enderror
+                                                </fieldset>
+                                            @endforeach
+                                        </div>
+
+                                        @if ($dataBlocked)
+                                            <div class="mt-3 flex gap-3 rounded-box border border-error/40 bg-error/10 p-3.5 text-sm" role="alert" data-testid="data-blocked">
+                                                <x-icon name="o-x-circle" class="mt-0.5 size-5 shrink-0 text-error" aria-hidden="true" />
+                                                <div>
+                                                    <p class="font-semibold text-error">Todavía no puedes pedir la reposición.</p>
+                                                    <p class="mt-1">Valida tus datos en el SIISAE. Si no te aparece la opción «Validar datos», espera a que se publique la convocatoria para validar datos en el SIISAE.</p>
+                                                    <a href="{{ $siisaeUrl }}" target="_blank" rel="noopener" class="mt-2 inline-flex items-center gap-1.5 font-semibold text-error underline" data-testid="siisae-link-blocked"><x-icon name="o-arrow-top-right-on-square" class="size-4" aria-hidden="true" />Ir al SIISAE<span class="sr-only"> (se abre en otra pestaña)</span></a>
+                                                </div>
+                                            </div>
+                                        @elseif ($photoLocked)
+                                            <div class="mt-3 flex gap-3 rounded-box border border-info/40 bg-info/10 p-3.5 text-sm" role="status" data-testid="photo-added">
+                                                <x-icon name="o-camera" class="mt-0.5 size-5 shrink-0 text-info" aria-hidden="true" />
+                                                <div>
+                                                    <p class="font-semibold">Agregamos «Tomarme o actualizar la foto»</p>
+                                                    <p class="mt-1">Como el SIISAE no muestra tu fotografía, también te citamos para tomártela.</p>
+                                                </div>
+                                            </div>
+                                        @elseif ($noPhotoInSiisae)
+                                            {{-- CO-12 (supuesto por confirmar): la foto no está disponible (plazo o ya hay una abierta); la reposición sigue sin ella. --}}
+                                            <div class="mt-3 flex gap-3 rounded-box border border-warning/40 bg-warning/10 p-3.5 text-sm" role="status" data-testid="photo-not-added">
+                                                <x-icon name="o-camera" class="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+                                                <div>
+                                                    <p class="font-semibold">No pudimos agregar la foto</p>
+                                                    <p class="mt-1">{{ $availability['photo'] }} Tu reposición sigue; la foto la pides después.</p>
+                                                </div>
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endif
+                            </div>
+                        @endif
+                    </div>
+
+                    <div>
+                        <label @class(['flex cursor-pointer flex-col gap-0.5 rounded-box border-2 px-3.5 py-3', 'border-primary' => $wantsPhoto, 'border-base-300' => ! $wantsPhoto, 'cursor-not-allowed opacity-70' => $availability['photo'] !== null || $photoLocked])>
+                            <span class="flex items-center gap-3 font-semibold">
+                                <input type="checkbox" class="checkbox checkbox-sm" wire:model="wantsPhoto" @disabled($availability['photo'] !== null || $photoLocked) data-testid="want-photo" />
+                                Tomarme o actualizar la foto
+                            </span>
+                            <span class="ml-8 text-sm text-neutral">Te citamos para tomártela.</span>
+                        </label>
+                        @if ($availability['photo'] !== null)
+                            <p class="ml-8 mt-1 text-sm text-neutral" data-testid="reason-photo">{{ $availability['photo'] }}</p>
+                        @elseif ($photoLocked)
+                            <p class="ml-8 mt-1 flex items-center gap-1.5 text-sm text-neutral" data-testid="reason-photo-locked"><x-icon name="o-lock-closed" class="size-4" aria-hidden="true" />Se agregó porque no ves tu foto en el SIISAE.</p>
+                        @endif
+                        @error('photo') <p class="ml-8 mt-1 text-sm text-error">{{ $message }}</p> @enderror
+                    </div>
                     @error('request') <p class="text-sm text-error" data-testid="request-error">{{ $message }}</p> @enderror
                 </div>
                 <x-slot:actions>
-                    <x-button label="Cerrar" wire:click="$set('showRequest', false)" />
-                    <x-button label="Solicitar" class="btn-primary" wire:click="requestCredential" spinner="requestCredential" data-testid="credential-request-submit" />
+                    @if ($footerWhy !== null)
+                        <span class="me-auto flex items-center gap-1.5 text-sm text-neutral" id="request-why" data-testid="request-why"><x-icon :name="'o-'.$footerWhy[0]" class="size-4 shrink-0" aria-hidden="true" />{{ $footerWhy[1] }}</span>
+                    @else
+                        <span class="me-auto text-sm text-neutral" data-testid="request-summary">Pides: <b>{{ $summary }}</b></span>
+                    @endif
+                    <x-button label="Cancelar" wire:click="$set('showRequest', false)" />
+                    <x-button label="Solicitar" class="btn-primary" wire:click="requestCredential" spinner="requestCredential" :disabled="$footerWhy !== null" aria-describedby="request-why" data-testid="credential-request-submit" />
                 </x-slot:actions>
             </x-drawer>
         @endif
