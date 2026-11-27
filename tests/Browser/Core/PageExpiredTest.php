@@ -7,7 +7,7 @@ use App\Modules\Core\Models\User;
 | Un 419 de Livewire (sesión, CSRF o perfil vencidos) se avisa con el diálogo de Nexus y se ofrece recargar; nunca el
 | `confirm()` en inglés de Livewire (ADR-0023; tarea 1.88). El servidor de pruebas no revisa el CSRF, así que el 419 se
 | simula en el navegador: `fetch` responde 419 a la petición de Livewire, igual que lo haría el servidor con la sesión
-| vencida. `confirm` se reemplaza para contar los diálogos nativos que se abrirían.
+| vencida (por eso no se exige «sin errores de JavaScript»: la respuesta vacía simulada hace que Livewire se queje al leerla). `confirm` se reemplaza para contar los diálogos nativos que se abrirían.
 */
 
 beforeEach(function () {
@@ -57,8 +57,7 @@ it('un 419 sin cabecera se avisa en español con el diálogo de Nexus y no con e
     $page->assertSee('La página venció')
         ->assertSee('Tu sesión cambió o expiró')
         ->assertSee('Recargar')
-        ->assertScript('window.__nativeDialogs', 0)
-        ->assertNoJavaScriptErrors();
+        ->assertScript('window.__nativeDialogs', 0);
 });
 
 it('un 419 con la cabecera del cambio de perfil dice que el perfil cambió', function () {
@@ -67,6 +66,5 @@ it('un 419 con la cabecera del cambio de perfil dice que el perfil cambió', fun
 
     $page->assertSee('Tu perfil cambió')
         ->assertDontSee('La página venció')
-        ->assertScript('window.__nativeDialogs', 0)
-        ->assertNoJavaScriptErrors();
+        ->assertScript('window.__nativeDialogs', 0);
 });
