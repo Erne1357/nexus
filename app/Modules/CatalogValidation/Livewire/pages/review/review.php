@@ -23,12 +23,13 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogRecordsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
-use App\Modules\CatalogValidation\Queries\DraftLoadsQuery;
 use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Queries\RoomClaimQuery;
 use App\Modules\CatalogValidation\Rules\CatalogReviewRules;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\LoadStages;
 use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Enums\RoomType;
@@ -47,6 +48,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -271,7 +273,7 @@ new #[Title('Validación de catálogos')] class extends Component
         $state = $this->state();
         $data = ['departments' => $state['departments'], 'department' => $state['department'], 'term' => $state['term'], 'viewOnly' => $this->viewOnlyOn($state['department']?->id)];
 
-        // CV17: con alguna revisión validada y la carga en borrador, se sugiere ir a la Bandeja.
+        // CV18: con alguna revisión validada y la carga en la etapa de la propuesta, se sugiere ir a la Bandeja.
         $data['inboxLinks'] = ! $data['viewOnly'] && $state['reviews']->contains(fn (CatalogReview $review): bool => $review->status === ReviewStatus::Validated) ? $this->inboxLinks() : [];
 
         $empty = match (true) {
@@ -894,13 +896,25 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * @return list<array{modality: string, url: string}>
+     * CV18: la liga a la Bandeja del departamento mientras su carga sigue en la etapa de la propuesta (borrador o propuesta,
+     * MN-06). CatalogValidation no conoce las cargas, que están a su derecha en el mapa de módulos: pregunta las etapas al
+     * contrato de Core (LoadStages, que AcademicLoad implementa) y la ruta por nombre.
+     *
+     * @return list<array{modality: string|null, url: string}>
      */
     private function inboxLinks(): array
     {
         $state = $this->state();
 
-        return $state['department'] === null || $state['term'] === null ? [] : app(DraftLoadsQuery::class)->inboxLinks($state['term'], $state['department']);
+        if ($state['department'] === null || $state['term'] === null || ! Route::has('academic-load.inbox')) {
+            return [];
+        }
+
+        $stages = app(LoadStages::class)->of(app(Actor::class), $state['term']);
+
+        return in_array(Stage::Proposal, $stages, true)
+            ? [['modality' => null, 'url' => route('academic-load.inbox', ['depto' => $state['department']->code])]]
+            : [];
     }
 
     private function user(): User
