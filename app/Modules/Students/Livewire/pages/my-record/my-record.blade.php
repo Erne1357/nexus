@@ -141,7 +141,7 @@
                                         <h3 class="mb-2 font-semibold">Verifica en el SIISAE</h3>
                                         <div class="space-y-4 rounded-box border border-base-300 bg-base-200/50 p-3.5">
                                             <p class="text-sm">Entra al <abbr title="Sistema Integral de Servicios Administrativos y Estudiantiles del TecNM-ITCJ" class="font-semibold">SIISAE</abbr> (Sistema Integral de Servicios Administrativos y Estudiantiles del TecNM-ITCJ) y revisa tu fotografía y tus datos.</p>
-                                            <a href="{{ $siisaeUrl }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" data-testid="siisae-link"><x-icon name="o-arrow-top-right-on-square" class="size-4" aria-hidden="true" />Abrir el SIISAE<span class="sr-only"> (se abre en otra pestaña)</span></a>
+                                            <a href="{{ $siisaeUrl }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" data-testid="siisae-link"><x-icon name="o-arrow-top-right-on-square" class="w-4 h-4" aria-hidden="true" />Abrir el SIISAE<span class="sr-only"> (se abre en otra pestaña)</span></a>
 
                                             @foreach (['siisaePhotoVisible' => ['photo_visible', '¿En el SIISAE puedes ver tu fotografía?'], 'siisaeDataCorrect' => ['data_correct', '¿En el SIISAE tus datos son correctos?']] as $model => [$key, $question])
                                                 <fieldset data-testid="q-{{ $key }}">
@@ -160,16 +160,16 @@
 
                                         @if ($dataBlocked)
                                             <div class="mt-3 flex gap-3 rounded-box border border-error/40 bg-error/10 p-3.5 text-sm" role="alert" data-testid="data-blocked">
-                                                <x-icon name="o-x-circle" class="mt-0.5 size-5 shrink-0 text-error" aria-hidden="true" />
+                                                <x-icon name="o-x-circle" class="mt-0.5 w-5 h-5 shrink-0 text-error" aria-hidden="true" />
                                                 <div>
                                                     <p class="font-semibold text-error">Todavía no puedes pedir la reposición.</p>
                                                     <p class="mt-1">Valida tus datos en el SIISAE. Si no te aparece la opción «Validar datos», espera a que se publique la convocatoria para validar datos en el SIISAE.</p>
-                                                    <a href="{{ $siisaeUrl }}" target="_blank" rel="noopener" class="mt-2 inline-flex items-center gap-1.5 font-semibold text-error underline" data-testid="siisae-link-blocked"><x-icon name="o-arrow-top-right-on-square" class="size-4" aria-hidden="true" />Ir al SIISAE<span class="sr-only"> (se abre en otra pestaña)</span></a>
+                                                    <a href="{{ $siisaeUrl }}" target="_blank" rel="noopener" class="mt-2 inline-flex items-center gap-1.5 font-semibold text-error underline" data-testid="siisae-link-blocked"><x-icon name="o-arrow-top-right-on-square" class="w-4 h-4" aria-hidden="true" />Ir al SIISAE<span class="sr-only"> (se abre en otra pestaña)</span></a>
                                                 </div>
                                             </div>
                                         @elseif ($photoLocked)
                                             <div class="mt-3 flex gap-3 rounded-box border border-info/40 bg-info/10 p-3.5 text-sm" role="status" data-testid="photo-added">
-                                                <x-icon name="o-camera" class="mt-0.5 size-5 shrink-0 text-info" aria-hidden="true" />
+                                                <x-icon name="o-camera" class="mt-0.5 w-5 h-5 shrink-0 text-info" aria-hidden="true" />
                                                 <div>
                                                     <p class="font-semibold">Agregamos «Tomarme o actualizar la foto»</p>
                                                     <p class="mt-1">Como el SIISAE no muestra tu fotografía, también te citamos para tomártela.</p>
@@ -178,7 +178,7 @@
                                         @elseif ($noPhotoInSiisae)
                                             {{-- CO-12 (supuesto por confirmar): la foto no está disponible (plazo o ya hay una abierta); la reposición sigue sin ella. --}}
                                             <div class="mt-3 flex gap-3 rounded-box border border-warning/40 bg-warning/10 p-3.5 text-sm" role="status" data-testid="photo-not-added">
-                                                <x-icon name="o-camera" class="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+                                                <x-icon name="o-camera" class="mt-0.5 w-5 h-5 shrink-0" aria-hidden="true" />
                                                 <div>
                                                     <p class="font-semibold">No pudimos agregar la foto</p>
                                                     <p class="mt-1">{{ $availability['photo'] }} Tu reposición sigue; la foto la pides después.</p>
@@ -202,7 +202,7 @@
                         @if ($availability['photo'] !== null)
                             <p class="ml-8 mt-1 text-sm text-neutral" data-testid="reason-photo">{{ $availability['photo'] }}</p>
                         @elseif ($photoLocked)
-                            <p class="ml-8 mt-1 flex items-center gap-1.5 text-sm text-neutral" data-testid="reason-photo-locked"><x-icon name="o-lock-closed" class="size-4" aria-hidden="true" />Se agregó porque no ves tu foto en el SIISAE.</p>
+                            <p class="ml-8 mt-1 flex items-center gap-1.5 text-sm text-neutral" data-testid="reason-photo-locked"><x-icon name="o-lock-closed" class="w-4 h-4" aria-hidden="true" />Se agregó porque no ves tu foto en el SIISAE.</p>
                         @endif
                         @error('photo') <p class="ml-8 mt-1 text-sm text-error">{{ $message }}</p> @enderror
                     </div>
@@ -210,7 +210,7 @@
                 </div>
                 <x-slot:actions>
                     @if ($footerWhy !== null)
-                        <span class="me-auto flex items-center gap-1.5 text-sm text-neutral" id="request-why" data-testid="request-why"><x-icon :name="'o-'.$footerWhy[0]" class="size-4 shrink-0" aria-hidden="true" />{{ $footerWhy[1] }}</span>
+                        <span class="me-auto flex items-center gap-1.5 text-sm text-neutral" id="request-why" data-testid="request-why"><x-icon :name="'o-'.$footerWhy[0]" class="w-4 h-4 shrink-0" aria-hidden="true" />{{ $footerWhy[1] }}</span>
                     @else
                         <span class="me-auto text-sm text-neutral" data-testid="request-summary">Pides: <b>{{ $summary }}</b></span>
                     @endif
