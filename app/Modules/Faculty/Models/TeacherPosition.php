@@ -16,10 +16,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Plaza de un docente: tipo, horas base y vigencia. Un límite nulo es sin límite. Un docente puede tener
+ * Plaza de un docente: tipo, clave de categoría (nula si no se conoce), horas base y vigencia. Un límite nulo es sin límite. Un docente puede tener
  * varias vigentes a la vez (confirmado el 30 de octubre de 2026).
  */
-#[Fillable(['teacher_id', 'kind', 'base_hours', 'valid_from', 'valid_to'])]
+#[Fillable(['teacher_id', 'kind', 'category', 'base_hours', 'valid_from', 'valid_to'])]
 #[UseFactory(TeacherPositionFactory::class)]
 class TeacherPosition extends Model
 {

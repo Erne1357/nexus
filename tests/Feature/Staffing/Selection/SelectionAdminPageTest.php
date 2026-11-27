@@ -10,6 +10,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
@@ -135,6 +136,20 @@ it('el monitor muestra el turno y el avance de una selección publicada', functi
         ->assertSee('Rosa Medina Soto')
         ->assertSee('Ahora')
         ->assertSeeHtml('wire:poll.10s');
+});
+
+it('PL-01: el monitor muestra las horas frente a grupo, igual que el docente, y no las 40 h del CSV', function () {
+    $selection = Selection::factory()->create(['status' => SelectionStatus::Running, 'starts_at' => now()->subHour()]);
+    $teacher = Teacher::factory()->create(['name' => 'Rosa Medina Soto']);
+    TeacherPosition::factory()->for($teacher)->tiempoCompleto()->create(['category' => 'E3817']);
+    SelectionEntry::factory()->for($selection)->create([
+        'teacher_id' => $teacher->id, 'base_hours' => 40, 'position' => 1, 'slot_index' => 0,
+        'slot_starts_at' => now()->subMinutes(5), 'slot_ends_at' => now()->addMinutes(25),
+    ]);
+
+    Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin', ['seleccion' => $selection->id])
+        ->assertSee('frente a grupo: 22 h (20 a 24)')
+        ->assertDontSee('de 40 h');
 });
 
 it('un jefe de departamento sin SelectionManage recibe 403', function () {

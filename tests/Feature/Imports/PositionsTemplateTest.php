@@ -162,3 +162,11 @@ it('el archivo de ejemplo anonimizado se valida y se aplica sin errores', functi
     expect([$batch->error_rows, $batch->created_rows])->toBe([0, 4])
         ->and(TeacherPosition::count())->toBe(4);
 });
+
+it('PL-01: la categoría se guarda, va en mayúsculas y vacía no pisa la que ya tiene', function () {
+    $this->template->apply(positionRow(['category' => 'e3817']), $this->context);
+    $this->template->apply(positionRow(['category' => null]), $this->context);
+
+    expect(TeacherPosition::query()->where('teacher_id', $this->teacher->id)->sole()->category)->toBe('E3817')
+        ->and($this->template->validate(positionRow(['category' => 'xx']), $this->context)->errors)->toHaveKey('category');
+});

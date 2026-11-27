@@ -4,6 +4,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherHourAllowance;
+use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
@@ -26,7 +27,7 @@ use Tests\Support\Staffing\SelectionWorld;
 | (HC-08 justificado); con menos pasa a la ronda extra, y en la ronda extra termina.
 */
 
-const FINISH_OUT_OF_BAND = 'Es responsabilidad del docente cubrir sus horas de acuerdo con su base: marca la casilla para continuar.';
+const FINISH_OUT_OF_BAND = 'Es responsabilidad del docente cubrir sus horas frente a grupo de acuerdo con su plaza: marca la casilla para continuar.';
 
 beforeEach(function () {
     $this->freezeTime();
@@ -82,6 +83,7 @@ it('SEL-05: dentro de su base ±2 termina sin la casilla', function () {
 
 it('SEL-12: cerrar dentro de la banda con más horas que su límite de Nexus no deja choque duro de HC-08', function () {
     [$world, $teacher] = finishLoadWorld(base: 3, entry: ['base_hours' => 5]);
+    TeacherPosition::query()->where('teacher_id', $teacher->id)->delete(); // sin plazas en Nexus la banda sale del CSV (PL-01)
 
     expect(finishLoadHoursViolations($world, $teacher))->not->toBeEmpty();
 
@@ -92,6 +94,7 @@ it('SEL-12: cerrar dentro de la banda con más horas que su límite de Nexus no 
 
 it('SEL-12: las horas autorizadas son todo lo que HC-08 le cuenta al cerrar: otras modalidades y horas externas', function () {
     [$world, $teacher] = finishLoadWorld(base: 2, entry: ['base_hours' => 5]);
+    TeacherPosition::query()->where('teacher_id', $teacher->id)->delete(); // sin plazas en Nexus la banda sale del CSV (PL-01)
     $elsewhere = Group::factory()->create(['term_id' => $world->term->id, 'modality_id' => Modality::factory()->create()->id, 'teacher_id' => $teacher->id]);
     GroupSession::factory()->for($elsewhere)->on(4, '16:00', '18:00')->create();
     TeacherExternalLoad::factory()->create(['teacher_id' => $teacher->id, 'term_id' => $world->term->id, 'hours' => 2]);
@@ -161,10 +164,34 @@ it('SEL-05: con horas de más y la casilla termina y le da al docente esas horas
         ->granted_by->toBe($teacher->user_id);
 });
 
-it('un docente fuera del CSV se mide contra su base de Nexus', function () {
+it('un docente fuera del CSV se mide contra sus horas frente a grupo de Nexus', function () {
     [$world, $teacher] = finishLoadWorld(base: 5, entry: ['source' => SelectionEntrySource::Appended, 'base_hours' => 0]);
 
     expect(finishLoadFor($world, $teacher, false)->fresh()->status)->toBe(SelectionEntryStatus::Done);
+});
+
+it('PL-01 y SEL-05: la banda se mide contra las horas frente a grupo de sus plazas, no contra las horas de la plaza ni las del CSV', function () {
+    // Tiempo completo (40 h de plaza) = 22 h frente a grupo; sus 5 h quedan muy abajo, aunque el CSV diga 5.
+    [$world, $teacher] = finishLoadWorld(base: 5, entry: ['base_hours' => 5]);
+    TeacherPosition::query()->where('teacher_id', $teacher->id)->delete();
+    TeacherPosition::factory()->for($teacher)->tiempoCompleto()->create(['category' => 'E3817']);
+
+    expect(finishLoadErrors(fn () => finishLoadFor($world, $teacher, false)))->toHaveKey('acknowledged');
+
+    finishLoadFor($world, $teacher, true);
+
+    $logged = Activity::query()->where('event', 'selection_load_finished')->sole()->properties;
+
+    expect([$logged['band'], $logged['base_hours']])->toBe(['under', 22]);
+});
+
+it('PL-01 y SEL-05: sin plazas en Nexus la banda sale de las horas del CSV (40 es 22)', function () {
+    [$world, $teacher] = finishLoadWorld(base: 5, entry: ['base_hours' => 40]);
+    TeacherPosition::query()->where('teacher_id', $teacher->id)->delete();
+
+    finishLoadFor($world, $teacher, true);
+
+    expect(Activity::query()->where('event', 'selection_load_finished')->sole()->properties['base_hours'])->toBe(22);
 });
 
 it('fuera de su turno no cierra su carga', function () {
