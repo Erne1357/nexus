@@ -114,6 +114,7 @@
                                                 <span class="me-2 font-mono font-semibold">{{ $department->code }}</span><span class="font-semibold underline decoration-transparent underline-offset-4 group-hover:decoration-current group-focus-visible:decoration-current">{{ $department->name }}</span>
                                             </button>
                                             <span class="block text-xs text-neutral"><span class="font-mono tabular-nums">{{ $row['groups'] }}</span> {{ $row['groups'] === 1 ? 'grupo' : 'grupos' }} · @include('staffing::closing.head', ['names' => $heads[$department->id] ?? []])</span>
+                                            @include('staffing::closing.over-band', ['n' => $row['overBand'], 'code' => $department->code])
                                         </th>
                                         <td class="px-2 py-2.5"><span class="flex flex-wrap gap-1.5">@foreach ($row['loads'] as $progress)@include('staffing::closing.campus-badge', ['progress' => $progress, 'selected' => $open && $closing->load->id === $progress->load->id])@endforeach</span></td>
                                         <td class="px-2 py-2.5 text-center">@include('staffing::closing.count', ['kind' => 'hard', 'n' => $row['hard']])</td>
@@ -166,6 +167,7 @@
                                         <span class="badge badge-neutral badge-soft h-6.5"><span class="font-mono">{{ $row['justified'] }}</span> {{ $row['justified'] === 1 ? 'justificado' : 'justificados' }}</span>
                                     @endif
                                 </div>
+                                @include('staffing::closing.over-band', ['n' => $row['overBand'], 'code' => $department->code])
                             @endif
                         </li>
                     @endforeach

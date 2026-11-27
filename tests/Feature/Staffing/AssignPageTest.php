@@ -94,7 +94,7 @@ describe('vista por materia', function () {
         expect($this->open->fresh()->teacher_id)->toBe($this->teachers[0]->id)
             ->and(lastToastOf($page))->type->toBe('warning')->title->toBe('Asignaste a Ana Ruiz')
             ->and(lastToastOf($page)['description'])->toContain('Lugar 1 de 4')
-            ->toContain('Pasa su banda de horas frente a grupo (22 h, de 20 a 24): lleva ')
+            ->toContain('Ana Ruiz pasa su banda de horas frente a grupo (22 h, de 20 a 24): lleva ')
             ->toContain('Requiere oficio de conformidad del docente (pendiente).');
     });
 

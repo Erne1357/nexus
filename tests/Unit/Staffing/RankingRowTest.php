@@ -38,12 +38,18 @@ it('las marcas del bloque final son choque y no disponible; sin evaluación no b
         ->and(rankingRow(['flags' => ['sin_evaluacion'], 'evaluation' => null])->isFlagged())->toBeFalse();
 });
 
-it('HC-08: «pasa su banda» es un aviso discreto que no baja al bloque final (tarea 1.50)', function () {
+it('HC-08: «pasa su banda» va en su propio bloque, asignable, y no en el final; con choque va al final (tarea 1.50)', function () {
     $row = rankingRow(['flags' => ['sin_horas', 'traslado_justo']]);
+    $withClash = rankingRow(['flags' => ['sin_horas', 'choque']]);
 
     expect($row->isFlagged())->toBeFalse()
+        ->and($row->isOverBand())->toBeTrue()
+        ->and($row->bandAccepted())->toBeFalse()
         ->and($row->marks())->toBe([])
-        ->and($row->notices())->toBe(['sin_horas' => 'pasa su banda', 'traslado_justo' => 'traslado justo']);
+        ->and($row->notices())->toBe(['sin_horas' => 'pasa su banda', 'traslado_justo' => 'traslado justo'])
+        ->and($withClash->isFlagged())->toBeTrue()
+        ->and($withClash->isOverBand())->toBeFalse()
+        ->and(rankingRow(['flags' => ['sin_horas', 'banda_aceptada']])->bandAccepted())->toBeTrue();
 });
 
 it('SC-09: «traslado justo» es una marca discreta que no baja al bloque final', function () {

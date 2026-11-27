@@ -10,6 +10,7 @@ use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
 use App\Modules\Faculty\Events\HourAllowanceChanged;
 use App\Modules\Faculty\Events\PositionChanged;
+use App\Modules\Faculty\Events\TeachingHoursChanged;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
@@ -40,6 +41,7 @@ final class QueueConflictRecompute
             $event instanceof ExternalLoadChanged => $this->targets->forTeacher($event->load->teacher_id, $event->load->term_id),
             $event instanceof HourAllowanceChanged => $this->targets->forTeacher($event->allowance->teacher_id, $event->allowance->term_id),
             $event instanceof PositionChanged => $this->targets->forTeacher($event->position->teacher_id),
+            $event instanceof TeachingHoursChanged => $this->targets->forTeachers($event->teacherIds, $event->termId),
             $event instanceof ModalityUpdated => in_array('settings', $event->changed, true) ? $this->targets->forModality($event->modality) : [],
             default => [],
         };

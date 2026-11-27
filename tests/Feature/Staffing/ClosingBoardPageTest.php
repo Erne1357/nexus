@@ -7,7 +7,9 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
+use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\ScheduleConflict;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -71,6 +73,19 @@ it('M1: muestra las cifras de la modalidad de la página, un renglón por depart
         ->assertDontSeeHtml('aria-label="Presencial: lista para cerrar"');
 
     expect(textOf(domOf($ead)->querySelector('[data-testid="kpi-published"]')))->toContain('1 de 1');
+});
+
+it('HC-08: cada renglón dice cuántos docentes pasan su banda, como aviso (tarea 1.50)', function () {
+    $group = $this->world->group();
+    ScheduleConflict::factory()->create([
+        'group_id' => $group->id, 'term_id' => $group->term_id, 'campus_id' => $group->campus_id, 'department_id' => $group->department_id,
+        'rule' => 'HC-08', 'severity' => ConflictSeverity::Soft, 'subject_type' => 'teacher', 'subject_id' => $group->teacher_id,
+    ]);
+
+    $html = closingBoardPage($this->subdireccion)->html();
+
+    expect(textOf(domOf($html)->querySelector('[data-testid=board-row-SC] [data-testid=board-over-band-SC]')))->toBe('1 pasa su banda · aviso, oficio pendiente')
+        ->and(domOf($html)->querySelector('[data-testid=board-row-EE] [data-testid=board-over-band-EE]'))->toBeNull();
 });
 
 it('cambiar la modalidad en el select cierra el detalle y deja la matriz de esa modalidad', function () {

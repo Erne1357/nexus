@@ -252,7 +252,7 @@ it('HC-08: sin selección viva HC-16 se exige, pero pasar la banda de horas ya n
     TeacherPosition::factory()->for($short)->asignatura(1)->create();
 
     $reason = assignmentErrors(fn () => assignTeacher($this->group, $this->teachers[2], $this->actor));
-    $assignment = assignTeacher($this->group, $short, $this->actor, 'Es el único disponible.');
+    [$assignment, $notice] = app(AssignTeacher::class)->handleWithNotice($this->group, $short, $this->actor, 'Es el único disponible.');
     $validator = app(ScheduleValidator::class);
     $validator->forget();
     $term = $this->group->term;
@@ -262,7 +262,8 @@ it('HC-08: sin selección viva HC-16 se exige, pero pasar la banda de horas ya n
         ->and($this->group->fresh()->teacher_id)->toBe($short->id)
         ->and($validator->validateTeacher($short, $term)->hasHard())->toBeFalse()
         ->and($validator->teacherHoursNotice($short, $term))->toStartWith('Pasa su banda de horas frente a grupo (1 h, de 0 a 3): lleva ')
-        ->and($validator->teacherHoursNotice($short, $term))->toEndWith('Requiere oficio de conformidad del docente (pendiente).');
+        ->and($validator->teacherHoursNotice($short, $term))->toEndWith('Requiere oficio de conformidad del docente (pendiente).')
+        ->and($notice)->toBe($short->name.' '.lcfirst((string) $validator->teacherHoursNotice($short, $term)));
 })->with([
     'borrador' => [SelectionStatus::Draft],
     'cancelada' => [SelectionStatus::Cancelled],

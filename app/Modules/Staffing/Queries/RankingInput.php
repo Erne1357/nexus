@@ -7,7 +7,7 @@ use App\Modules\Staffing\Rules\RankingCandidate;
 
 /**
  * Los datos de Faculty de un docente para el ranking de un grupo (reglas-de-negocio.md, «Ranking docente
- * (desempate)»). Las marcas «sin horas», «choque» y «no disponible» las decide Scheduling/Staffing al armar el
+ * (desempate)»). Las marcas «pasa su banda» (`sin_horas`), «choque» y «no disponible» las decide Scheduling/Staffing al armar el
  * candidato con toCandidate().
  */
 final readonly class RankingInput
@@ -23,7 +23,7 @@ final readonly class RankingInput
         public bool $fromOtherDepartment,
     ) {}
 
-    public function toCandidate(bool $noHours, bool $clash, bool $unavailable, ?int $remainingHours, bool $tightTravel = false): RankingCandidate
+    public function toCandidate(bool $noHours, bool $clash, bool $unavailable, ?int $remainingHours, bool $tightTravel = false, bool $bandAccepted = false): RankingCandidate
     {
         return new RankingCandidate(
             $this->teacherId,
@@ -38,6 +38,7 @@ final readonly class RankingInput
             $unavailable,
             $this->previousRank,
             $tightTravel,
+            $bandAccepted,
         );
     }
 }

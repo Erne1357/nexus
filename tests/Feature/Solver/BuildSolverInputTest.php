@@ -17,6 +17,7 @@ use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Faculty\Actions\GrantHourAllowance;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherAvailability;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
@@ -24,6 +25,8 @@ use App\Modules\Solver\Contract\GroupInput;
 use App\Modules\Solver\Contract\ScopeKind;
 use App\Modules\Solver\Contract\SessionKind;
 use App\Modules\Solver\Contract\SolverInput;
+use App\Modules\Solver\Evaluation\ContractEvaluator;
+use App\Modules\Solver\Evaluation\ContractState;
 use App\Modules\Solver\Queries\BuildSolverInput;
 use App\Modules\Solver\Queries\SolverInputBuild;
 use App\Modules\Solver\Rules\InputFingerprint;
@@ -240,6 +243,18 @@ it('trae los docentes de los grupos con horas restantes, honorarios, no disponib
         ->and(array_map(fn ($slot) => $slot->toArray(), $t1->preferred))->toBe([['day' => 4, 'starts_at' => '08:00', 'ends_at' => '10:00']])
         ->and(array_map(fn ($slot) => $slot->toArray(), $t1->busy))->toBe([['day' => 5, 'starts_at' => '07:00', 'ends_at' => '09:00', 'campus_code' => 'S1']])
         ->and($teachers[$this->t2->id]->remainingHours)->toBe(9);
+});
+
+it('HC-08: lo que las personas ya asignaron de más no es problema de la entrada: sus movibles caben y el motor no le agrega horas (tarea 1.50)', function () {
+    TeacherExternalLoad::factory()->for($this->t1)->create(['term_id' => $this->term->id, 'hours' => 30]);
+
+    $input = buildInputForDepartment()->input;
+    $t1 = collect($input->teachers)->keyBy('id')[$this->t1->id];
+    $movableHours = collect($input->groups)->where('movable', true)->where('teacherId', $this->t1->id)->sum('weeklyHours');
+
+    expect($movableHours)->toBeGreaterThan(0)
+        ->and($t1->remainingHours)->toBe($movableHours)
+        ->and(collect((new ContractEvaluator)->evaluate($input, ContractState::currentSessions($input))->hardViolations)->where('rule', 'HC-08')->all())->toBe([]);
 });
 
 it('HC-08: el motor recibe el tope nuevo, frente a grupo + 2, o lo que autorizó la casilla si es más (tarea 1.50)', function () {

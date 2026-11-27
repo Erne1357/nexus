@@ -65,9 +65,9 @@ final readonly class ValidationResult
     }
 
     /**
-     * Las violaciones como las ve el motor (tarea 1.50): el aviso de HC-08 que pasa también lo que autorizó la casilla
-     * (`remaining_hours` negativo, el oficio pendiente) cuenta como choque duro, igual que en la foto del contrato
-     * (ContractState). Lo usan las demos, que como el motor no sobrecargan a nadie sin oficio.
+     * Las violaciones con el aviso de HC-08 que pasa también lo que autorizó la casilla (`remaining_hours` negativo, el
+     * oficio pendiente) como choque duro (tarea 1.50). Lo usan las demos al elegir a quién asignar: como el motor, no
+     * agregan horas a nadie por encima de su tope.
      */
     public function asEngine(): self
     {

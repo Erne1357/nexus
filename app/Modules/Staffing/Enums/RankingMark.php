@@ -5,11 +5,11 @@ namespace App\Modules\Staffing\Enums;
 use App\Modules\Core\Enums\StatusTone;
 
 /**
- * Las marcas de un docente en el ranking de un grupo (reglas-de-negocio.md, «Ranking docente (desempate)»), como las
- * guarda el desglose (`staffing_rankings.breakdown.flags`): choque con su horario (HC-01) y no disponible (HC-09) lo
- * bajan al bloque final (lowers()); pasa su banda de horas frente a grupo (HC-08, clave `sin_horas`) es aviso desde la
- * tarea 1.50 y no lo baja. El nombre, el tono y el icono son los de la asignación, para que la oferta del docente las
- * pinte igual.
+ * Las marcas que bajan a un docente en el ranking de un grupo (reglas-de-negocio.md, «Ranking docente (desempate)»),
+ * como las guarda el desglose (`staffing_rankings.breakdown.flags`): choque con su horario (HC-01) y no disponible
+ * (HC-09), al bloque final; pasa su banda de horas frente a grupo (HC-08, clave `sin_horas`; desde la tarea 1.50 se
+ * puede asignar), a su bloque «Pasan su banda». El nombre, el tono y el icono son los de la asignación, para que la
+ * oferta del docente las pinte igual.
  */
 enum RankingMark: string
 {
@@ -42,14 +42,6 @@ enum RankingMark: string
             self::NoHours => 'o-clock',
             self::Unavailable => 'o-no-symbol',
         };
-    }
-
-    /**
-     * Si baja al docente al bloque final: choque y no disponible sí; pasar su banda (HC-08) es aviso.
-     */
-    public function lowers(): bool
-    {
-        return $this !== self::NoHours;
     }
 
     /**

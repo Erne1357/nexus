@@ -19,13 +19,23 @@ final readonly class GroupRanking
     ) {}
 
     /**
-     * Quienes pueden tomar el grupo: los que no van en el bloque final.
+     * Quienes pueden tomar el grupo sin marca: los que no pasan su banda ni van en el bloque final.
      *
      * @return list<RankingRow>
      */
     public function eligible(): array
     {
-        return array_values(array_filter($this->rows, fn (RankingRow $row): bool => ! $row->isFlagged()));
+        return array_values(array_filter($this->rows, fn (RankingRow $row): bool => ! $row->isFlagged() && ! $row->isOverBand()));
+    }
+
+    /**
+     * El bloque «Pasan su banda» (HC-08, tarea 1.50): se pueden asignar, con el oficio de conformidad pendiente.
+     *
+     * @return list<RankingRow>
+     */
+    public function overBand(): array
+    {
+        return array_values(array_filter($this->rows, fn (RankingRow $row): bool => $row->isOverBand()));
     }
 
     /**

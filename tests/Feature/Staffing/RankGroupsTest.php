@@ -100,7 +100,7 @@ it('cada fila del ranking copia la modalidad de su grupo (ampliación de la rond
         ->and(StaffingRanking::query()->pluck('modality_id')->unique()->all())->toBe([$group->modality_id]);
 });
 
-it('HC-08: un candidato que con el grupo pasa su banda queda marcado «sin_horas» (pasa su banda) como aviso, sin bajar al bloque final', function () {
+it('HC-08: un candidato que con el grupo pasa su banda queda marcado «sin_horas» (pasa su banda) y baja a su bloque, debajo de los demás', function () {
     $group = ($this->group)();
     $ana = ($this->teacher)('Ana', 10);
     TeacherExternalLoad::query()->create(['teacher_id' => $ana->id, 'term_id' => $this->term->id, 'source' => 'UACJ', 'hours' => 8]);
@@ -110,9 +110,10 @@ it('HC-08: un candidato que con el grupo pasa su banda queda marcado «sin_horas
 
     $row = StaffingRanking::query()->where('group_id', $group->id)->where('teacher_id', $ana->id)->sole();
 
-    // Ana: 10 h frente a grupo + 2 = 12, menos 8 externas; con el grupo de 5 h pasa su banda por 1 h.
-    expect(($this->ranking)($group))->toBe(['Ana', 'Beatriz'])
-        ->and($row->rank)->toBe(1)
+    // Ana: 10 h frente a grupo + 2 = 12, menos 8 externas; con el grupo de 5 h pasa su banda por 1 h: aunque tiene más
+    // horas base, va debajo de Beatriz (tarea 1.50).
+    expect(($this->ranking)($group))->toBe(['Beatriz', 'Ana'])
+        ->and($row->rank)->toBe(2)
         ->and($row->breakdown['flags'])->toContain('sin_horas')
         ->and($row->breakdown['remaining_hours'])->toBe(4)
         ->and($row->breakdown['remaining_after_hours'])->toBe(-1);

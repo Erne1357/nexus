@@ -209,7 +209,7 @@ final class ScheduleStateQuery
                 $unavailable[$teacher->id] ?? [],
                 $honorarios->has($teacher->id),
                 $teacher->allowance_hours === null ? null : (int) $teacher->allowance_hours,
-                TeachingHours::target($teaching[$teacher->id] ?? 0, $csv[$teacher->id] ?? 0),
+                ($teaching[$teacher->id] ?? 0) > 0 ? $teaching[$teacher->id] : ($csv[$teacher->id] ?? 0),
             ))
             ->all();
     }

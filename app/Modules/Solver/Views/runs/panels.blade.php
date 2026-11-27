@@ -56,6 +56,7 @@
                             @endforeach
                         </section>
                     @endif
+                    @include('solver::runs.hour-notices', ['notices' => $comparison->hourNotices(), 'testid' => 'run-hour-notices'])
                     <section class="grid gap-2">
                         <h3 class="font-bold">Se quedan como están</h3>
                         @forelse ($comparison->kept() as $entry)
@@ -238,6 +239,7 @@
                         </div>
                     </div>
                 @endif
+                @include('solver::runs.hour-notices', ['notices' => $comparison->hourNotices(), 'testid' => 'accept-hour-notices'])
                 <p class="text-sm text-neutral">Antes de escribir se revisa que la carga siga igual que cuando se lanzó.</p>
             </div>
             <x-slot:actions>

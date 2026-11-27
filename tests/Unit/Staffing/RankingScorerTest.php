@@ -8,7 +8,7 @@ use App\Modules\Staffing\Rules\RankingWeights;
 
 /*
 | Ranking docente (desempate), reglas-de-negocio.md: horas base, puntaje, orden del periodo anterior, nombre, id;
-| los marcados (choque, no disponible) van al final; pasar la banda de horas (HC-08) es aviso desde la tarea 1.50.
+| los que pasan su banda de horas (HC-08, tarea 1.50) después de los demás y los marcados (choque, no disponible) al final.
 */
 
 function rankingCandidate(string $id, array $with = []): RankingCandidate
@@ -103,15 +103,17 @@ it('Ranking docente: choque y no disponible van juntos al final, ordenados entre
     ]))->toBe(['ok-high', 'ok-low', 'flag-high', 'flag-un', 'flag-low']);
 });
 
-it('HC-08: pasar su banda de horas es aviso y no baja al docente al bloque final (tarea 1.50)', function () {
+it('HC-08: quien pasa su banda de horas va debajo de los demás y arriba del bloque final, asignable (tarea 1.50)', function () {
     $ranked = (new RankingScorer(new RankingWeights))->rank([
-        rankingCandidate('a', ['baseHours' => 40, 'noHours' => true]),
-        rankingCandidate('b', ['baseHours' => 20]),
+        rankingCandidate('band', ['baseHours' => 40, 'noHours' => true, 'bandAccepted' => true]),
+        rankingCandidate('flag', ['baseHours' => 40, 'clash' => true]),
+        rankingCandidate('ok', ['baseHours' => 5]),
     ]);
 
-    expect(array_map(fn (RankedCandidate $r) => $r->candidate->teacherId, $ranked))->toBe(['a', 'b'])
-        ->and($ranked[0]->candidate->isFlagged())->toBeFalse()
-        ->and($ranked[0]->breakdown()['flags'])->toBe(['sin_horas']);
+    expect(array_map(fn (RankedCandidate $r) => $r->candidate->teacherId, $ranked))->toBe(['ok', 'band', 'flag'])
+        ->and($ranked[1]->candidate->isFlagged())->toBeFalse()
+        ->and($ranked[1]->candidate->isOverBand())->toBeTrue()
+        ->and($ranked[1]->breakdown()['flags'])->toBe(['sin_horas', 'banda_aceptada']);
 });
 
 it('Ranking docente: asigna posiciones de 1 a n', function () {

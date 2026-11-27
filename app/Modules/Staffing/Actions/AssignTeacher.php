@@ -20,7 +20,7 @@ use Illuminate\Validation\ValidationException;
  * (confirmado el 7 de noviembre de 2026), el docente activo y que las reglas duras del docente pasen (HC-01 y HC-09 por
  * ScheduleValidator::checkTeacher; el motivo no las salva, supuesto por confirmar). HC-08 ya no veta (tarea 1.50,
  * confirmado el 26 de noviembre de 2026): pasar la banda de horas frente a grupo se permite y queda como aviso, con el
- * oficio de conformidad del docente pendiente (ScheduleValidator::teacherHoursNotice da el texto). HC-16: si el docente no
+ * oficio de conformidad del docente pendiente; handleWithNotice() devuelve ese aviso, el mismo que dio checkTeacher. HC-16: si el docente no
  * ocupa el primer lugar del ranking del grupo, o no está en él, exige un motivo. Asignar al docente vigente no cambia
  * nada y devuelve su asignación (supuesto por confirmar). Si no, escribe con RecordTeacherAssignment: reemplaza la
  * asignación vigente, cambia `groups.teacher_id` con SetGroupTeacher, crea la nueva fila y deja bitácora con el lugar y
@@ -45,11 +45,25 @@ final class AssignTeacher
      */
     public function handle(Group $group, Teacher $teacher, User $actor, ?string $reason = null): GroupTeacherAssignment
     {
+        return $this->handleWithNotice($group, $teacher, $actor, $reason)[0];
+    }
+
+    /**
+     * Lo mismo que handle(), con el aviso de HC-08 (tarea 1.50) que dio checkTeacher al asignar: «Ana Pérez pasa su banda
+     * de horas frente a grupo (…). Requiere oficio de conformidad del docente (pendiente).», o null si no pasa su banda o
+     * si el docente ya era el del grupo.
+     *
+     * @return array{0: GroupTeacherAssignment, 1: ?string}
+     *
+     * @throws ValidationException
+     */
+    public function handleWithNotice(Group $group, Teacher $teacher, User $actor, ?string $reason = null): array
+    {
         $reason = filled($reason) ? trim($reason) : null;
 
         $editability = app(LoadEditability::class);
 
-        return $editability->guard(fn (): GroupTeacherAssignment => DB::transaction(function () use ($group, $teacher, $actor, $reason, $editability): GroupTeacherAssignment {
+        return $editability->guard(fn (): array => DB::transaction(function () use ($group, $teacher, $actor, $reason, $editability): array {
             $load = $editability->lockLoad($group);
             $group->setRawAttributes($group->newQuery()->lockForUpdate()->findOrFail($group->getKey())->getAttributes(), sync: true);
 
@@ -58,7 +72,7 @@ final class AssignTeacher
             $current = GroupTeacherAssignment::query()->current()->where('group_id', $group->id)->lockForUpdate()->first();
 
             if ($current !== null && $group->teacher_id === $teacher->id && $current->teacher_id === $teacher->id) {
-                return $current;
+                return [$current, null];
             }
 
             if (! $teacher->is_active || $teacher->trashed()) {
@@ -87,7 +101,9 @@ final class AssignTeacher
                 throw ValidationException::withMessages(['teacher' => $result->messages()]);
             }
 
-            return $this->record->handle($group, $teacher, $actor, $reason, $position, $size);
+            $notice = $result->forRule('HC-08')[0]->message ?? null;
+
+            return [$this->record->handle($group, $teacher, $actor, $reason, $position, $size), $notice];
         }), 'group');
     }
 

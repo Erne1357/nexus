@@ -7,7 +7,8 @@ use App\Modules\Faculty\Enums\QualificationLevel;
 /**
  * Ordena a los candidatos de un grupo (reglas-de-negocio.md, «Ranking docente (desempate)»). Puntaje = grupos
  * impartidos × peso + peso del perfil (preferente o apto, no ambos) + evaluación × peso; sin evaluación son 0
- * puntos. Orden: los marcados (choque, no disponible) después de todos; horas base de mayor a menor;
+ * puntos. Orden: los que pasan su banda de horas (HC-08) después de los demás y los marcados (choque, no disponible)
+ * después de todos; dentro de cada bloque, horas base de mayor a menor;
  * puntaje de mayor a menor; posición del periodo anterior (los que no tienen, al final); nombre sin importar
  * mayúsculas ni acentos; id del docente. Determinista. Puro.
  */
@@ -28,9 +29,9 @@ final readonly class RankingScorer
         ], $candidates);
 
         usort($scored, fn (array $a, array $b): int => [
-            $a['candidate']->isFlagged(), -$a['candidate']->baseHours, -$a['score'], $a['candidate']->previousRank ?? PHP_INT_MAX, $a['name'], $a['candidate']->teacherId,
+            $a['candidate']->tier(), -$a['candidate']->baseHours, -$a['score'], $a['candidate']->previousRank ?? PHP_INT_MAX, $a['name'], $a['candidate']->teacherId,
         ] <=> [
-            $b['candidate']->isFlagged(), -$b['candidate']->baseHours, -$b['score'], $b['candidate']->previousRank ?? PHP_INT_MAX, $b['name'], $b['candidate']->teacherId,
+            $b['candidate']->tier(), -$b['candidate']->baseHours, -$b['score'], $b['candidate']->previousRank ?? PHP_INT_MAX, $b['name'], $b['candidate']->teacherId,
         ]);
 
         return array_map(

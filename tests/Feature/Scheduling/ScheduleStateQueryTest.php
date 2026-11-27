@@ -111,6 +111,8 @@ it('HC-08: trae las horas frente a grupo del docente (PL-01) y, sin plazas que l
     $twoSelections = Teacher::factory()->create();
     $cancelledOnly = Teacher::factory()->create();
     $nowhere = Teacher::factory()->create();
+    $mixedLow = Teacher::factory()->create();
+    $mixedHigh = Teacher::factory()->create();
     $live = Selection::factory()->create(['term_id' => $this->term->id]);
     $other = Selection::factory()->create(['term_id' => $this->term->id]);
     $cancelled = Selection::factory()->create(['term_id' => $this->term->id, 'status' => SelectionStatus::Cancelled]);
@@ -123,17 +125,24 @@ it('HC-08: trae las horas frente a grupo del docente (PL-01) y, sin plazas que l
     SelectionEntry::factory()->for($other)->create(['teacher_id' => $cancelledOnly->id, 'base_hours' => 0]);
     SelectionEntry::factory()->for($cancelled)->create(['teacher_id' => $cancelledOnly->id, 'base_hours' => 40]);
     SelectionEntry::factory()->for($elsewhere)->create(['teacher_id' => $nowhere->id, 'base_hours' => 40]);
+    SelectionEntry::factory()->for($live)->create(['teacher_id' => $mixedLow->id, 'base_hours' => 25]);
+    SelectionEntry::factory()->for($other)->create(['teacher_id' => $mixedLow->id, 'base_hours' => 30]);
+    SelectionEntry::factory()->for($live)->create(['teacher_id' => $mixedHigh->id, 'base_hours' => 35]);
+    SelectionEntry::factory()->for($other)->create(['teacher_id' => $mixedHigh->id, 'base_hours' => 40]);
 
-    $teachers = collect(app(ScheduleStateQuery::class)->teachers($this->term, [$career->id, $csvOnly->id, $honorarios->id, $twoSelections->id, $cancelledOnly->id, $nowhere->id]))->keyBy('id');
+    $teachers = collect(app(ScheduleStateQuery::class)->teachers($this->term, [$career->id, $csvOnly->id, $honorarios->id, $twoSelections->id, $cancelledOnly->id, $nowhere->id, $mixedLow->id, $mixedHigh->id]))->keyBy('id');
 
     // Tiempo completo titular: 22 (sus plazas mandan aunque venga en el CSV); 30 en el CSV es 16, 20 es 12; con dos
-    // selecciones, la menor; un renglón en 0, una selección cancelada o de otro periodo no cuentan.
+    // selecciones, cada renglón se convierte y cuenta el menor (25 y 30 → 25 y 16 → 16; 35 y 40 → 35 y 22 → 22); un
+    // renglón en 0, una selección cancelada o de otro periodo no cuentan.
     expect($teachers[$career->id]->teachingHours)->toBe(22)
         ->and($teachers[$csvOnly->id]->teachingHours)->toBe(16)
         ->and($teachers[$honorarios->id])->teachingHours->toBe(12)->isHonorarios->toBeTrue()
         ->and($teachers[$twoSelections->id]->teachingHours)->toBe(16)
         ->and($teachers[$cancelledOnly->id]->teachingHours)->toBe(0)
         ->and($teachers[$nowhere->id]->teachingHours)->toBe(0)
+        ->and($teachers[$mixedLow->id]->teachingHours)->toBe(16)
+        ->and($teachers[$mixedHigh->id]->teachingHours)->toBe(22)
         ->and($teachers[$career->id]->engineLimit)->toBeNull();
 });
 

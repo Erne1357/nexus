@@ -31,6 +31,7 @@ use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
+use App\Modules\Faculty\Events\TeachingHoursChanged;
 use App\Modules\Faculty\Queries\SelectionCsvHours;
 use App\Modules\Faculty\Queries\SelectionQueueMembership;
 use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
@@ -93,8 +94,8 @@ use Illuminate\Support\Facades\Gate;
 final class StaffingServiceProvider extends ModuleServiceProvider
 {
     /**
-     * Lo que recalcula `teacher_term_loads`: los grupos con docente de Scheduling y las plazas, horas externas,
-     * datos y adscripciones de Faculty.
+     * Lo que recalcula `teacher_term_loads`: los grupos con docente de Scheduling y las plazas, horas externas y
+     * autorizadas, horas frente a grupo del CSV de la selección (TeachingHoursChanged), datos y adscripciones de Faculty.
      */
     private const array REFRESH_LOADS_ON = [
         GroupTeacherChanged::class,
@@ -103,6 +104,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         PositionChanged::class,
         ExternalLoadChanged::class,
         HourAllowanceChanged::class,
+        TeachingHoursChanged::class,
         TeacherUpdated::class,
         AdscriptionChanged::class,
     ];
@@ -149,7 +151,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         Event::listen([GroupScheduleChanged::class, GroupCancelled::class, GroupTeacherChanged::class], RerankOnGroupChange::class);
         Event::listen([
             PositionChanged::class, ExternalLoadChanged::class, AvailabilityChanged::class, QualificationChanged::class,
-            AdscriptionChanged::class, TeacherUpdated::class, TeacherAccessChanged::class,
+            AdscriptionChanged::class, TeacherUpdated::class, TeacherAccessChanged::class, TeachingHoursChanged::class,
         ], RerankOnFacultyChange::class);
     }
 

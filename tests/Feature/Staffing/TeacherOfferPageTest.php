@@ -221,7 +221,7 @@ it('filtra por materia (?q=), semestre, «Sin docente» y «Entre tus 3 primeros
         ->assertSee('Quitar filtros');
 });
 
-it('«Entre tus 3 primeros» cuenta exactamente lo que muestra: lugar 1 a 3, sin marca que lo baje (pasar su banda, HC-08, es aviso y no lo saca) y sin contar los suyos', function () {
+it('«Entre tus 3 primeros» cuenta exactamente lo que muestra: lugar 1 a 3, sin marca que lo baje (tampoco pasar su banda, HC-08) y sin contar los suyos', function () {
     $top = offerGroup($this->sc, $this->c2, ['code' => 'TOP1']);
     $noHours = offerGroup($this->sc, $this->c2, ['code' => 'SIN1']);
     $clash = offerGroup($this->sc, $this->c2, ['code' => 'CHO1']);
@@ -237,10 +237,10 @@ it('«Entre tus 3 primeros» cuenta exactamente lo que muestra: lugar 1 a 3, sin
 
     $page = Livewire::actingAs($this->user)->test('staffing::pages.offer');
 
-    expect(offerText($page, '[data-testid="offer-state-top"]'))->toBe('Entre tus 3 primeros 2');
+    expect(offerText($page, '[data-testid="offer-state-top"]'))->toBe('Entre tus 3 primeros 1');
 
-    $page->set('state', 'top')->assertSee('TOP1')->assertSee('SIN1')
-        ->assertDontSee('CHO1')->assertDontSee('NOD1')->assertDontSee('MIO1')->assertDontSee('LEJ1')
+    $page->set('state', 'top')->assertSee('TOP1')
+        ->assertDontSee('SIN1')->assertDontSee('CHO1')->assertDontSee('NOD1')->assertDontSee('MIO1')->assertDontSee('LEJ1')
         ->assertSee('Mostrando');
 
     expect(offerText($page, '[data-testid="offer-state-todos"]'))->toBe('Todos 6')
