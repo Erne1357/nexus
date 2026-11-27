@@ -1,0 +1,187 @@
+<?php
+
+use App\Modules\Faculty\Database\Seeders\TeacherRosterGenerator;
+use Random\Engine\Mt19937;
+use Random\Randomizer;
+
+/*
+| Generador de plantillas de docentes de los seeders demo y masivo (tarea 7b). Clase pura, sin base: con una
+| semilla fija da los mismos docentes, con las plazas, asignaciones, disponibilidad e historial de los casos
+| que pide docs/arquitectura/testing.md ("Datos de prueba").
+*/
+
+/**
+ * @return list<array<string, mixed>>
+ */
+function roster(int $count = 60, string $campus = 'C2', int $seed = 2027, array $subjects = [8, 5, 0, 12]): array
+{
+    return (new TeacherRosterGenerator(new Randomizer(new Mt19937($seed))))->generate($campus, $count, $subjects);
+}
+
+it('con la misma semilla da los mismos docentes y con otra semilla, otros', function () {
+    expect(roster())->toBe(roster())
+        ->and(roster(seed: 1))->not->toBe(roster());
+});
+
+it('da un RFC único por docente y por campus', function () {
+    $numbers = array_column(roster(80), 'rfc');
+
+    expect(array_unique($numbers))->toHaveCount(80)
+        ->and(array_intersect($numbers, array_column(roster(80, 'C1'), 'rfc')))->toBe([]);
+});
+
+it('cubre los cinco tipos de plaza, varias plazas a la vez, vencidas, futuras y docentes sin plaza', function () {
+    $teachers = roster(40);
+    $kinds = collect($teachers)->flatMap(fn (array $teacher) => array_column($teacher['positions'], 'kind'))->unique()->sort()->values()->all();
+
+    expect($kinds)->toBe(['asignatura', 'honorarios', 'medio_tiempo', 'tiempo_completo', 'tres_cuartos'])
+        ->and(collect($teachers)->contains(fn (array $teacher) => count(array_filter($teacher['positions'], fn (array $position) => $position['kind'] === 'tiempo_completo')) >= 3))->toBeTrue()
+        ->and(collect($teachers)->contains(fn (array $teacher) => $teacher['positions'] === []))->toBeTrue()
+        ->and(collect($teachers)->flatMap(fn (array $teacher) => $teacher['positions'])->contains(fn (array $position) => $position['to'] !== null))->toBeTrue()
+        ->and(collect($teachers)->flatMap(fn (array $teacher) => $teacher['positions'])->contains(fn (array $position) => $position['from'] !== null && $position['from'] > '2027-01-01'))->toBeTrue();
+});
+
+it('respeta las horas de cada tipo de plaza', function () {
+    $hours = ['tiempo_completo' => 40, 'tres_cuartos' => 30, 'medio_tiempo' => 20, 'honorarios' => 0];
+
+    foreach (roster(80) as $teacher) {
+        foreach ($teacher['positions'] as $position) {
+            if ($position['kind'] === 'asignatura') {
+                expect($position['hours'])->toBeBetween(1, 40);
+            } else {
+                expect($position['hours'])->toBe($hours[$position['kind']]);
+            }
+        }
+    }
+});
+
+it('cada docente tiene una sola asignación principal, sin campus ni departamentos repetidos; algunos tienen dos o tres', function () {
+    $teachers = roster(60);
+
+    foreach ($teachers as $teacher) {
+        $departments = array_column($teacher['adscriptions'], 'dept');
+
+        expect(array_filter($teacher['adscriptions'], fn (array $adscription) => $adscription['primary']))->toHaveCount(1)
+            ->and(array_unique($departments))->toHaveCount(count($departments))
+            ->and(collect($teacher['adscriptions'])->every(fn (array $adscription) => array_keys($adscription) === ['dept', 'primary']))->toBeTrue();
+    }
+
+    expect(collect($teachers)->contains(fn (array $teacher) => count($teacher['adscriptions']) === 2))->toBeTrue()
+        ->and(collect($teachers)->contains(fn (array $teacher) => count($teacher['adscriptions']) === 3))->toBeTrue();
+});
+
+it('hay docentes de cada departamento, inactivos, borrados, sin correo, sin grado y con nombres muy largos', function () {
+    $teachers = collect(roster(60));
+
+    expect($teachers->pluck('adscriptions.0.dept')->unique()->sort()->values()->all())->toBe([0, 1, 2, 3])
+        ->and($teachers->contains(fn (array $teacher) => ! $teacher['is_active']))->toBeTrue()
+        ->and($teachers->contains(fn (array $teacher) => $teacher['deleted']))->toBeTrue()
+        ->and($teachers->contains(fn (array $teacher) => $teacher['email'] === null))->toBeTrue()
+        ->and($teachers->contains(fn (array $teacher) => $teacher['degree'] === null))->toBeTrue()
+        ->and($teachers->contains(fn (array $teacher) => mb_strlen($teacher['name']) > 80))->toBeTrue();
+});
+
+it('unos pocos docentes no traen correo institucional, y son los mismos con cualquier semilla', function () {
+    $without = fn (int $seed): array => array_column(array_filter(roster(200, seed: $seed), fn (array $teacher): bool => ! $teacher['has_institutional_email']), 'rfc');
+
+    expect(count($without(2027)))->toBeGreaterThan(0)->toBeLessThanOrEqual(10)
+        ->and($without(1))->toBe($without(2027));
+});
+
+it('la disponibilidad cae entre las 7:00 y las 21:00 de lunes a viernes, sin traslapes y con los contiguos unidos', function () {
+    $blocks = collect(roster(60))->pluck('availability')->filter();
+
+    expect($blocks->isNotEmpty())->toBeTrue();
+
+    foreach ($blocks as $teacherBlocks) {
+        $byDay = collect($teacherBlocks)->groupBy('day');
+
+        foreach ($byDay as $day => $dayBlocks) {
+            expect($day)->toBeBetween(1, 5);
+            $sorted = $dayBlocks->sortBy('starts_at')->values();
+
+            foreach ($sorted as $i => $block) {
+                expect($block['starts_at'])->toBeGreaterThanOrEqual('07:00')
+                    ->and($block['ends_at'])->toBeLessThanOrEqual('21:00')
+                    ->and($block['ends_at'])->toBeGreaterThan($block['starts_at']);
+
+                if ($i > 0) {
+                    $previous = $sorted[$i - 1];
+                    expect($block['starts_at'])->toBeGreaterThanOrEqual($previous['ends_at']);
+
+                    if ($block['starts_at'] === $previous['ends_at']) {
+                        expect($block['kind'])->not->toBe($previous['kind']);
+                    }
+                }
+            }
+        }
+    }
+});
+
+it('el historial tiene 8 periodos del SII, una fila por grupo, y evaluaciones de 1 a 5 de los dos tipos', function () {
+    $teachers = collect(roster(60));
+    $history = $teachers->flatMap(fn (array $teacher) => $teacher['history']);
+    $evaluations = $teachers->flatMap(fn (array $teacher) => $teacher['evaluations']);
+
+    expect($history->pluck('term')->unique()->count())->toBe(8)
+        ->and($history->every(fn (array $row) => preg_match('/^[0-9]{4}[123]$/', $row['term']) === 1))->toBeTrue()
+        ->and($evaluations->pluck('kind')->unique()->sort()->values()->all())->toBe(['departamental', 'estudiantil'])
+        ->and($evaluations->every(fn (array $row) => $row['score'] >= 1 && $row['score'] <= 5))->toBeTrue();
+
+    foreach ($teachers as $teacher) {
+        $keys = array_map(fn (array $row) => "{$row['term']}|{$row['subject']}|{$row['group']}", $teacher['history']);
+        expect(array_unique($keys))->toHaveCount(count($keys));
+    }
+
+    expect($teachers->contains(fn (array $teacher) => collect($teacher['history'])->groupBy(fn (array $row) => "{$row['term']}|{$row['subject']}")->contains(fn ($rows) => $rows->count() > 1)))->toBeTrue();
+});
+
+it('no da experiencia académica ni historial de materias de un departamento sin materias', function () {
+    foreach (roster(60) as $teacher) {
+        if ($teacher['adscriptions'][0]['dept'] === 2) {
+            expect($teacher['profile'])->toBe([])->and($teacher['history'])->toBe([]);
+        }
+    }
+});
+
+it('las plazas de un docente no repiten tipo y «desde», que es la clave de la importación de plazas', function () {
+    foreach ([2027, 1, 99] as $seed) {
+        foreach (roster(400, seed: $seed) as $teacher) {
+            $keys = array_map(fn (array $p): string => "{$p['kind']}/{$p['from']}", $teacher['positions']);
+
+            expect(array_unique($keys))->toHaveCount(count($keys));
+        }
+    }
+});
+
+it('con pesos por departamento, la asignación principal sigue los pesos y aun así hay un docente de cada departamento', function () {
+    $teachers = (new TeacherRosterGenerator(new Randomizer(new Mt19937(2027))))->generate('C2', 300, [8, 5, 0, 12], [1, 1, 1, 97]);
+    $primaries = array_count_values(array_map(fn (array $teacher): int => $teacher['adscriptions'][0]['dept'], $teachers));
+
+    expect(array_keys($primaries))->toEqualCanonicalizing([0, 1, 2, 3])
+        ->and($primaries[3])->toBeGreaterThan(250);
+});
+
+it('el modo proceso deja como una décima parte de la semana no disponible; el de siempre, como un tercio', function () {
+    $unavailableShare = function (TeacherRosterGenerator $generator): float {
+        $blocked = 0;
+        $withAvailability = 0;
+
+        foreach ($generator->generate('C2', 400, [8, 5, 0, 12]) as $teacher) {
+            if ($teacher['availability'] === []) {
+                continue;
+            }
+
+            $withAvailability++;
+
+            foreach ($teacher['availability'] as $block) {
+                $blocked += $block['kind'] === 'unavailable' ? (int) substr($block['ends_at'], 0, 2) - (int) substr($block['starts_at'], 0, 2) : 0;
+            }
+        }
+
+        return $blocked / ($withAvailability * 5 * 14);
+    };
+
+    expect($unavailableShare(TeacherRosterGenerator::forProcess(new Randomizer(new Mt19937(2027)))))->toBeBetween(0.06, 0.14)
+        ->and($unavailableShare(new TeacherRosterGenerator(new Randomizer(new Mt19937(2027)))))->toBeBetween(0.28, 0.40);
+});

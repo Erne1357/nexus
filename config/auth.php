@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\User;
+use App\Modules\Core\Models\User;
 
 return [
 
@@ -113,5 +113,32 @@ return [
     */
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Contraseña inicial del admin
+    |--------------------------------------------------------------------------
+    |
+    | La usa AdminUserSeeder (Core) solo al crear el usuario `admin`, que debe
+    | cambiarla en su primer acceso. Obligatoria fuera de local y testing; si
+    | falta en local o testing, el seeder genera una aleatoria y la muestra.
+    |
+    */
+
+    'admin_initial_password' => env('ADMIN_INITIAL_PASSWORD'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Contraseña por defecto del personal
+    |--------------------------------------------------------------------------
+    |
+    | El alta del personal ya no la pone: todo usuario nace sin acceso y
+    | entra por la invitación con enlace (CF-07). Quien entra con ella queda obligado a cambiarla y no
+    | puede volver a elegirla. Solo vive en .env (NEXUS_DEFAULT_PASSWORD):
+    | el repositorio es público.
+    |
+    */
+
+    'default_password' => env('NEXUS_DEFAULT_PASSWORD'),
 
 ];

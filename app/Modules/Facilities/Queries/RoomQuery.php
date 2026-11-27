@@ -1,0 +1,235 @@
+<?php
+
+namespace App\Modules\Facilities\Queries;
+
+use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Queries\TextSearch;
+use App\Modules\Facilities\Enums\FacilitiesPermission;
+use App\Modules\Facilities\Enums\RoomType;
+use App\Modules\Facilities\Models\Room;
+use App\Modules\Facilities\Models\RoomBlock;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+
+/**
+ * Lecturas de salones y de sus bloqueos para las pantallas. Cada salón es de un campus y la pantalla los muestra de
+ * todos los campus que el usuario ve (#415, la credencial ya no elige campus). Los ve quien los cubre según
+ * RoomPolicy: el admin y la Subdirección de ese campus.
+ */
+final class RoomQuery
+{
+    /** Valor del filtro de dueño para los salones sin departamento dueño. */
+    public const string WITHOUT_OWNER = 'sin_dueno';
+
+    /**
+     * La tabla de salones de los campus de `$campuses`, por clave y sin los borrados, con su edificio, su dueño y cuántos
+     * bloqueos tiene (`blocks_count`). Busca `$search` en la clave o el nombre con TextSearch; filtra por
+     * edificio, tipo, dueño (un id o WITHOUT_OWNER) y estado. Los filtros llegan del navegador: uno que no
+     * es uuid o no es un tipo no encuentra a nadie, en lugar de tronar en PostgreSQL (ADR-0014).
+     *
+     * @param  Collection<int, Campus>  $campuses
+     * @return LengthAwarePaginator<int, Room>
+     */
+    public function forTable(
+        Actor $context,
+        Collection $campuses,
+        string $search = '',
+        ?string $building = null,
+        ?string $type = null,
+        ?string $owner = null,
+        ?bool $active = null,
+        int $perPage = 15,
+    ): LengthAwarePaginator {
+        return $this->filtered($context, $campuses, $search, $building, $type, $owner, $active)
+            ->with(['campus:id,code,name', 'building:id,code,name', 'department:id,code,name'])
+            ->withCount('blocks')
+            ->orderBy('code')
+            ->paginate($perPage);
+    }
+
+    /**
+     * Los ids de todos los salones que cumplen los mismos filtros de forTable(), de todas las páginas, para «Elegir los
+     * N de la lista» al asignar dueño en bloque.
+     *
+     * @param  Collection<int, Campus>  $campuses
+     * @return list<string>
+     */
+    public function idsForTable(
+        Actor $context,
+        Collection $campuses,
+        string $search = '',
+        ?string $building = null,
+        ?string $type = null,
+        ?string $owner = null,
+        ?bool $active = null,
+    ): array {
+        return $this->filtered($context, $campuses, $search, $building, $type, $owner, $active)
+            ->orderBy('code')
+            ->pluck('rooms.id')
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, Campus>  $campuses
+     * @return Builder<Room>
+     */
+    private function filtered(Actor $context, Collection $campuses, string $search, ?string $building, ?string $type, ?string $owner, ?bool $active): Builder
+    {
+        return Room::query()
+            ->whereIn('campus_id', $campuses->pluck('id')->all())
+            ->tap(fn (Builder $query) => $context->constrain($query, FacilitiesPermission::RoomView, ['campus' => 'rooms.campus_id']))
+            ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
+            ->when($building, fn (Builder $query, string $id) => Str::isUuid($id) ? $query->where('building_id', $id) : $query->whereRaw('false'))
+            ->when($type, fn (Builder $query, string $value) => RoomType::tryFrom($value) === null ? $query->whereRaw('false') : $query->where('type', $value))
+            ->when($owner, fn (Builder $query, string $value) => match (true) {
+                $value === self::WITHOUT_OWNER => $query->whereNull('department_id'),
+                Str::isUuid($value) => $query->where('department_id', $value),
+                default => $query->whereRaw('false'),
+            })
+            ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active));
+    }
+
+    /**
+     * Cuántos salones activos, sin borrar, de cualquier campus, no tienen departamento dueño: ningún jefe los revisa en la
+     * validación de salones (CV12, confirmado el 14 de noviembre de 2026; el aviso de «Abrir validación»).
+     */
+    public function withoutOwnerCount(): int
+    {
+        return Room::query()->where('is_active', true)->whereNull('department_id')->count();
+    }
+
+    /**
+     * Los salones activos, sin borrar, de cualquier campus, que no tienen departamento dueño, por campus y clave, con su
+     * campus y edificio: la lista de «Reclamar salones sin dueño» (CV16, confirmado el 20 de noviembre de 2026). Busca
+     * `$search` en la clave o el nombre; `$campusId` y `$buildingId` dejan los de ese campus o edificio (uno que no es
+     * uuid no deja ninguno). Devuelve a lo más `$limit` y cuántos hay en total. No lleva alcance de campus: la reclama
+     * el jefe, que es de todo el Tec.
+     *
+     * @return array{rooms: EloquentCollection<int, Room>, total: int}
+     */
+    public function unowned(string $search = '', string $campusId = '', string $buildingId = '', int $limit = 40): array
+    {
+        $query = Room::query()
+            ->where('rooms.is_active', true)->whereNull('rooms.department_id')
+            ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search));
+
+        foreach (['campus_id' => $campusId, 'building_id' => $buildingId] as $column => $id) {
+            if ($id !== '') {
+                Str::isUuid($id) ? $query->where("rooms.{$column}", $id) : $query->whereRaw('false');
+            }
+        }
+
+        return [
+            'total' => (clone $query)->count(),
+            'rooms' => $query->with(['campus:id,code,name', 'building:id,code,name'])
+                ->orderBy(Campus::query()->select('code')->whereColumn('campuses.id', 'rooms.campus_id'))->orderBy('rooms.code')
+                ->limit($limit)->get(),
+        ];
+    }
+
+    /**
+     * Los campus y edificios que tienen salones activos sin dueño, como opciones de x-select, para los filtros de
+     * `unowned()`: sin los borrados, por clave; el edificio con su campus.
+     *
+     * @return array{campuses: list<array{id: string, name: string}>, buildings: list<array{id: string, name: string, campus_id: string}>}
+     */
+    public function unownedFilterOptions(): array
+    {
+        $rooms = Room::query()->where('is_active', true)->whereNull('department_id')
+            ->with(['campus:id,code,name', 'building:id,code,name'])->get(['id', 'campus_id', 'building_id']);
+
+        return [
+            'campuses' => $rooms->pluck('campus')->filter()->unique('id')->sortBy('code')
+                ->map(fn ($campus): array => ['id' => $campus->id, 'name' => "{$campus->code} · {$campus->name}"])->values()->all(),
+            'buildings' => $rooms->filter(fn (Room $room): bool => $room->building !== null)->unique('building_id')->sortBy(fn (Room $room): string => ($room->campus?->code ?? '').' '.$room->building->code)
+                ->map(fn (Room $room): array => ['id' => $room->building->id, 'name' => trim(($room->campus?->code ?? '').' · '.$room->building->code.' · '.$room->building->name, ' ·'), 'campus_id' => $room->campus_id])->values()->all(),
+        ];
+    }
+
+    /**
+     * El salón que se va a editar, sin los borrados.
+     *
+     * @throws ModelNotFoundException<Room>
+     */
+    public function findOrFail(string $id): Room
+    {
+        return KeyLookup::findOrFail(Room::query(), $id);
+    }
+
+    /**
+     * El bloqueo que se va a quitar, sin los quitados, con su salón (la policy lo autoriza por él).
+     *
+     * @throws ModelNotFoundException<RoomBlock>
+     */
+    public function findBlockOrFail(string $id): RoomBlock
+    {
+        return KeyLookup::findOrFail(RoomBlock::query()->with('room'), $id);
+    }
+
+    /**
+     * El bloqueo, sin los quitados, o null si ya no existe (quitarlo dos veces no es un error).
+     */
+    public function findBlock(string $id): ?RoomBlock
+    {
+        return KeyLookup::find(RoomBlock::query()->with('room'), $id);
+    }
+
+    /**
+     * Los departamentos que se pueden elegir como dueño: los activos y, al editar, el que el salón ya tiene
+     * aunque esté desactivado.
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    public function ownerOptions(?string $current = null): array
+    {
+        return Department::query()
+            ->where(fn (Builder $query) => $query->where('is_active', true)->when($current !== null && Str::isUuid($current), fn (Builder $query) => $query->orWhere('id', $current)))
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'is_active'])
+            ->map(fn (Department $department): array => [
+                'id' => $department->id,
+                'name' => "{$department->code} · {$department->name}".($department->is_active ? '' : ' (inactivo)'),
+            ])
+            ->all();
+    }
+
+    /**
+     * Los bloqueos del salón, por día y hora, con su periodo.
+     *
+     * @return EloquentCollection<int, RoomBlock>
+     */
+    public function blocksOf(Room $room): EloquentCollection
+    {
+        return $room->blocks()->with('term:id,code,name')->orderBy('day')->orderBy('starts_at')->get();
+    }
+
+    /**
+     * Los tipos de salón como opciones de x-select.
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    public function typeOptions(): array
+    {
+        return array_map(fn (RoomType $type): array => ['id' => $type->value, 'name' => $type->label()], RoomType::cases());
+    }
+
+    /**
+     * Los periodos, del más reciente al más antiguo, como opciones de x-select.
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    public function termOptions(): array
+    {
+        return Term::query()->orderByDesc('code')->get(['id', 'code', 'name'])
+            ->map(fn (Term $term): array => ['id' => $term->id, 'name' => "{$term->code} · {$term->name}"])
+            ->all();
+    }
+}

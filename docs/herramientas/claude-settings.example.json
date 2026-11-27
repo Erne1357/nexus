@@ -1,0 +1,44 @@
+{
+  "_comentario": "Copiar a .claude/settings.json (se versiona) o .claude/settings.local.json (personal). Permite sin preguntar los comandos de uso diario y bloquea los peligrosos.",
+  "permissions": {
+    "allow": [
+      "Bash(docker compose ps *)",
+      "Bash(docker compose logs *)",
+      "Bash(docker compose exec app php artisan *)",
+      "Bash(docker compose exec -T app php artisan *)",
+      "Bash(docker compose exec app ./vendor/bin/pest *)",
+      "Bash(docker compose exec app ./vendor/bin/pint *)",
+      "Bash(docker compose exec -T app ./vendor/bin/pint *)",
+      "Bash(docker compose exec app composer *)",
+      "Bash(gh issue *)",
+      "Bash(gh pr *)",
+      "Bash(gh label *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git worktree *)"
+    ],
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(docker compose down -v *)",
+      "Bash(docker volume rm *)",
+      "Read(./.env)",
+      "Read(./storage/app/imports/**)"
+    ]
+  },
+  "hooks": {
+    "_comentario": "Opcional. Corre Pint sobre cada archivo PHP editado. Requiere contenedores arriba; si no, quítalo.",
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.php) docker compose exec -T app ./vendor/bin/pint \"${f#$PWD/}\" >/dev/null 2>&1 || true;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,217 @@
+<?php
+
+use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+
+/*
+| Layout en el navegador. DemoCatalog (tests/Fixtures/Modules) agrega "Saludo", para coordinadores,
+| en Servicios escolares, y "Elementos", solo para el admin, en Recursos humanos. Inicio es el primer
+| icono de la franja. Cerrado, el menú muestra el área de la pantalla (en Inicio, la primera); las demás
+| se ven al abrirlo con la liebre. Los iconos de área no abren el menú: llevan a la última página que
+| visitaste del área. El periodo y el tema están en la tarjeta de la credencial; el campus no (#415: lo
+| elige cada pantalla).
+*/
+
+beforeEach(function () {
+    // Como al arrancar: indexar los nombres de las rutas del módulo y rearmar el registro.
+    registerDemoCatalog();
+
+    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
+    $this->previous = Term::factory()->create(['name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
+    // Carga en curso (MN-04): el coordinador ve las pantallas de la carga y el admin, sin la insignia «Oculta».
+    AcademicLoad::factory()->for($term)->create();
+
+    User::factory()->admin()->create(['username' => 'admin', 'name' => 'Ana Admin']);
+    User::factory()
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+        ->create(['username' => '19110001', 'name' => 'Carlos Coordinador']);
+});
+
+function signInFromBrowser(string $username)
+{
+    return visit('/login')
+        ->fill('username', $username)
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->assertScript('window.Alpine?.$data(document.body).menuOpen === false');
+}
+
+it('navegación muestra solo lo permitido por rol', function () {
+    $page = signInFromBrowser('19110001')
+        ->assertVisible('#nexus-menu [data-menu-home]')
+        ->assertMissing('a[data-label="Saludo"]')
+        ->click('@hare')
+        ->assertSeeIn('[aria-label="Navegación principal"]', 'Saludo')
+        ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Elementos')
+        ->assertSee('Coordinador de carrera')
+        ->keys('#nexus-menu-search', 'Escape')
+        ->assertScript('document.body.dataset.menu', 'closed')
+        ->assertNoJavaScriptErrors();
+
+    $page->click('Carlos Coordinador')
+        ->press('Cerrar sesión')
+        ->assertPathIs('/login');
+
+    signInFromBrowser('admin')
+        ->assertVisible('#nexus-menu [data-menu-home]')
+        ->click('@hare')
+        ->assertSeeIn('[aria-label="Navegación principal"]', 'Saludo')
+        ->assertSeeIn('[aria-label="Navegación principal"]', 'Elementos')
+        ->assertSee('Administración')
+        ->assertNoJavaScriptErrors();
+});
+
+it('el icono de otra área lleva a la última página que visitaste de ella, con el menú cerrado; el menú lo abre la liebre', function () {
+    $page = signInFromBrowser('admin');
+
+    $page->navigate('/campus?search=Campus')
+        ->assertScript('window.Alpine?.$data(document.body).menuOpen === false')
+        ->assertPresent('[data-menu-area="administracion"] [data-menu-flip="icon"][data-area-current]')
+        ->click('[data-menu-area="servicios_escolares"] [data-menu-flip="icon"]')
+        ->assertPathIs('/students')
+        ->assertScript('document.body.dataset.menu', 'closed')
+        ->click('[data-menu-area="administracion"] [data-menu-flip="icon"]')
+        ->assertPathIs('/campus')
+        ->assertQueryStringHas('search', 'Campus')
+        ->assertScript('document.body.dataset.menu', 'closed')
+        ->click('@hare')
+        ->assertScript('document.body.dataset.menu', 'open')
+        ->assertNoJavaScriptErrors();
+});
+
+it('MN-07: Inicio, el primer icono de la franja, lleva al inicio; ahí no hay columna de ninguna área y el mapa ocupa su lugar', function () {
+    signInFromBrowser('admin')
+        ->navigate('/campus')
+        ->assertVisible('a[data-label="Campus"]')
+        ->click('#nexus-menu [data-menu-home]')
+        ->assertPathIs('/')
+        ->assertAttribute('#nexus-menu [data-menu-home]', 'aria-current', 'page')
+        ->assertNotPresent('#nexus-menu [data-area-current]')
+        ->assertMissing('a[data-label="Validación de catálogos"]')
+        ->assertMissing('a[data-label="Campus"]')
+        ->assertScript('document.querySelector("#nexus-menu").getBoundingClientRect().width === 64')
+        ->assertScript('document.getElementById("nexus-content").getBoundingClientRect().left === 64')
+        ->assertScript('document.querySelector("#nexus-menu [data-menu-home]").getBoundingClientRect().top < document.querySelector(\'[data-menu-area="academico"] [data-menu-flip="icon"]\').getBoundingClientRect().top')
+        ->assertNoJavaScriptErrors();
+});
+
+it('el menú no brinca: lo que espera para moverse sale de su lugar inicial, la cascada no pasa de 400 ms y al cerrar todo va a la vez', function () {
+    $page = signInFromBrowser('admin');
+
+    // Las animaciones del menú y de la copia que se desvanece al cerrar. Una con retraso y sin fill
+    // backwards pinta el elemento en su lugar final mientras espera y después brinca al inicial.
+    $page->script(<<<'JS'
+        (() => {
+            window.menuMotion = () => {
+                const ofMenu = document.getAnimations()
+                    .filter((animation) => animation.effect?.target?.closest?.('#nexus-menu, [data-menu-ghost]'));
+
+                return {
+                    count: ofMenu.length,
+                    jumps: ofMenu.filter((animation) => {
+                        const { delay, fill } = animation.effect.getTiming();
+
+                        return delay > 0 && fill !== 'backwards' && fill !== 'both';
+                    }).length,
+                    longestWait: Math.max(0, ...ofMenu.map((animation) => animation.effect.getTiming().delay)),
+                    ghost: ofMenu.some((animation) => animation.effect.target.closest('[data-menu-ghost]') !== null),
+                };
+            };
+        })()
+    JS);
+
+    $opening = $page->script('(() => { Alpine.$data(document.body).openMenu(); return menuMotion(); })()');
+
+    $page->assertScript('Alpine.$data(document.body).busy === false');
+
+    $closing = $page->script('(() => { Alpine.$data(document.body).closeMenu(); return { closedAtOnce: document.body.dataset.menu === "closed", ...menuMotion() }; })()');
+
+    // La cascada de abrir no espera más de 400 ms, aunque el admin vea todo el menú.
+    expect($opening)->count->toBeGreaterThan(0)->jumps->toBe(0)->longestWait->toBeLessThanOrEqual(400)->toBeGreaterThan(0)
+        ->and($closing)->closedAtOnce->toBeTrue()->ghost->toBeTrue()->jumps->toBe(0);
+
+    $page->assertScript('document.querySelector("[data-menu-ghost]") === null')
+        ->assertScript('document.activeElement.id', 'nexus-hare')
+        ->assertNoJavaScriptErrors();
+});
+
+it('cambia el periodo activo desde la credencial y lo confirma con un toast', function () {
+    // La credencial muestra el periodo de consulta, el en curso por omisión (TP-03, TP-04): el día cae en Ene-Jun 2027.
+    $this->travelTo('2027-02-01 10:00:00');
+
+    signInFromBrowser('admin')
+        ->assertSeeIn('@credential', 'Administración · Ene-Jun 2027')
+        ->click('@credential')
+        ->select('term', (string) $this->previous->id)
+        ->waitForText('Periodo actualizado')
+        ->refresh()
+        ->assertSeeIn('@credential', 'Administración · Ago-Dic 2026')
+        ->assertSelected('term', (string) $this->previous->id)
+        ->assertNoJavaScriptErrors();
+});
+
+it('la credencial no lleva campus, ni en el resumen ni en la tarjeta', function (string $username) {
+    signInFromBrowser($username)
+        ->assertDontSeeIn('@credential', 'Campus')
+        ->click('@credential')
+        ->assertDontSeeIn('#nexus-credential', 'Campus I')
+        ->assertNotPresent('select[name="campus"]')
+        ->assertPresent('select[name="term"]');
+})->with(['admin de dos campus' => 'admin', 'coordinador de uno' => '19110001']);
+
+it('cambia entre el tema claro y el oscuro desde la credencial', function () {
+    $page = signInFromBrowser('admin')
+        ->assertScript('document.documentElement.dataset.theme', 'nexus')
+        ->click('@credential')
+        ->assertVisible('@theme-toggle')
+        ->radio('nexus-theme', 'nexus-dark')
+        ->assertScript('document.documentElement.dataset.theme', 'nexus-dark');
+
+    $page->refresh()
+        ->assertScript('document.documentElement.dataset.theme', 'nexus-dark')
+        ->assertScript('window.Alpine?.$data(document.body).menuOpen === false')
+        ->click('@credential')
+        ->assertRadioSelected('nexus-theme', 'nexus-dark')
+        ->radio('nexus-theme', 'nexus')
+        ->assertScript('document.documentElement.dataset.theme', 'nexus');
+});
+
+it('el cambio de tema pasa por la transición de vista de la liebre', function () {
+    $page = signInFromBrowser('admin');
+    $page->script('window.__vt = 0; const start = document.startViewTransition.bind(document); document.startViewTransition = (update) => { window.__vt++; return start(update); };');
+
+    $page->click('@credential')
+        ->radio('nexus-theme', 'nexus-dark')
+        ->assertScript('document.documentElement.dataset.theme', 'nexus-dark')
+        ->assertScript('window.__vt > 0', true)
+        ->wait(1.5)
+        ->assertScript("document.documentElement.hasAttribute('data-theme-switch')", false)
+        ->assertVisible('@theme-toggle');
+});
+
+it('sin transiciones de vista el tema cambia igual y se recuerda', function () {
+    $page = signInFromBrowser('admin');
+    $page->script('document.startViewTransition = undefined;');
+
+    $page->click('@credential')
+        ->radio('nexus-theme', 'nexus-dark')
+        ->assertScript('document.documentElement.dataset.theme', 'nexus-dark')
+        ->refresh()
+        ->assertScript('document.documentElement.dataset.theme', 'nexus-dark');
+});
+
+it('MN-07: en el celular el menú no se abre solo en Inicio; abierto muestra las áreas como siempre', function () {
+    signInFromBrowser('admin')
+        ->resize(390, 844)
+        ->navigate('/')
+        ->assertScript('window.Alpine?.$data(document.body).menuOpen === false')
+        ->assertMissing('a[data-label="Validación de catálogos"]')
+        ->assertScript('document.getElementById("nexus-content").getBoundingClientRect().left === 0')
+        ->assertNoJavaScriptErrors();
+});

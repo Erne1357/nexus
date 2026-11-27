@@ -1,0 +1,358 @@
+<?php
+
+namespace App\Modules\Imports\Console;
+
+use App\Modules\Faculty\Enums\PositionKind;
+use App\Modules\Faculty\Enums\TeacherDegree;
+use App\Modules\Imports\Templates\ImportTemplate;
+use App\Modules\Imports\Templates\StudentsTemplate;
+use App\Modules\Imports\Templates\TemplateRegistry;
+use App\Modules\Students\Database\Seeders\ClosingGrades;
+use App\Modules\Students\Enums\KardexResult;
+use Closure;
+use Illuminate\Console\Command;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\LazyCollection;
+
+/**
+ * Escribe lo sembrado (DemoSeeder o MassiveSeeder) como un CSV por plantilla de importación, para probar el
+ * asistente de punta a punta con archivos grandes sin exportaciones reales del SII. Los encabezados son las
+ * etiquetas de cada plantilla, que ColumnMatcher reconoce sin mapeo guardado. Los archivos caen en
+ * `storage/app/imports/<dir>/` (disco `imports`, fuera de git) y se suben en el orden de
+ * reglas-de-negocio.md, "Reglas de datos".
+ *
+ * Con `--closing-grades` (por omisión, el ordinario anterior al periodo actual) escribe además `kardex-cierre-<periodo>.csv`, las
+ * calificaciones de cierre de lo que se cursa, para el ensayo del re-análisis (ver writeClosingGrades()).
+ *
+ * No exporta lo borrado; lo inactivo sí, con su «vigente» en los planes. Los renglones salen por bloques
+ * (`lazyById`) a un flujo, sin cargar el kárdex en memoria. No corre en producción: son datos de prueba.
+ */
+final class ExportDemoFiles extends Command
+{
+    private const int CHUNK = 5000;
+
+    protected $signature = 'imports:export-demo
+        {--dir=demo : Carpeta dentro del disco imports}
+        {--closing-grades= : Periodo cuyas calificaciones de cierre se escriben en kardex-cierre-<periodo>.csv (por omisión, el ordinario anterior al periodo actual)}
+        {--captured-share=0.85 : Parte de lo que se cursa que se califica, en materias completas (como la demo del re-análisis)}
+        {--failure-share=0.15 : Parte de lo calificado que sale reprobada}
+        {--seed=2027 : Semilla del reparto de aprobadas y reprobadas}';
+
+    protected $description = 'Escribe los datos sembrados como CSV con el formato de cada plantilla de importación';
+
+    public function handle(TemplateRegistry $templates): int
+    {
+        if ($this->laravel->isProduction()) {
+            $this->components->error('No se exportan datos de prueba en producción.');
+
+            return self::FAILURE;
+        }
+
+        $dir = trim((string) $this->option('dir'), '/');
+
+        if ($dir === '' || str_contains($dir, '..')) {
+            $this->components->error('La carpeta debe ser un nombre dentro del disco imports.');
+
+            return self::FAILURE;
+        }
+
+        $disk = Storage::disk('imports');
+        $disk->makeDirectory($dir);
+
+        foreach ($this->sources() as $template => $rows) {
+            $path = $disk->path("{$dir}/{$template}.csv");
+            $count = $this->write($path, $templates->get($template), $rows());
+
+            if ($count === null) {
+                $this->components->error("No se pudo escribir {$dir}/{$template}.csv.");
+
+                return self::FAILURE;
+            }
+
+            $this->components->twoColumnDetail("{$dir}/{$template}.csv", "{$count} filas");
+        }
+
+        foreach ($this->roomFiles() as $name => $rows) {
+            $path = $disk->path("{$dir}/{$name}.csv");
+            $count = $this->write($path, $templates->get('rooms'), $rows());
+
+            if ($count === null) {
+                $this->components->error("No se pudo escribir {$dir}/{$name}.csv.");
+
+                return self::FAILURE;
+            }
+
+            $this->components->twoColumnDetail("{$dir}/{$name}.csv", "{$count} filas");
+        }
+
+        return $this->writeClosingGrades($disk->path($dir), $dir, $templates->get('kardex'));
+    }
+
+    /**
+     * El kárdex de cierre para el ensayo del re-análisis: las filas `cursando` del periodo (por omisión, el ordinario
+     * anterior al periodo actual) pasan a calificación final con la misma regla de DemandRecalculationDemoSeeder
+     * (ClosingGrades): materias completas hasta `--captured-share` de lo que se cursa y `--failure-share` de reprobadas,
+     * repartidas por `crc32(número de control|clave de materia|semilla)`, así que el mismo archivo sale cada vez. Mismas
+     * columnas que la plantilla `kardex`, para subirlo por el asistente. No escribe nada si el periodo no tiene filas
+     * cursando.
+     */
+    private function writeClosingGrades(string $path, string $dir, ImportTemplate $template): int
+    {
+        $current = (string) (DB::table('terms')->where('is_current', true)->value('code') ?? '20271');
+        $term = trim((string) ($this->option('closing-grades') ?: ($current[4] === '1' ? sprintf('%04d3', (int) substr($current, 0, 4) - 1) : substr($current, 0, 4).'1')));
+
+        if (preg_match('/^[0-9]{4}[123]$/', $term) !== 1) {
+            $this->components->error('El periodo de las calificaciones de cierre debe ser un código del SII, como 20263.');
+
+            return self::FAILURE;
+        }
+
+        $subjectIds = ClosingGrades::subjectsToCapture($term, (float) $this->option('captured-share'));
+        $pending = DB::table('kardex_records as kr')
+            ->join('students as st', 'st.id', '=', 'kr.student_id')
+            ->join('subjects as s', 's.id', '=', 'kr.subject_id')
+            ->where('kr.term_code', $term)->where('kr.result', KardexResult::Cursando->value)
+            ->whereIn('kr.subject_id', $subjectIds)
+            ->whereNull('kr.deleted_at')->whereNull('st.deleted_at')->whereNull('s.deleted_at')
+            ->get(['kr.id', 'st.control_number', 's.code', 'kr.attempt', 'kr.sii_subject_code'])
+            ->keyBy('id');
+
+        if ($pending->isEmpty()) {
+            $this->components->warn("No hay filas cursando en {$term}: no se escribe el kárdex de cierre.");
+
+            return self::SUCCESS;
+        }
+
+        $split = ClosingGrades::split(
+            $pending->map(fn (object $r): array => ['id' => (string) $r->id, 'key' => "{$r->control_number}|{$r->code}"])->values()->all(),
+            (float) $this->option('failure-share'),
+            (int) $this->option('seed'),
+        );
+        $failed = array_flip($split['failed']);
+        $rows = $pending->sortBy(fn (object $r): string => "{$r->control_number}|{$r->code}")->map(fn (object $r): array => [
+            $r->control_number, $r->code, $term,
+            isset($failed[$r->id]) ? ClosingGrades::FAILED_GRADE : ClosingGrades::PASSED_GRADE,
+            isset($failed[$r->id]) ? KardexResult::Reprobada->value : KardexResult::Aprobada->value,
+            $r->attempt, $r->sii_subject_code,
+        ])->values();
+
+        $name = "kardex-cierre-{$term}";
+
+        if ($this->write("{$path}/{$name}.csv", $template, $rows) === null) {
+            $this->components->error("No se pudo escribir {$dir}/{$name}.csv.");
+
+            return self::FAILURE;
+        }
+
+        $this->components->twoColumnDetail("{$dir}/{$name}.csv", sprintf('%d filas (%d aprobadas, %d reprobadas)', $rows->count(), count($split['passed']), count($failed)));
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Un archivo de salones por campus que los tenga (`rooms-<CAMPUS>.csv`): la plantilla `rooms` es de un campus, el
+     * del lote, y se sube una vez por campus. Salen los salones sin borrar, también los inactivos, con el tipo
+     * como lo reconoce la plantilla y el edificio por su clave.
+     *
+     * @return array<string, Closure(): iterable<int, list<scalar|null>>>
+     */
+    private function roomFiles(): array
+    {
+        $files = [];
+
+        $campuses = DB::table('campuses')->whereNull('deleted_at')
+            ->whereExists(fn (Builder $rooms) => $rooms->from('rooms')->whereColumn('rooms.campus_id', 'campuses.id')->whereNull('rooms.deleted_at'))
+            ->orderBy('code')->pluck('id', 'code');
+
+        foreach ($campuses as $code => $campusId) {
+            $files["rooms-{$code}"] = fn (): iterable => DB::table('rooms as r')
+                ->join('buildings as b', 'b.id', '=', 'r.building_id')
+                ->leftJoin('departments as d', fn ($join) => $join->on('d.id', '=', 'r.department_id')->whereNull('d.deleted_at'))
+                ->where('r.campus_id', $campusId)->whereNull('r.deleted_at')->whereNull('b.deleted_at')
+                ->orderBy('b.code')->orderBy('r.code')
+                ->get(['b.code as building', 'r.code', 'r.name', 'r.type', 'r.capacity', 'd.code as department'])
+                ->map(fn (object $r): array => [$r->building, $r->code, $r->name, $r->type, $r->capacity, $r->department]);
+        }
+
+        return $files;
+    }
+
+    /**
+     * Una función por plantilla que da los renglones como lista de valores, en el orden de `fields()`.
+     *
+     * @return array<string, Closure(): iterable<int, list<scalar|null>>>
+     */
+    private function sources(): array
+    {
+        return [
+            'departments' => fn (): iterable => DB::table('departments')->whereNull('deleted_at')->orderBy('code')
+                ->get(['code', 'name'])->map(fn (object $r): array => [$r->code, $r->name]),
+
+            // Un renglón por carrera y campus (reglas de datos): la oferta es lo que lleva el campus.
+            'careers' => fn (): iterable => DB::table('career_campus as cc')
+                ->join('careers as c', 'c.id', '=', 'cc.career_id')
+                ->join('departments as d', 'd.id', '=', 'c.department_id')
+                ->join('campuses as k', 'k.id', '=', 'cc.campus_id')
+                ->whereNull('cc.deleted_at')->whereNull('c.deleted_at')->whereNull('d.deleted_at')
+                ->orderBy('c.code')->orderBy('k.code')
+                ->get(['c.code', 'c.name', 'd.code as department', 'k.code as campus'])
+                ->map(fn (object $r): array => [$r->code, $r->name, $r->department, $r->campus]),
+
+            'study_plans' => fn (): iterable => DB::table('study_plans as p')
+                ->join('careers as c', 'c.id', '=', 'p.career_id')
+                ->whereNull('p.deleted_at')->whereNull('c.deleted_at')
+                ->orderBy('p.code')
+                ->get(['p.code', 'c.code as career', 'p.name', 'p.version', 'p.is_active', 'p.is_current'])
+                ->map(fn (object $r): array => [$r->code, $r->career, $r->name, $r->version, $r->is_active ? 'Sí' : 'No', $r->is_current ? 'Sí' : 'No']),
+
+            // Una fila por lugar en la retícula; la especialidad solo si no está borrada.
+            'subjects' => fn (): iterable => DB::table('study_plan_subjects as sp')
+                ->join('study_plans as p', 'p.id', '=', 'sp.study_plan_id')
+                ->join('subjects as s', 's.id', '=', 'sp.subject_id')
+                ->join('departments as d', 'd.id', '=', 's.department_id')
+                ->leftJoin('specialties as e', fn ($join) => $join->on('e.id', '=', 'sp.specialty_id')->whereNull('e.deleted_at'))
+                ->whereNull('sp.deleted_at')->whereNull('p.deleted_at')->whereNull('s.deleted_at')->whereNull('d.deleted_at')
+                ->orderBy('p.code')->orderBy('sp.semester')->orderBy('s.code')
+                ->get(['p.code as plan', 's.code', 's.name', 'sp.semester', 's.theory_hours', 's.practice_hours', 's.credits', 'd.code as department', 'e.code as specialty', 'e.name as specialty_name', 's.kind', DB::raw('(select min(a.code) from subject_aliases a where a.subject_id = s.id and a.study_plan_id = p.id) as sii_code')])
+                ->map(fn (object $r): array => [$r->plan, $r->code, $r->name, $r->semester, $r->theory_hours, $r->practice_hours, $r->credits, $r->department, $r->specialty, $r->specialty_name, $r->sii_code, $r->kind]),
+
+            // Solo seriaciones entre materias que siguen en la retícula del plan.
+            'prerequisites' => fn (): iterable => DB::table('subject_prerequisites as r')
+                ->join('study_plans as p', 'p.id', '=', 'r.study_plan_id')
+                ->join('subjects as s', 's.id', '=', 'r.subject_id')
+                ->join('subjects as q', 'q.id', '=', 'r.prerequisite_subject_id')
+                ->whereNull('r.deleted_at')->whereNull('p.deleted_at')->whereNull('s.deleted_at')->whereNull('q.deleted_at')
+                ->whereExists(fn ($grid) => $grid->from('study_plan_subjects as g')->whereColumn('g.study_plan_id', 'r.study_plan_id')->whereColumn('g.subject_id', 'r.subject_id')->whereNull('g.deleted_at'))
+                ->whereExists(fn ($grid) => $grid->from('study_plan_subjects as g')->whereColumn('g.study_plan_id', 'r.study_plan_id')->whereColumn('g.subject_id', 'r.prerequisite_subject_id')->whereNull('g.deleted_at'))
+                ->orderBy('p.code')->orderBy('s.code')->orderBy('q.code')
+                ->get(['p.code as plan', 's.code as subject', 'q.code as prerequisite', 'r.kind'])
+                ->map(fn (object $r): array => [$r->plan, $r->subject, $r->prerequisite, $r->kind]),
+
+            // Un renglón por adscripción, la principal primero: la primera de un docente es la principal al importar.
+            'teachers' => fn (): iterable => DB::table('teacher_departments as td')
+                ->join('teachers as t', 't.id', '=', 'td.teacher_id')
+                ->join('departments as d', 'd.id', '=', 'td.department_id')
+                ->whereNull('td.deleted_at')->whereNull('t.deleted_at')->whereNull('d.deleted_at')
+                ->orderBy('t.rfc')->orderByDesc('td.is_primary')->orderBy('d.code')
+                ->get(['t.rfc', 't.name', 'd.code as department', 't.email', 't.degree', 't.is_active', 't.hired_on'])
+                ->map(fn (object $r): array => [
+                    $r->rfc, $r->name, $r->department, $r->email,
+                    $r->degree === null ? null : TeacherDegree::from($r->degree)->label(),
+                    $r->is_active ? 'Sí' : 'No',
+                    $r->hired_on === null ? null : date('d/m/Y', strtotime($r->hired_on)),
+                ]),
+
+            'positions' => fn (): iterable => DB::table('teacher_positions as p')
+                ->join('teachers as t', 't.id', '=', 'p.teacher_id')
+                ->whereNull('p.deleted_at')->whereNull('t.deleted_at')
+                ->orderBy('t.rfc')->orderBy('p.kind')->orderBy('p.valid_from')
+                ->get(['t.rfc', 'p.kind', 'p.base_hours', 'p.category', 'p.valid_from', 'p.valid_to'])
+                ->map(fn (object $r): array => [
+                    $r->rfc, PositionKind::from($r->kind)->label(), $r->base_hours, $r->category,
+                    $r->valid_from === null ? null : date('d/m/Y', strtotime($r->valid_from)),
+                    $r->valid_to === null ? null : date('d/m/Y', strtotime($r->valid_to)),
+                ]),
+
+            'students' => fn (): iterable => $this->students(),
+
+            'kardex' => fn (): iterable => $this->chunked(
+                DB::table('kardex_records as kr')
+                    ->join('students as st', 'st.id', '=', 'kr.student_id')
+                    ->join('subjects as s', 's.id', '=', 'kr.subject_id')
+                    ->whereNull('kr.deleted_at')->whereNull('st.deleted_at')->whereNull('s.deleted_at')
+                    ->select(['kr.id', 'st.control_number', 's.code', 'kr.term_code', 'kr.grade', 'kr.result', 'kr.attempt']),
+                'kr.id',
+                fn (object $r): array => [$r->control_number, $r->code, $r->term_code, $r->grade === null ? null : (string) (float) $r->grade, $r->result, $r->attempt],
+            ),
+
+            // Un renglón por grupo impartido; el campus puede ir vacío.
+            'teacher_history' => fn (): iterable => $this->chunked(
+                DB::table('teacher_subject_history as h')
+                    ->join('teachers as t', 't.id', '=', 'h.teacher_id')
+                    ->join('subjects as s', 's.id', '=', 'h.subject_id')
+                    ->leftJoin('campuses as k', 'k.id', '=', 'h.campus_id')
+                    ->whereNull('h.deleted_at')->whereNull('t.deleted_at')->whereNull('s.deleted_at')
+                    ->select(['h.id', 't.rfc', 's.code', 'h.term_code', 'k.code as campus', 'h.group_code']),
+                'h.id',
+                fn (object $r): array => [$r->rfc, $r->code, $r->term_code, $r->campus, $r->group_code],
+            ),
+
+            'evaluations' => fn (): iterable => DB::table('teacher_evaluations as e')
+                ->join('teachers as t', 't.id', '=', 'e.teacher_id')
+                ->whereNull('e.deleted_at')->whereNull('t.deleted_at')
+                ->orderBy('t.rfc')->orderBy('e.term_code')->orderBy('e.kind')
+                ->get(['t.rfc', 'e.term_code', 'e.kind', 'e.score'])
+                ->map(fn (object $r): array => [$r->rfc, $r->term_code, $r->kind, (string) (float) $r->score]),
+        ];
+    }
+
+    /**
+     * Los alumnos con su modalidad como la escribe el SII (StudentsTemplate::SII_MODALITIES: presencial o distancia, MS7).
+     * Los de una modalidad sin valor en el SII (En línea, TecNM Virtual) no se exportan: se avisa cuántos y de qué
+     * modalidades (MS35, supuesto por confirmar).
+     *
+     * @return LazyCollection<int, list<scalar|null>>
+     */
+    private function students(): LazyCollection
+    {
+        $students = fn (): Builder => DB::table('students as st')
+            ->join('careers as c', 'c.id', '=', 'st.career_id')
+            ->join('study_plans as p', 'p.id', '=', 'st.study_plan_id')
+            ->join('campuses as k', 'k.id', '=', 'st.campus_id')
+            ->join('modalities as m', 'm.id', '=', 'st.modality_id')
+            ->whereNull('st.deleted_at')->whereNull('c.deleted_at')->whereNull('p.deleted_at');
+        $skipped = $students()->whereNotIn('m.code', array_keys(StudentsTemplate::SII_MODALITIES))
+            ->groupBy('m.code', 'm.name')->orderBy('m.code')->get(['m.name', DB::raw('count(*) as total')]);
+
+        if ($skipped->isNotEmpty()) {
+            $this->warn("{$skipped->sum('total')} alumnos de una modalidad sin valor en el SII ({$skipped->pluck('name')->join(', ', ' o ')}) no se exportan.");
+        }
+
+        return $this->chunked(
+            $students()->whereIn('m.code', array_keys(StudentsTemplate::SII_MODALITIES))
+                ->select(['st.id', 'st.control_number', 'st.name', 'c.code as career', 'p.code as plan', 'k.code as campus', 'st.current_semester', 'st.status', 'm.code as modality', 'st.status_reason']),
+            'st.id',
+            fn (object $r): array => [$r->control_number, $r->name, $r->career, $r->plan, $r->campus, $r->current_semester, $r->status, StudentsTemplate::SII_MODALITIES[$r->modality], $r->status_reason],
+        );
+    }
+
+    /**
+     * Los renglones de una consulta grande por bloques ordenados por llave, uno a la vez en memoria.
+     *
+     * @param  Closure(object): list<scalar|null>  $row
+     * @return LazyCollection<int, list<scalar|null>>
+     */
+    private function chunked(Builder $query, string $key, Closure $row): LazyCollection
+    {
+        return $query->lazyById(self::CHUNK, $key, 'id')->map($row);
+    }
+
+    /**
+     * Escribe el encabezado con las etiquetas de la plantilla y los renglones; devuelve cuántos renglones, o null
+     * si no pudo abrir el archivo.
+     *
+     * @param  iterable<int, list<scalar|null>>  $rows
+     */
+    private function write(string $path, ImportTemplate $template, iterable $rows): ?int
+    {
+        $stream = @fopen($path, 'w');
+
+        if ($stream === false) {
+            return null;
+        }
+
+        fputcsv($stream, array_values($template->fields()), ',', '"', '');
+        $count = 0;
+
+        foreach ($rows as $row) {
+            fputcsv($stream, $row, ',', '"', '');
+            $count++;
+        }
+
+        fclose($stream);
+
+        return $count;
+    }
+}

@@ -1,0 +1,151 @@
+# ADR-0018 — Permisos por puesto, nombramientos, árbol de unidades y perfil activo
+
+**Estado:** Aceptada · **Fecha:** 2026-11-02
+
+## Contexto
+Nexus crecerá hasta ser el ERP del ITCJ y su autorización tiene que acompañarlo. Hoy:
+- Todos los roles de una persona valen a la vez; no puede elegir con qué puesto actúa, y la credencial muestra el primero del enum.
+- No hay permisos granulares: las listas de roles están escritas a mano en unos quince lugares (`AcademicLoadPolicy::VIEWERS` y sus copias, `TeacherPolicy::EDITORS`, pares `[Coord, Sub]`).
+- La regla de alcance existe una vez en PHP (`ScopedContext`) y tres más en SQL (`TeacherQuery::coveredDepartments`, `StudentQuery::visible`, `RecipientsQuery`).
+- Hay tres fuentes de verdad del puesto: `model_has_roles` (spatie), `role_scopes.role` y `department_heads`. Spatie no aporta nada más: cero permisos y sin `config/permission.php`.
+- El admin es un atajo global que obliga a excepciones escritas a mano, y no hay caché entre peticiones ni puesto en la bitácora.
+
+El usuario pidió (2 de noviembre de 2026) estructurarlo bien desde el principio, con permisos granulares, atributos y un perfil activo, y dejar lista la puerta a las áreas administrativas del próximo año.
+
+## Decisión
+1. **Permisos por módulo.** Cada módulo declara los suyos en un enum respaldado por string (`modulo.recurso.accion`), con etiqueta en español, las dimensiones de alcance que revisa y si es personal. Los junta un `PermissionRegistry` inmutable, armado al arrancar el worker; falla si una concesión cita un permiso desconocido.
+2. **Puestos en código.** El enum `Role` sigue siendo el catálogo de puestos; la matriz puesto→permisos vive en los providers (`permissions()` y `grants()`) y se cambia por PR. El admin asigna puestos, no edita qué hace cada uno. Una prueba congela la matriz contra un archivo de referencia. *Reemplazada el 14 de noviembre de 2026 por los roles editables (adenda al final): `grants()` queda como lo de fábrica.*
+3. **Nombramientos como única fuente.** `role_scopes` pasa a `role_assignments` (modelo `RoleAssignment`): una persona en un puesto, con su unidad, campus y carrera (nulo = sin límite) y su vigencia. Sustituyen a `model_has_roles` y, en un PR posterior, a `department_heads`.
+4. **Árbol `org_units`.** Dirección → Subdirecciones → Divisiones y Departamentos, en lista de adyacencia con el mapa de descendientes cacheado. El alcance sobre una unidad cubre todo su subárbol. Los departamentos académicos comparten llave con su unidad (`departments.id` es FK a `org_units.id`), así que ninguna tabla con `department_id` cambia.
+5. **Perfil activo.** La persona elige un puesto con todos sus alcances; solo valen los permisos y alcances de ese puesto. Lo personal («Mi espacio») vale en cualquier perfil. `Actor` (evolución de `ScopedContext`) responde `allows()`, `allowsAny()` y `constrain()`; `constrain()` filtra en SQL con la misma regla, de modo que PHP y SQL salen de una sola definición.
+6. **El admin es un puesto.** Un nombramiento sin alcance, elegible como perfil. Activo, lo puede todo menos sus excepciones explícitas por permiso (AZ-S9).
+7. **Caché por triggers y huellas.** El snapshot por usuario se guarda con la llave `authz:user:v{FORMAT}:{id}:{authz_version}` y el árbol con una huella de `org_units`; el snapshot vence a la siguiente medianoche de Ciudad Juárez, porque las vigencias son por día; `users.authz_version` lo sube un trigger de `role_assignments`. Nada depende de código que alguien pueda olvidar.
+8. **Sale spatie/permission.** `HasRoles` sale de `User` y sus tablas se eliminan con una migración nueva. La migración histórica `2026_10_27_000006` no se edita: lee sus nombres de `config/permission.php`, que se conserva mínimo (sin el paquete) para que corra en bases nuevas.
+9. **Excepción documentada a «las escrituras pasan por Actions».** Los triggers de `departments` (crean y sincronizan su unidad 1:1) y de `role_assignments` (suben `authz_version`) escriben desde la base de datos. No son lógica de proceso: mantienen una extensión 1:1 y una versión, y así ningún camino de escritura (Action, importación, seeder, factory) las olvida.
+
+Las reglas nuevas son AZ-01 (autoaprobación marcada, confirmada) y AZ-S1 a AZ-S9 (supuestos por confirmar) en `docs/dominio/reglas-de-negocio.md`. Esta ADR reemplaza la parte de roles y alcances de [ADR-0004](0004-fortify-username-y-alcances.md) (Fortify con username sigue vigente) y retira la fila de spatie/permission de [ADR-0012](0012-dependencias-base.md).
+
+## Consecuencias
+- Ningún módulo nombra puestos en Policies, componentes, menú o Queries, solo permisos; solo los providers en `grants()` y las Actions de nombramientos usan `Role::`. Una prueba arch lo exige.
+- Hasta que el último módulo migre, `ScopedContext` sigue vivo y responde solo con el perfil activo, de modo que los módulos actuales obtienen el comportamiento por perfil desde el primer día. Después se borra y la prueba arch lo prohíbe.
+- La fase 3 escribe sus Policies directamente con permisos; los módulos existentes migran en PRs encadenados, uno por módulo (tareas 3.P1 a 3.P9).
+- Un permiso que omita una dimensión amplía el alcance; se mitiga con una prueba unitaria por módulo (recurso con `campus_id` ⇒ dimensión campus), la matriz congelada y una prueba negativa por otro alcance en cada Policy.
+- Agregar una dimensión futura (edificio, programa de posgrado) es una columna nullable en `role_assignments`, un caso en `Dimension` y su comparación; no toca a los módulos que no la usan.
+- El organigrama sembrado sale del directorio oficial del ITCJ y queda marcado «por confirmar» (AZ-S1); el admin lo corrige en pantalla.
+
+## Alternativas descartadas
+- **Motor externo de políticas (Cerbos, OPA, Casbin, OpenFGA):** sirve a sistemas de varios servicios y lenguajes. Nexus es un monolito y el solver no autoriza usuarios. Costaría una dependencia, reglas fuera de TDD y una caché más difícil. La interfaz `allows()` deja abierta esa puerta.
+- **Matriz editable por el admin:** la decisión del usuario es que viva en código y se revise por PR. *El 14 de noviembre de 2026 el usuario cambió esta decisión (C1): ver la adenda de los roles editables.*
+- **Unión de roles con filtro de vista:** no restringe lo que se puede hacer, y es justo lo que se quiere corregir.
+- **Un perfil por nombramiento:** obliga a cambiar de perfil entre carreras de la misma coordinación.
+- **Mantener spatie solo para la matriz:** con la matriz en código, sus tablas serían una tercera fuente de verdad.
+- **Árbol con `ltree`:** el árbol es chico (decenas de nodos) y el mapa cacheado basta sin otra extensión.
+
+## Adenda (5 de noviembre de 2026): los permisos siguen la unidad del jefe (D20)
+
+**Contexto.** Con D19 el jefe del Departamento de Servicios Escolares se nombra con el puesto de jefe de departamento, sobre su unidad, para validar las materias de la migración del SII. Como la matriz concede por puesto, heredaba todo lo del jefe de un departamento académico: su menú mostraba «Validar catálogos», la bandeja, «Docentes» y «Alumnos» (vacíos para su unidad) y su credencial decía «Jefe de departamento académico». El usuario decidió (D20, AZ-02 en `reglas-de-negocio.md`) que cada unidad tiene su puesto de jefe y que lo que puede hacer depende de su unidad.
+
+**Decisión.**
+Las reglas son AZ-02 (D20, confirmada) y AZ-S16 (el mecanismo, supuestos por confirmar).
+
+1. **Un permiso declara a qué unidades aplica.** `Permission::appliesTo()` da un `UnitApplicability` (tipos de unidad y claves de unidades estructurales) o nulo, que es «a cualquiera». Lo académico (Academic, AcademicLoad, CatalogValidation, Faculty, Students) aplica a los departamentos académicos y a la Subdirección Académica (`UnitApplicability::academic()`); `academic.placement.validate`, a `SERVICIOS-ESCOLARES`; `academic.subject.set_space` (cambiar el tipo de espacio de una materia, SEL-17), con dimensión unidad = el departamento de la materia, al jefe de departamento y al admin; Core, Facilities e Imports no declaran.
+2. **Qué nombramiento aporta un permiso.** Uno con unidad lo aporta solo si su unidad, o una de sus descendientes, cumple (`OrgTree::fits()`); nunca por un ancestro. Uno sin unidad (admin, coordinador, docente) lo aporta siempre. Es el mismo criterio del alcance por unidad (que cubre el subárbol): la Subdirección Académica conserva lo académico, y un futuro puesto de Dirección lo tendría sin listar claves. La clave cuenta solo en unidades estructurales, como `OrgTree::idOf()`.
+3. **Una sola definición en PHP y SQL.** `Actor::contributing()` da los nombramientos que aportan un permiso, y `rolesGranting()` exige que alguno lo aporte (o que sea el admin); `allows()`, `allowsAny()` (y con él el menú), `constrain()` y `rolesAllowing()` (y con él los avisos) salen de ahí. La aplicabilidad decide qué nombramientos cuentan; no recorta el alcance de los que sí cuentan.
+4. **Caché.** El snapshot de nombramientos no cambia de forma ni de significado (`FORMAT` sigue en 2): la aplicabilidad se evalúa en cada petición con el registro, que vive en código, y con el árbol. La huella del árbol incluye ahora el tipo y la clave de cada unidad (`id>parent_id:kind:code`) y su llave, `authz:org-tree:v2:{huella}`: cambiar el tipo o la clave de una unidad cambia lo que aporta en la siguiente petición. `OrgTree::idOf()` se memoriza por clave en la instancia (`scoped`).
+5. **Guardias del árbol.** Como lo académico aplica al subárbol, la forma del árbol decide quién lo tiene: la Subdirección Académica no se mueve (`OrgUnitRules::moveBlocker()`), así que ninguna otra unidad la tiene debajo; los departamentos académicos ya no se movían (AZ-S13). La clave `SERVICIOS-ESCOLARES` no cambia mientras la unidad tenga jefe (`OrgUnitRules::fixedCodeProblem()`).
+6. **La credencial nombra la unidad.** `Role::titleOn()` llama «Jefe del Departamento de Servicios Escolares» al jefe de una unidad que no es departamento académico; la banda, Inicio (`RoleTitleQuery`), «Actuando como» (`RoleSummaryQuery`), las etiquetas de nombramientos (`AssignmentLabels`, y con ellas «¿Quién ocupa un puesto?»), «Nombrar» en el panel de la unidad, la bitácora del cambio de perfil (`SwitchRole`) y la campana (`NotificationQuery`) lo usan. Las listas para elegir un puesto sin persona ni unidad usan `Role::listLabel()` («Jefe de departamento»).
+7. **Congelado y pruebas.** `matrix.json` congela también las unidades de cada permiso (`applies_to`, de `PermissionRegistry::applicability()`); `AuthorizationMatrixTest` exige que todo permiso concedido al jefe de departamento declare a qué unidades aplica, y `UnitApplicabilityTest` compara, por puesto, lo que cada uno ejerce contra la matriz.
+
+
+**Alternativas descartadas.**
+- **Un puesto por unidad (jefe de Servicios Escolares):** multiplicaría puestos por cada departamento del ERP, cuando D20 dice que el puesto es el de jefe y la unidad decide.
+- **Concesiones por puesto y tipo de unidad en `grants()`:** la matriz crecería en dos dimensiones; quién aplica a qué unidad es del permiso y lo declara el módulo dueño una vez.
+- **Comparar solo la unidad del nombramiento, sin su subárbol:** obligaría a listar la Subdirección Académica (y mañana la Dirección) en cada permiso.
+- **Guardar el tipo y la clave de la unidad en el snapshot:** un cambio en `org_units` no sube `authz_version`; habría que agregar otro trigger, cuando la huella del árbol ya lo cubre.
+
+## Adenda (14 de noviembre de 2026): roles editables
+
+**Contexto.** Para el lanzamiento, el admin necesita cambiar qué hace cada puesto sin esperar un PR (tarea 1.22, riel `riel/configuracion`). El usuario decidió (C1, confirmado el 14 de noviembre de 2026) que los roles sean editables en tres niveles, con lo de hoy como «de fábrica» y restablecible. Esta decisión reemplaza la decisión 2 («la matriz vive en código y se cambia por PR») y la alternativa descartada «Matriz editable por el admin». Las reglas son CF-01 a CF-04, CF-S1 y CF-S2 en `docs/dominio/reglas-de-negocio.md`.
+
+**Decisión.**
+
+1. **Tres niveles: permiso → rol → puesto (CF-01).**
+   - El código declara los permisos, igual que antes.
+   - El admin arma **roles** (paquetes de permisos, tabla `permission_sets`; en código, `PermissionSet`) y le da a cada **puesto** roles (`position_permission_sets`) y permisos sueltos (`position_permissions`).
+   - Lo que un puesto puede es la unión de sus permisos sueltos y de sus roles activos y no borrados.
+   - Los puestos siguen en el enum `Role`, porque su alcance está amarrado a los CHECK y las exclusiones de `role_assignments`.
+2. **De fábrica (CF-02).**
+   - `grants()` de cada provider sigue en código y pasa a ser «lo de fábrica».
+   - La migración `2026_11_15_000102` crea un rol de fábrica por puesto, salvo el admin, «<puesto> (de fábrica)» con `Role::listLabel()`. Lo crea con `follows_factory`, así que aporta lo que el código concede a su `factory_role`, y se lo asigna a su puesto.
+   - Así, el día del despliegue cada puesto puede exactamente lo de antes. `GrantTableTest` lo compara, puesto por puesto y permiso por permiso, contra el registro y `matrix.json`.
+   - Al editar un rol de fábrica, deja de seguir al código: guarda su propia lista y, en `factory_baseline`, lo que el código concedía en ese momento. Lo que el código agregue después son «los permisos nuevos de fábrica», que el panel ofrece con «Aplicar».
+3. **`GrantTable`.**
+   - Es la pieza que responde qué tiene hoy cada puesto: `grants(Role, Permission)`, `rolesGranting(Permission)` y `matrix()`. Se registra con `scoped`.
+   - `Actor` y `RecipientsQuery` le preguntan a ella las concesiones, en lugar de al registro.
+   - El admin no se edita (CF-S1): tiene lo del registro, todo menos `adminDenies()`.
+   - `PermissionRegistry` sigue siendo el catálogo inmutable: los permisos declarados, lo de fábrica, las excepciones del admin, los candados y la aplicabilidad (D20).
+4. **Caché por versión, sello y huella.**
+   - La llave del mapa es `authz:grants:v1:{versión}:{sello}:{huella}`.
+   - La versión y el sello son la única fila de `authz_grants_version`. Los suben triggers **de sentencia** (insert, update, delete y truncate) en las cuatro tablas: ningún camino de escritura lo olvida, como `users.authz_version` (decisión 7).
+   - El sello es un uuid nuevo en cada cambio. Sin él, dos bases con la misma versión que comparten Valkey (otro worktree, la demo, una base recién migrada o restaurada) leerían el mapa de la otra.
+   - Se leen una vez por petición. Si el mapa no está en la caché, se arma con una sola consulta que vuelve a leer la versión y el sello junto con las tres tablas: el mapa sale de un solo estado de la base y se guarda con la llave de ese estado, aunque otra petición haya cambiado algo entre medio.
+   - La huella sale del código: lo de fábrica, las dimensiones y si es personal cada permiso, los candados y lo que acota cada puesto. Un despliegue que cambie cualquiera de esas cosas no lee el mapa que armó el anterior.
+   - Como el snapshot, el mapa se escribe en la caché solo cuando la transacción se confirma. Se lee estricto y vence al día.
+   - Un cambio vale en la siguiente petición de cada usuario, sin volver a entrar. No toca `users.authz_version` ni el snapshot de nombramientos, cuyo `FORMAT` no cambia.
+5. **Candados (CF-03).**
+   - `ModuleServiceProvider::adminOnly()` declara los permisos que solo tiene el admin y que no se dan a otro puesto, ni sueltos ni dentro de un rol.
+   - Core declara `core.user.*`, `core.authz.*`, `core.assignment.*`, `core.activity.*`, `core.mail.*`, `core.queue.*` y `core.org_unit.*`. El organigrama es un supuesto por confirmar, porque decide el alcance de todos.
+   - Desde el 15 de noviembre de 2026 (confirmado) también son candados `core.campus.update` y `core.modality.update` (Core) y `academic.career.delete` y `academic.department.delete` (Academic): desactivar un campus o una modalidad les quita el alcance a todos, y borrar una carrera o un departamento termina nombramientos de otros. `core.modality.update_profile` no lo es, porque la Subdirección lo tiene de fábrica.
+   - El registro falla al arrancar si un candado se concede en `grants()` o es también excepción del admin. La única salida es la excepción de fábrica, explícita, de un candado de lectura para un puesto que lee en todo el Tec (adenda del 20 de noviembre de 2026).
+6. **Alcance (CF-04, «departamento o carrera», confirmado el 14 de noviembre de 2026).**
+   - `Role::boundedDimensions()` dice qué dimensiones acota cada puesto:
+     - las que lleva en su nombramiento, también el campus opcional del coordinador y del jefe de proyecto docente (supuesto por confirmar);
+     - las que cubre por regla: el jefe de departamento y la Subdirección, en campus y modalidad.
+   - El docente y el alumno no acotan ninguna: solo reciben permisos personales.
+   - Un permiso de gestión se le da a un puesto si este acota el campus y la modalidad que el permiso declare y, si el permiso declara unidad o carrera, al menos una de las que declare. Si no declara ni unidad ni carrera, el puesto acota todas sus dimensiones.
+   - `PermissionGrantRules` da el motivo en español de cada bloqueo: el admin no se edita; un permiso es candado; un permiso de gestión va a un puesto sin alcance; o el puesto no acota el campus, la modalidad, o ni el departamento ni la carrera del permiso.
+   - Lo de fábrica siempre vale, porque se revisó por PR.
+   - Lo que valdría en todo el Tec se puede dar con aviso (confirmado el 15 de noviembre de 2026): `PermissionGrantRules::isInstitutionWide()` lo marca cuando el permiso no declara ni unidad ni carrera y el puesto no fija ninguna de sus dimensiones.
+   - `PermissionGrantRules::VERSION` va en la huella de `GrantTable`, y lo que sale de la caché se vuelve a revisar con las reglas: un despliegue que solo cambie las reglas no sirve lo que permitían las anteriores.
+   - Las Actions lo revisan al dar un rol o un permiso a un puesto. `GrantTable` lo vuelve a aplicar al armar el mapa. Así no vale lo que llegue a la base por otro camino, ni lo que un rol de fábrica, si sigue al código y está dado a otro puesto, le traiga después de un despliegue.
+7. **Lo de fábrica frente a CF-04.**
+   - Con la primera redacción («acota **cada** dimensión»), doce concesiones de fábrica se bloquearían si no fueran de fábrica:
+     - `students.student.view`, de la Subdirección, el jefe de departamento y el coordinador;
+     - `academic_load.proposal.view`, de la Subdirección;
+     - `scheduling.schedule.view`, de la Subdirección, el jefe de departamento, el jefe de proyecto docente y el coordinador;
+     - `scheduling.group.manage` y `scheduling.session.edit`, del jefe de departamento y el coordinador.
+   - Todas declaran la carrera, y casi todas también la unidad. Cada puesto acota una de las dos: el coordinador, la carrera; los demás, la unidad. Por eso el usuario decidió «departamento o carrera».
+   - Con esa regla pasan once.
+   - Sigue necesitando la excepción de fábrica `academic_load.proposal.view` de la Subdirección: declara la carrera sin la unidad, y la Subdirección acota la unidad. `PermissionGrantRulesTest` la congela. Dar a otro puesto lo que declara solo la unidad sigue bloqueado para el coordinador: `academic_load.load.close`, por ejemplo.
+8. **Excepción documentada a «las escrituras pasan por Actions»:** los triggers de versión, igual que la decisión 9.
+
+**Consecuencias.**
+- `matrix.json` congela ahora lo de fábrica, no lo que vale en producción. Cambiar `grants()` sigue siendo un PR que cambia el archivo. Los puestos cuyo rol de fábrica no se editó lo reciben en el siguiente despliegue; los editados lo ven como «permisos nuevos de fábrica».
+- Un puesto nuevo en el enum necesita su rol de fábrica en una migración de datos. Sin él no tendría nada, y la prueba del día cero falla.
+- Fuera de `Core/Authorization`, sus migraciones, el modelo y su factory, y las Actions, Queries y Policy del panel, nadie lee esas tablas: `tests/Arch/AuthorizationTest.php` lo exige.
+- Cada petición que pregunta por un permiso hace una consulta más, la de la versión. El mapa sale de la caché mientras no cambie.
+
+**Alternativas descartadas.**
+- **Invalidar la caché desde las Actions** (`Cache::forget`): un camino que lo olvide (una importación, un seeder, SQL a mano) dejaría la caché vieja.
+- **Subir `users.authz_version` de todos los usuarios:** tocaría miles de filas por cada cambio y mezclaría los nombramientos con las concesiones.
+- **Materializar lo de fábrica como filas:** cada cambio de `grants()` necesitaría una migración de datos para llegar a los puestos.
+- **Hacer editables los puestos:** su alcance vive en los CHECK y las exclusiones de la base (C1).
+
+## Adenda (20 de noviembre de 2026): la excepción de fábrica de un candado (AZ-03, #738)
+
+**Contexto.** El usuario confirmó que el directivo, que lee en todo el Tec (AZ-03), consulte también «Personas y puestos», el Organigrama y la Bitácora, de solo lectura. Sus permisos (`core.assignment.view`, `core.org_unit.view`, `core.activity.view`) son candados (CF-03): el registro no dejaba concederlos en `grants()` y las reglas los descartaban para cualquier puesto.
+
+**Decisión.**
+1. **Una lista explícita.** `ModuleServiceProvider::factoryLockExceptions()` declara, por puesto, los candados que el código sí le concede de fábrica. Core declara solo la del directivo, con esas tres lecturas, y `grants()` del directivo las toma de ahí.
+2. **El registro la valida al arrancar.** Cada excepción tiene que estar en `grants()` de ese puesto, ser candado, ser de lectura (`isReadOnly()`) y ser de un puesto que lee en todo el Tec (`readsWholeTec()`). Y todo candado que aparezca en `grants()` tiene que ser excepción de ese mismo puesto. Si algo no cumple, `PermissionRegistry` lanza `LogicException`. Nuevos: `isFactoryLockException(Role, Permission)` y `factoryLockHolders(Permission)`.
+3. **La excepción vale solo para su puesto.** `PermissionGrantRules::lockProblem(Permission, ?Role)` no bloquea al puesto exceptuado: su rol de fábrica la conserva al editarlo y el panel se la puede devolver suelta. Para cualquier otro puesto, y dentro de un rol propio, sigue siendo candado, también en `GrantTable`. El motivo y la insignia lo dicen: «… es solo del admin y, de fábrica, de Directivo: no se da a otro puesto.» y «Solo del admin y Directivo». `PermissionGrantRules::VERSION` sube a 4.
+4. **Lo que muestra de cada pantalla.** Cada botón que escribe sale solo con su ability («Dar de alta», «Nombrar», «Terminar…», «Acciones» de la cuenta y de la unidad, «Nueva unidad», y «Nombrar jefatura» y «Terminar» en la ficha del docente), y cada método vuelve a autorizar. En la Bitácora, las propiedades reservadas que declara cada módulo en `activityProtectedProperties()` (`evento => [propiedad => permiso]`; Core las junta en `ActivityProtectedProperties`) no salen en el detalle a quien no tiene su permiso. Hoy son dos: el motivo D8 de la salida de un docente (`discharged.reason`, `faculty.teacher.deactivate`: admin y Subdirección) y la nota libre de la baja de una cuenta (`deactivated.note`, `core.user.deactivate`: solo el admin). Se quitan al leer; lo guardado no cambia (HC-18).
+
+**Consecuencias.**
+- Conceder de fábrica otro candado a un puesto es un PR que toca dos listas y `matrix.json`. El registro no arranca si falta una.
+- `tests/Arch/AuthorizationTest.php` permite `Role::` también dentro de `factoryLockExceptions()` de los providers.
+- Una propiedad nueva de la bitácora con datos reservados se declara en el provider del módulo dueño del evento.
+
+**Alternativas descartadas.**
+- **Quitar esos tres de los candados:** el panel podría dárselos a cualquier puesto, y el usuario solo decidió el directivo.
+- **Deducir la excepción de una regla** («todo candado de lectura para quien lee en todo el Tec»): se colaría cualquier lectura de candado nueva sin decisión del usuario.

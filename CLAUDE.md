@@ -1,47 +1,142 @@
-<laravel-boost-guidelines>
-# Laravel Application
+# CLAUDE.md — Guía operativa de Nexus
 
-This repository contains a Laravel application. Complete the following setup before working on the user's request.
+> Lee este archivo completo antes de proponer o cambiar código. Si una decisión choca con lo que dice aquí o en los documentos que enlaza, **detente y pregunta**; no asumas.
 
-## Prerequisites
+## 1. Qué es esto
 
-Verify that PHP and Composer are available:
+Nexus es la nueva fuente de verdad académica del Instituto Tecnológico de Ciudad Juárez y reemplaza por etapas al SII. La primera entrega (R1) construye y publica la **carga académica** de Campus II para Ene-Jun 2027; después vienen el motor de horarios (R2) y la inscripción (R3).
 
-```sh
-php -v
-composer -V
+- **Dominio de producción: `https://nexus.cdjuarez.tecnm.mx`** (confirmado por el usuario el 20 de noviembre de 2026). En producción `APP_URL` es ese; los QR, los enlaces de los correos y las URL absolutas salen de él.
+- Contexto, alcance, decisiones y riesgos: [PROJECT.md](PROJECT.md)
+- Estado de fases y módulos: [PLAN.md](PLAN.md) (la fase activa está en su encabezado)
+- Proceso: `docs/proceso/`. Dominio: `docs/dominio/`. Arquitectura: `docs/arquitectura/`. Fases: `docs/plan/`.
+
+## 2. Cómo arrancar una sesión
+
+1. Lee [PLAN.md](PLAN.md) y el archivo de la fase activa en `docs/plan/`.
+2. Toma un issue (`gh issue view <n>`). Cada issue referencia una tarea del plan (por ejemplo `3.2`).
+3. Si la fase está marcada 🟦 (vaga), **no implementes**: primero una sesión de planeación que la vuelva detallada.
+4. Trabaja en una rama `feature/<issue>-<slug>` creada desde la rama padre de tu riel (`riel/<riel>`, que sale de `develop`; ver §7), en un worktree propio dentro del repo (`.worktrees/<rama>`; comandos con `docker compose exec -w /app/.worktrees/<rama> app ...`, detalle en [CONTRIBUTING.md](CONTRIBUTING.md)).
+5. Si el issue es claro, ve directo a TDD. Si hay ambigüedad, usa brainstorming y pregunta antes.
+6. Antes de abrir el PR: suite completa verde, Pint, `/code-review`, documentación de la fase actualizada.
+
+## 3. Stack y comandos
+
+Todo corre en Docker. **No hay PHP, Composer ni Node en la máquina local**; nunca intentes instalarlos.
+
+```bash
+docker compose up -d --build                      # levantar (dev usa compose.override.yaml)
+docker compose exec app php artisan test          # Pest: unit + feature + browser (tests/Browser)
+docker compose exec app php artisan test --filter=NombreDelTest
+docker compose exec app ./vendor/bin/pint         # formato antes de cada commit (sin --dirty: no hay git en el contenedor)
+docker compose exec app php artisan migrate
+docker compose exec app php artisan make:livewire <ruta>   # genera MFC por defecto
+docker compose logs -f app queue
+docker compose exec app composer require <paquete>         # dependencias siempre dentro del contenedor
 ```
 
-If either command is unavailable, detect the user's operating system and install the prerequisites with the appropriate command:
+| Pieza | Elección |
+|---|---|
+| Laravel 13 + Octane (FrankenPHP, PHP 8.5) | Worker mode: nada con estado mutable como singleton; usa `scoped` |
+| Livewire 4 MFC + MaryUI (daisyUI) + Tailwind 4 | Sin SPA, sin API para la UI |
+| PostgreSQL 18 | Única fuente de verdad; pruebas contra `nexus_test`, nunca SQLite |
+| Valkey | Caché, sesiones y colas (`redis`) |
+| Fortify (username) + puestos y nombramientos propios (ADR-0018) | Sin registro público |
+| spatie/activitylog | Bitácora inmutable |
+| Pest 5 | Unit, feature, browser y arch |
+| Laravel Boost (MCP) | Docs exactas de Laravel, Livewire y Pest; ver `docs/herramientas/ia-tooling.md` |
 
-macOS:
+## 4. Arquitectura en diez líneas
 
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/mac/8.5)"
-```
+Monolito modular: `app/Modules/<Modulo>/{Models,Enums,Actions,Queries,Rules,Livewire/{pages,components},Policies,Jobs,Routes,Database/{Migrations,Factories,Seeders},Lang}`. **No** es hexagonal ni DDD: sin capas Domain/Infrastructure, sin repositorios.
 
-Windows PowerShell:
+1. Las **escrituras** pasan solo por `Actions` (transacción, bitácora, evento).
+2. Las **lecturas** de pantallas y exportes salen de `Queries`.
+3. Los `Models` solo tienen relaciones, casts, scopes y accessors.
+4. Los componentes Livewire validan, llaman Actions o Queries y renderizan. Nada de consultas en Blade.
+5. Un módulo solo depende de los que están a su izquierda en el mapa de `docs/dominio/modelo-de-datos.md`; hacia la derecha se comunica con eventos.
+6. Toda Policy usa el trait `AuthorizesActor` (Core): pregunta por un permiso con `allows()` o `allowsAny()`, y `Actor` decide el puesto activo y el alcance (campus, unidad, carrera).
+7. Lo que tarda más de un segundo va a un job en cola.
+8. El perfil de flujo por modalidad (`modalities.settings`) decide qué aplica; nunca `if ($modality->code === 'PRES')` ni `if ($campus->code === 'C2')`.
+9. Las reglas de negocio tienen id (`HC-07`, `SC-01`) y viven en `docs/dominio/reglas-de-negocio.md`; el código las cita.
+10. El módulo de referencia es `app/Modules/Core` (CRUD de Campus). Copia su forma.
 
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://php.new/install/windows/8.5'))
-```
+Detalle: `docs/arquitectura/arquitectura.md`.
 
-Linux:
+## 5. Convenciones
 
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/linux/8.5)"
-```
+- **Idioma:** código, tablas, rutas, nombres de pruebas de arquitectura y commits en inglés; interfaz, documentación, issues y descripciones de pruebas en español. Términos del dominio según `docs/dominio/glosario.md`.
+- **Nombres:** Actions = verbo + sustantivo (`AssignTeacher`, `CloseLoad`); Queries = sustantivo + `Query`; reglas = `Rules/Constraints/<Nombre>` con el id de la regla en el docblock.
+- **Livewire MFC:** una carpeta por componente con `<nombre>.php` (clase anónima) y `<nombre>.blade.php`; namespace `<modulo>::pages.<nombre>` o `<modulo>::components.<nombre>`.
+- **Migraciones:** dentro del módulo. Una migración mezclada en `develop` no se edita; se crea otra.
+- **Migraciones sin caída (expand/contract):** toda migración debe funcionar con el código del release anterior, porque los dos conviven durante el despliegue. Columnas nuevas `nullable()` o con `default()`. Borrar, renombrar o cambiar de tipo va en un release posterior al que dejó de usarlo y lleva `#[Contract('qué release dejó de usarlo')]`; volver atrás de ese release exige restaurar el respaldo. Índices en tablas grandes: `CREATE INDEX CONCURRENTLY` con `$withinTransaction = false`. Los jobs aceptan los payloads del release anterior. Lo revisa `tests/Arch/MigrationSafetyTest.php` ([ADR-0033](docs/decisiones/0033-despliegue-continuo.md)).
+- **Datos fuera de las migraciones** (decisión del usuario, 24 de noviembre de 2026). El repositorio es público: lo que queda en una migración o un seeder se publica para siempre, y `rollback` no lo deshace. La forma del esquema la cuida expand/contract (bullet anterior); los datos, los comandos de una sola vez.
+  - Una migración cambia el esquema. Puede reacomodar datos que ya existen, sin valores escritos a mano; por ejemplo, copiar una columna a otra.
+  - Los seeders llevan solo catálogos públicos de referencia: campus, modalidades, permisos.
+  - Insertar, corregir o desactivar registros reales de producción se hace con un comando de Artisan del módulo:
+    - pasa por Actions (bitácora), es idempotente y trae `--dry-run`, que solo cuenta;
+    - toma sus datos de un archivo puesto en el servidor (`storage/app/imports/`, ignorado por git) o de sus argumentos, nunca del código;
+    - en producción se corre una sola vez, después de un respaldo, y se anota en «Comandos de una sola vez» de `docs/operacion/despliegue.md`.
+  - Lo que ya hace una pantalla va por la pantalla.
+- **Llaves:** UUIDv7 en todo modelo (`HasUuids`, `foreignUuid`, `default uuidv7()`); los ids del cliente se buscan con `KeyLookup` ([ADR-0014](docs/decisiones/0014-uuidv7-como-llave-primaria.md)).
+- **Enums** PHP respaldados por string. Eventos con `timestamptz`; horas de sesión con `time`. Zona `America/Ciudad_Juarez`.
+- **Catálogos:** soft deletes + `is_active`; nunca borrado físico. Bitácora: nunca se edita ni se borra.
+- **UI:** componentes MaryUI; Tailwind utilitario; tokens de tema en [DESIGN.md](DESIGN.md). Sin CSS a mano salvo tokens.
+- **Diálogos:** nunca los del navegador (`confirm()`, `alert()`, `prompt()` ni `wire:confirm`). Para lo corto, `x-modal`; para lo que lleva mucha información, `x-drawer`, que es el preferido ([ADR-0023](docs/decisiones/0023-sin-dialogos-nativos-del-navegador.md)).
+- **Formato:** Pint antes de cada commit; CI lo verifica.
 
-After installation, ask the user to restart their terminal. If the agent needs the restarted shell to continue, ask the user to reopen their terminal and rerun their original prompt.
+## 6. Pruebas (obligatorio)
 
-## Agent Setup
+TDD: escribe la prueba (rojo), la implementación mínima (verde), refactoriza. Pest 5.
 
-Install Laravel Boost from the application root before making application changes:
+- **Unit:** reglas, Actions, Queries, scorers, plantillas de importación.
+- **Feature:** componentes Livewire, jobs, policies y alcance, transiciones de estado, seeders, restricciones de BD.
+- **Browser:** un flujo crítico por rol por fase.
+- **Arch:** dependencias entre módulos y convenciones.
+- Cada regla `HC-xx` / `SC-xx` tiene una prueba que la nombra. Cada pantalla tiene una prueba negativa de alcance (otro rol u otro campus no ve ni edita).
+- Prohibido `skip` o marcar incompleto para pasar CI. Cobertura mínima por módulo: 80 %.
+- Nunca afirmes que algo pasa sin haber corrido la suite y mostrado el resultado.
 
-```sh
-composer require laravel/boost --dev
-php artisan boost:install
-```
+Detalle: `docs/arquitectura/testing.md`.
 
-Boost replaces these bootstrap instructions with guidelines tailored to the application. After installation, read `AGENTS.md` again and continue with the user's original request using the generated guidelines.
-</laravel-boost-guidelines>
+## 7. Git y PRs
+
+- **Rama padre por riel** (decisión del usuario, 10 de noviembre de 2026): cada línea de trabajo sale de `develop` a su rama padre `riel/<riel>`, y todos sus PR se mezclan ahí (squash, con CI verde y revisión cruzada). Así los rieles avanzan en paralelo sin esperar el CI de los demás. Ningún PR de tarea apunta directo a `develop`.
+- A `develop` entra solo el PR de cada rama padre, uno a la vez y avisando a los demás rieles: primero se trae `develop` a la rama padre y luego se mezcla con merge commit, no squash. `develop` → `main` por PR cuando la integración está probada. `develop` y `main` están protegidas: **nunca push directo**.
+- Commits convencionales en inglés con el módulo como alcance: `feat(scheduling): add room suggestion query`, `test(staffing): cover HC-16`.
+- Un PR por tarea del plan, de preferencia menos de 400 líneas netas, con `Closes #<issue>`; sigue la plantilla de PR.
+- Revisor cruzado obligatorio y CI verde obligatorio.
+- Al cerrar una tarea: márcala en `docs/plan/fase-N.md` con el número de PR. Al cerrar una fase: actualiza [PLAN.md](PLAN.md).
+
+Detalle: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## 8. Reglas duras
+
+1. No inventes reglas de negocio. Si no está en `docs/dominio/reglas-de-negocio.md`, pregunta y documenta.
+2. No cambies el modelo de datos sin actualizar `docs/dominio/modelo-de-datos.md` en el mismo PR.
+3. No toques módulos de otra persona sin acordarlo en el issue.
+4. No borres registros de catálogo ni de bitácora. Desactiva.
+5. No metas lógica de proceso en modelos ni consultas en Blade.
+6. No agregues dependencias sin una nota en `docs/decisiones/`.
+7. No compares Nexus con otros proyectos; decide por lo que Nexus necesita.
+8. No uses SQLite para pruebas.
+9. Los archivos exportados del SII tienen datos personales: viven en `storage/app/imports/` (ignorado por git) y **nunca** se suben al repositorio ni a fixtures sin anonimizar.
+10. No marques una fase como hecha sin que todas sus tareas tengan PR mezclado en `develop`.
+
+## 9. Dónde está cada cosa
+
+| Qué | Dónde |
+|---|---|
+| Módulos | `app/Modules/<Modulo>/` |
+| Layout y navegación | `resources/views/layouts/app.blade.php`, `app/Modules/Core/Livewire/components`, `app/Modules/Core/Navigation` (entradas por módulo en `navigation()` de su provider) |
+| Pruebas | `tests/Unit/<Modulo>`, `tests/Feature/<Modulo>`, `tests/Browser/<Modulo>`, `tests/Arch` |
+| Fixtures de importación | `tests/Fixtures/imports/` (anonimizados) |
+| Docker | `Dockerfile`, `compose.yaml`, `compose.override.yaml`, `docker/` |
+| CI | `.github/workflows/ci.yml` (PR) y `cache.yml` (push) |
+| Plantillas de issues y PR | `.github/` |
+| Skills del proyecto | `.claude/skills/` |
+| Servicio del motor (R2) | `services/solver/` |
+
+## 10. Guías generadas por Laravel Boost
+
+@AGENTS.md

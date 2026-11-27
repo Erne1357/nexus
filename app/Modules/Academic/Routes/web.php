@@ -1,0 +1,18 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+
+/*
+| Rutas de Academic: la administración de sus catálogos. Quién entra lo decide la policy de cada
+| modelo, no la ruta.
+*/
+
+Route::middleware('auth')->prefix('academic')->name('academic.')->group(function () {
+    Route::livewire('/departments', 'academic::pages.departments')->name('departments');
+    Route::livewire('/careers', 'academic::pages.careers')->name('careers');
+    Route::livewire('/subjects', 'academic::pages.subjects')->name('subjects');
+    Route::livewire('/plans', 'academic::pages.plans')->name('plans');
+    Route::livewire('/plans/{plan}', 'academic::pages.plan')->name('plans.show');
+    // «Materias por colocar» de Servicios escolares: la misma lista de planes, abierta con el filtro «Por validar».
+    Route::livewire('/placements', 'academic::pages.plans')->name('placements');
+});

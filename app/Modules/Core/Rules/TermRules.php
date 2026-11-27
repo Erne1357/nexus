@@ -1,0 +1,220 @@
+<?php
+
+namespace App\Modules\Core\Rules;
+
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
+use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
+use DateTimeInterface;
+use Illuminate\Support\Arr;
+use Illuminate\Validation\ValidationException;
+
+/**
+ * Reglas de un periodo y de las ventanas de su calendario, que comparten sus Actions (docs/dominio/
+ * modelo-de-datos.md, `terms` y `term_stages`). Cada regla rota es una ValidationException sobre su
+ * campo.
+ *
+ * - `code`: código del SII, cuatro dígitos de año y un dígito de periodo (1 Ene-Jun, 2 Verano,
+ *   3 Ago-Dic), único.
+ * - `code`: ya no cambia una vez que el periodo se abrió en alguna modalidad (supuesto por confirmar, docs/dominio/
+ *   reglas-de-negocio.md, Periodo y calendario).
+ * - Fechas: un periodo o una ventana no termina antes de empezar (`ends_on` >= `starts_on`).
+ *   Una ventana no se compara con las fechas del periodo: la planeación ocurre antes de que empiece
+ *   (ver docs/dominio/reglas-de-negocio.md, Periodo y calendario, supuesto por confirmar).
+ */
+final class TermRules
+{
+    private const SUFFIXES = ['1' => 'Ene-Jun', '2' => 'Verano', '3' => 'Ago-Dic'];
+
+    /** Los sufijos de los periodos regulares, Ene-Jun y Ago-Dic; el verano (2) no lo es (TP-03). */
+    public const array REGULAR_SUFFIXES = ['1', '3'];
+
+    /**
+     * Fechas por sufijo, como `m-d` (TP-01, supuesto por confirmar): 1 del 22 de enero al 5 de junio, 2 del 22 de
+     * junio al 7 de agosto, 3 del 17 de agosto al 11 de diciembre.
+     *
+     * @var array<string, array{0: string, 1: string}>
+     */
+    private const DATES = ['1' => ['01-22', '06-05'], '2' => ['06-22', '08-07'], '3' => ['08-17', '12-11']];
+
+    /**
+     * @throws ValidationException si no tiene la forma `AAAAP`
+     */
+    public function normalizeCode(string $code): string
+    {
+        $code = trim($code);
+
+        if (preg_match('/^[0-9]{4}[123]$/', $code) !== 1) {
+            throw ValidationException::withMessages([
+                'code' => 'El código lleva el año y el periodo: 4 dígitos y 1 (Ene-Jun), 2 (Verano) o 3 (Ago-Dic), por ejemplo 20271.',
+            ]);
+        }
+
+        return $code;
+    }
+
+    /**
+     * El nombre que se sugiere para un código válido; null si el código no tiene la forma.
+     */
+    public function suggestedName(string $code): ?string
+    {
+        $code = trim($code);
+
+        if (preg_match('/^[0-9]{4}[123]$/', $code) !== 1) {
+            return null;
+        }
+
+        return self::SUFFIXES[$code[4]].' '.substr($code, 0, 4);
+    }
+
+    /**
+     * Las fechas fijas de un código válido (TP-01); null si el código no tiene la forma.
+     *
+     * @return array{0: string, 1: string}|null `[inicio, fin]` como `Y-m-d`
+     */
+    public function defaultDates(string $code): ?array
+    {
+        $code = trim($code);
+
+        if (preg_match('/^[0-9]{4}[123]$/', $code) !== 1) {
+            return null;
+        }
+
+        $year = substr($code, 0, 4);
+
+        return [$year.'-'.self::DATES[$code[4]][0], $year.'-'.self::DATES[$code[4]][1]];
+    }
+
+    /**
+     * El código que sigue al más reciente: 1 pasa a 2, 2 a 3 y 3 al 1 del año siguiente (20273 -> 20281); null si
+     * `$latest` no tiene la forma del código.
+     */
+    public function nextCode(?string $latest): ?string
+    {
+        if ($latest === null || preg_match('/^[0-9]{4}[123]$/', trim($latest)) !== 1) {
+            return null;
+        }
+
+        $latest = trim($latest);
+        $year = (int) substr($latest, 0, 4);
+        $period = (int) $latest[4];
+
+        return $period === 3 ? ($year + 1).'1' : $year.($period + 1);
+    }
+
+    /**
+     * Revisa un código ya normalizado; `$except` es el periodo que lo conserva al editarse.
+     *
+     * @throws ValidationException
+     */
+    public function ensureCodeIsFree(string $code, ?Term $except = null): void
+    {
+        $taken = Term::query()
+            ->where('code', $code)
+            ->when($except !== null, fn ($query) => $query->whereKeyNot($except->getKey()))
+            ->exists();
+
+        if ($taken) {
+            throw $this->codeTaken($code);
+        }
+    }
+
+    /**
+     * Por qué el código del periodo ya no se puede cambiar: «El código ya no se puede cambiar: el periodo se abrió
+     * en EAD y Presencial.»; null si no se ha abierto en ninguna modalidad (M4; también cuenta una desactivada o borrada
+     * después).
+     */
+    public function codeLockReason(Term $term): ?string
+    {
+        $codes = TermOpening::query()
+            ->where('term_id', $term->getKey())
+            ->join('modalities', 'modalities.id', '=', 'term_openings.modality_id')
+            ->orderBy('modalities.code')
+            ->pluck('modalities.name')
+            ->all();
+
+        if ($codes === []) {
+            return null;
+        }
+
+        $list = Arr::join($codes, ', ', ' y ');
+
+        return "El código ya no se puede cambiar: el periodo se abrió en {$list}.";
+    }
+
+    /**
+     * Rechaza un código distinto al guardado cuando el periodo ya se abrió en alguna modalidad; conservar el propio vale.
+     *
+     * @throws ValidationException
+     */
+    public function ensureCodeIsUnlocked(Term $term, string $code): void
+    {
+        if ($code === $term->code) {
+            return;
+        }
+
+        $reason = $this->codeLockReason($term);
+
+        if ($reason !== null) {
+            throw ValidationException::withMessages(['code' => $reason]);
+        }
+    }
+
+    /**
+     * El error de código repetido, también para cuando la restricción única de la base gana la
+     * carrera a ensureCodeIsFree().
+     */
+    public function codeTaken(string $code): ValidationException
+    {
+        return ValidationException::withMessages(['code' => "Ya existe un periodo con el código {$code}."]);
+    }
+
+    /**
+     * Las fechas de un periodo o una ventana como `Y-m-d`.
+     *
+     * @return array{0: string, 1: string}
+     *
+     * @throws ValidationException
+     */
+    public function dates(mixed $startsOn, mixed $endsOn): array
+    {
+        $starts = $this->date('starts_on', $startsOn);
+        $ends = $this->date('ends_on', $endsOn);
+
+        if ($ends < $starts) {
+            throw ValidationException::withMessages(['ends_on' => 'La fecha de fin no puede ser anterior a la de inicio.']);
+        }
+
+        return [$starts, $ends];
+    }
+
+    /**
+     * Una fecha estricta: un DateTimeInterface o un texto `Y-m-d` que existe en el calendario (el 30 de febrero
+     * no pasa a marzo). Vacío, nulo o «now» no son «hoy»: son error.
+     *
+     * @throws ValidationException
+     */
+    public function date(string $field, mixed $value): string
+    {
+        if ($value instanceof DateTimeInterface) {
+            return CarbonImmutable::instance($value)->toDateString();
+        }
+
+        if ($value === null || (is_string($value) && trim($value) === '')) {
+            throw ValidationException::withMessages([$field => 'Escribe la fecha.']);
+        }
+
+        try {
+            $date = is_string($value) ? CarbonImmutable::createFromFormat('!Y-m-d', $value) : null;
+        } catch (InvalidFormatException) {
+            $date = null;
+        }
+
+        if ($date === null || $date === false || $date->format('Y-m-d') !== $value) {
+            throw ValidationException::withMessages([$field => 'La fecha no es válida.']);
+        }
+
+        return $date->toDateString();
+    }
+}

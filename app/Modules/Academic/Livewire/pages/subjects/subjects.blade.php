@@ -1,0 +1,216 @@
+{{--
+    Anatomía de una pantalla de catálogo (DESIGN.md, "Layout"), la misma de Departamentos: encabezado y, en su renglón, la barra de herramientas común (x-core::catalog-toolbar: búsqueda,
+    filtros y una sola acción principal); tabla en una superficie blanca con filete, la
+    clave en Mono, las horas y los créditos en Mono (HT-HP-créditos), el estado con su insignia y las
+    acciones en btn-ghost; al pie, el rango y la paginación. Entre 768 y 1199 px se ocultan el tipo y
+    el laboratorio; debajo de 768 px la tabla cede su lugar a renglones apilados (clave, nombre y
+    estado; luego el detalle; luego las acciones), que no repiten los data-testid de la tabla.
+--}}
+<div>
+    <x-core::back-link :validation="$this->validationReturnUrl()" class="mb-4" />
+    <x-header title="Materias" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
+        <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
+            El catálogo de materias con sus horas y créditos; su lugar en cada plan está en la retícula. Una materia no se borra: se desactiva, y solo si ningún alumno la necesita todavía.
+        </x-slot:subtitle>
+    </x-header>
+
+    <x-core::catalog-toolbar narrow>
+        <x-slot:search>
+            <x-input
+                wire:model.live.debounce.300ms="search"
+                placeholder="Clave o nombre"
+                aria-label="Buscar materias"
+                icon="o-magnifying-glass"
+                clearable
+            />
+        </x-slot:search>
+
+        <x-select wire:model.live="departmentFilter" aria-label="Departamento" :options="$departments" placeholder="Departamento" />
+        <x-select wire:model.live="kindFilter" aria-label="Tipo" :options="$kindFilters" placeholder="Tipo" />
+        <x-select wire:model.live="spaceFilter" aria-label="Tipo de espacio" :options="$spaceFilters" placeholder="Tipo de espacio" />
+        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
+
+        @if ($fullCatalog)
+            <x-slot:action>
+                <x-button label="Nueva materia" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
+            </x-slot:action>
+        @endif
+    </x-core::catalog-toolbar>
+
+    <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
+        <x-table
+            :headers="$headers"
+            :rows="$subjects"
+            :row-decoration="$rowDecoration"
+            class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
+        >
+            @scope('cell_code', $subject)
+                <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $subject->is_active])>{{ $subject->code }}</span>
+            @endscope
+
+            @scope('cell_name', $subject)
+                {{ $subject->name }}
+                <span class="block text-xs text-neutral min-[1536px]:hidden">{{ $subject->required_space?->label() ?? 'Espacio sin marcar' }}</span>
+                @if (! $subject->counts_teacher_hours)
+                    <span class="mt-0.5 flex items-center gap-1 text-xs text-neutral" data-testid="no-teacher-hours-{{ $subject->code }}"><x-icon name="o-clock" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />No cuenta en la carga del docente</span>
+                @endif
+            @endscope
+
+            @scope('cell_department', $subject)
+                <span class="font-mono" title="{{ $subject->department?->name }}">{{ $subject->department?->code }}</span>
+            @endscope
+
+            @scope('cell_hours', $subject)
+                <span class="whitespace-nowrap font-mono tabular-nums">{{ $subject->theory_hours }}-{{ $subject->practice_hours }}-{{ $subject->credits }}</span>
+            @endscope
+
+            @scope('cell_kind', $subject)
+                @if ($subject->kind === null)
+                    <span class="text-neutral">Sin tipo</span>
+                @else
+                    {{ $subject->kind->label() }}
+                @endif
+            @endscope
+
+            @scope('cell_needs_lab', $subject)
+                {{ $subject->needs_lab ? 'Sí' : 'No' }}
+            @endscope
+
+            @scope('cell_required_space', $subject)
+                <x-core::status-badge :tone="$subject->required_space === null ? 'neutral' : 'info'" :label="$subject->required_space?->label() ?? 'Sin marcar'" />
+            @endscope
+
+            @scope('cell_study_plans_count', $subject)
+                <span class="whitespace-nowrap">{{ trans_choice('{0} En ningún plan|{1} En 1 plan|[2,*] En :count planes', $subject->study_plans_count) }}</span>
+            @endscope
+
+            @scope('cell_is_active', $subject)
+                <x-core::status-badge :tone="$subject->is_active ? 'success' : 'neutral'" :label="$subject->is_active ? 'Activa' : 'Inactiva'" />
+            @endscope
+
+            @scope('actions', $subject)
+                @include('academic::subjects.row-actions', ['subject' => $subject, 'inTable' => true])
+            @endscope
+
+            <x-slot:empty>
+                <x-icon name="o-book-open" label="Ninguna materia coincide con la búsqueda." />
+            </x-slot:empty>
+        </x-table>
+
+        <ul class="divide-y divide-base-300 md:hidden" data-testid="subject-cards">
+            @foreach ($subjects as $subject)
+                <li wire:key="subject-card-{{ $subject->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $subject->is_active])>
+                    <div class="flex items-center gap-2.5">
+                        <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $subject->is_active])>{{ $subject->code }}</span>
+                        <span @class(['min-w-0 flex-1', 'font-semibold' => $subject->is_active])>{{ $subject->name }}</span>
+
+                        <x-core::status-badge :tone="$subject->is_active ? 'success' : 'neutral'" :label="$subject->is_active ? 'Activa' : 'Inactiva'" />
+                    </div>
+
+                    <div class="text-neutral">
+                        <span class="font-mono">{{ $subject->department?->code }}</span> ·
+                        <span class="font-mono tabular-nums">{{ $subject->theory_hours }}-{{ $subject->practice_hours }}-{{ $subject->credits }}</span> ·
+                        {{ $subject->kind?->label() ?? 'Sin tipo' }} · {{ $subject->required_space?->label() ?? 'Espacio sin marcar' }} ·
+                        {{ trans_choice('{0} En ningún plan|{1} En 1 plan|[2,*] En :count planes', $subject->study_plans_count) }}@if ($subject->needs_lab) · Laboratorio @endif@if (! $subject->counts_teacher_hours) · No cuenta en la carga del docente @endif
+                    </div>
+
+                    @include('academic::subjects.row-actions', ['subject' => $subject, 'inTable' => false])
+                </li>
+            @endforeach
+        </ul>
+
+        @if ($subjects->isNotEmpty() || $subjects->hasPages())
+            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
+                @if ($subjects->isNotEmpty())
+                    <p>Materias <span class="font-mono">{{ $subjects->first()->code }}</span>@if ($subjects->count() > 1) a <span class="font-mono">{{ $subjects->last()->code }}</span> · <span class="font-mono">{{ $subjects->firstItem() }}–{{ $subjects->lastItem() }}</span>@else · <span class="font-mono">{{ $subjects->firstItem() }}</span>@endif de <span class="font-mono">{{ $subjects->total() }}</span></p>
+                @endif
+
+                {{ $subjects->onEachSide(1)->links(data: ['scrollTo' => false]) }}
+            </div>
+        @endif
+    </div>
+
+    <x-drawer wire:model="showSpaceDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="space-drawer-title" data-testid="space-drawer">
+        @if ($spaceSubjectId !== null)
+        <form wire:submit="saveSpace" class="flex min-h-dvh flex-col">
+            <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
+                <div class="min-w-0 flex-1">
+                    <h2 id="space-drawer-title" class="text-xl font-bold leading-tight">Tipo de espacio</h2>
+                    <p class="mt-1 text-sm text-neutral">Dónde se da la materia: de él depende qué salones puede elegir el docente al seleccionar su carga.</p>
+                </div>
+                <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="$wire.showSpaceDrawer = false" aria-label="Cerrar el panel" />
+            </header>
+            <div class="flex-1 space-y-4 px-5 pt-4 pb-8">
+                <x-select label="Tipo de espacio" name="spaceChoice" wire:model="spaceChoice" :options="$spaces" placeholder="Elige el tipo…" />
+                <p class="text-sm text-neutral">Laboratorio es el laboratorio de verdad, como el de redes; la sala de cómputo es lo que en la relación de materias dice «laboratorio». Con laboratorio, la materia también queda como «Requiere laboratorio».</p>
+            </div>
+            <footer class="flex justify-end gap-2 border-t border-base-300 px-5 py-3">
+                <x-button label="Cancelar" @click="$wire.showSpaceDrawer = false" />
+                <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="saveSpace" data-testid="space-save" />
+            </footer>
+        </form>
+        @endif
+    </x-drawer>
+
+    {{-- PL-02 (tarea 1.73): si las horas de la materia cuentan en la carga del docente; lo cambian el jefe de su departamento y el admin. --}}
+    <x-drawer wire:model="showHoursDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="hours-drawer-title" data-testid="teacher-hours-drawer">
+        @if ($hoursSubjectId !== null)
+        <form wire:submit="saveTeacherHours" class="flex min-h-dvh flex-col">
+            <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
+                <div class="min-w-0 flex-1">
+                    <h2 id="hours-drawer-title" class="text-xl font-bold leading-tight">Carga del docente</h2>
+                    <p class="mt-1 text-sm text-neutral">Si las horas de esta materia le cuentan al docente en su carga: en sus horas frente a grupo, su banda y el aviso de horas de más.</p>
+                </div>
+                <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="$wire.showHoursDrawer = false" aria-label="Cerrar el panel" />
+            </header>
+            <div class="flex-1 space-y-4 px-5 pt-4 pb-8">
+                <x-toggle label="Sus horas cuentan en la carga del docente" wire:model="countsTeacherHours" data-testid="teacher-hours-toggle" />
+                <p class="text-sm text-neutral">Apágalo en materias como las tutorías: el docente las da y el grupo ocupa su horario, pero sus horas no le cuentan. Al alumno sus créditos le siguen contando.</p>
+            </div>
+            <footer class="flex justify-end gap-2 border-t border-base-300 px-5 py-3">
+                <x-button label="Cancelar" @click="$wire.showHoursDrawer = false" />
+                <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="saveTeacherHours" data-testid="teacher-hours-save" />
+            </footer>
+        </form>
+        @endif
+    </x-drawer>
+
+    <x-modal wire:model="showModal" :title="$editingId === null ? 'Nueva materia' : 'Editar materia'" box-class="max-w-2xl" separator>
+        <x-form wire:submit="save" no-separator>
+            <div class="grid gap-4 md:grid-cols-6">
+                <div class="md:col-span-2">
+                    <x-input label="Clave" name="code" wire:model="code" placeholder="ACF-0901" />
+                </div>
+                <div class="md:col-span-4">
+                    <x-input label="Nombre" name="name" wire:model="name" />
+                </div>
+
+                <div class="md:col-span-4">
+                    <x-select label="Departamento" name="department_id" wire:model="department_id" :options="$departments" placeholder="Elige el departamento" />
+                </div>
+                <div class="md:col-span-2">
+                    <x-select label="Tipo" name="kind" wire:model="kind" :options="$kinds" placeholder="Sin tipo" />
+                </div>
+
+                <div class="md:col-span-2">
+                    <x-input label="Horas de teoría" name="theory_hours" wire:model="theory_hours" type="number" min="0" inputmode="numeric" />
+                </div>
+                <div class="md:col-span-2">
+                    <x-input label="Horas de práctica" name="practice_hours" wire:model="practice_hours" type="number" min="0" inputmode="numeric" />
+                </div>
+                <div class="md:col-span-2">
+                    <x-input label="Créditos" name="credits" wire:model="credits" type="number" min="0" inputmode="numeric" />
+                </div>
+
+                <div class="md:col-span-6">
+                    <x-toggle label="Requiere laboratorio" name="needs_lab" wire:model="needs_lab" />
+                </div>
+            </div>
+
+            <x-slot:actions>
+                <x-button label="Cancelar" @click="$wire.showModal = false" />
+                <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="save" />
+            </x-slot:actions>
+        </x-form>
+    </x-modal>
+</div>

@@ -1,0 +1,277 @@
+<?php
+
+namespace App\Modules\Scheduling\Queries;
+
+use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\AcademicLoad\Queries\RoomLoansQuery;
+use App\Modules\Core\Enums\SettingScope;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
+use App\Modules\Core\Models\Setting;
+use App\Modules\Core\Models\Term;
+use App\Modules\Facilities\Models\Room;
+use App\Modules\Facilities\Models\RoomBlock;
+use App\Modules\Faculty\Enums\AvailabilityKind;
+use App\Modules\Faculty\Enums\PositionKind;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherAvailability;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
+use App\Modules\Faculty\Models\TeacherHourAllowance;
+use App\Modules\Faculty\Models\TeacherPosition;
+use App\Modules\Faculty\Queries\SelectionCsvHours;
+use App\Modules\Faculty\Rules\TeachingHours;
+use App\Modules\Scheduling\Enums\GroupStatus;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupQuota;
+use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Validation\Minutes;
+use App\Modules\Scheduling\Validation\ScheduleState;
+use App\Modules\Scheduling\Validation\ScheduleStateBuilder;
+use App\Modules\Scheduling\Validation\State\StateGroup;
+use App\Modules\Scheduling\Validation\State\StateQuota;
+use App\Modules\Scheduling\Validation\State\StateRoom;
+use App\Modules\Scheduling\Validation\State\StateRoomBlock;
+use App\Modules\Scheduling\Validation\State\StateRoomLoan;
+use App\Modules\Scheduling\Validation\State\StateSession;
+use App\Modules\Scheduling\Validation\State\StateSubject;
+use App\Modules\Scheduling\Validation\State\StateTeacher;
+use Illuminate\Database\Eloquent\Builder;
+
+/**
+ * Lee de la base el ScheduleState de un periodo visto desde una modalidad (tarea 3.2; M1: la carga es por departamento
+ * y modalidad, con los grupos de todos sus campus), en pocas consultas agregadas:
+ *
+ * - todos los grupos de la modalidad, de todos sus campus (los cancelados, inactivos), con sus sesiones y los cupos de los
+ *   no cancelados: un grupo cancelado conserva sus cupos de historia (CancelGroup) y no cuentan;
+ * - los grupos activos con docente de las otras modalidades del periodo, porque HC-01 cruza campus y modalidades, y
+ *   los que tienen alguna sesión con salón, porque un salón lo comparten las modalidades de su campus (HC-02);
+ * - las materias de esos grupos, los salones de los campus donde la modalidad tiene grupos y los que usan esas
+ *   sesiones, y los bloqueos vigentes;
+ * - los docentes de esos grupos: nombre, horas base (la suma de sus plazas vigentes al inicio del periodo, como
+ *   TeacherBaseHoursQuery), horas frente a grupo (PL-01 por esas plazas, como TeacherTeachingHoursQuery, o el CSV de la
+ *   selección del periodo si no dan, SelectionCsvHours; HC-08 desde la tarea 1.50), horas externas del periodo, bloques
+ *   no disponibles, si es de honorarios y sus horas autorizadas del periodo (`teacher_hour_allowances`, SEL-12);
+ * - los perfiles de las modalidades (todas, borradas incluidas; una con perfil guardado inválido toma el perfil por
+ *   omisión, ModalityProfile::DEFAULTS, para que un perfil roto no tumbe la foto de todas las modalidades:
+ *   Modality::valid_profile), las claves de los campus, las carreras ofrecidas, los planes activos y los parámetros
+ *   `staffing.*` y `scheduling.*`;
+ * - los préstamos de salón vivos (aceptados o propuestos) de esos campus, de RoomLoansQuery de AcademicLoad (HC-10).
+ */
+final class ScheduleStateQuery
+{
+    private const array SETTING_PREFIXES = ['staffing.', 'scheduling.'];
+
+    public function __construct(
+        private readonly RoomLoansQuery $roomLoans,
+        private readonly SelectionCsvHours $csvHours,
+    ) {}
+
+    /**
+     * La foto del periodo vista desde una modalidad (su id); sin modalidad, solo los grupos activos con docente de todo
+     * el periodo (lo que necesita validar a un docente).
+     */
+    public function forModality(Term $term, ?string $modalityId = null): ScheduleState
+    {
+        $builder = new ScheduleStateBuilder($term->id);
+
+        $groups = Group::query()
+            ->where('term_id', $term->id)
+            ->where(fn (Builder $query) => $query->when($modalityId !== null, fn (Builder $focus) => $focus->where('modality_id', $modalityId))
+                ->orWhere(fn (Builder $other) => $other->where('status', '<>', GroupStatus::Cancelled->value)
+                    ->where(fn (Builder $reason) => $reason->whereNotNull('teacher_id')
+                        ->when($modalityId !== null, fn (Builder $rooms) => $rooms->orWhereExists(GroupSession::query()->toBase()
+                            ->whereColumn('group_sessions.group_id', 'groups.id')->whereNotNull('group_sessions.room_id'))))))
+            ->get(['id', 'campus_id', 'modality_id', 'subject_id', 'department_id', 'owner_career_id', 'study_plan_id', 'semester', 'code', 'teacher_id', 'capacity', 'status', 'package_id', 'package_number']);
+
+        foreach ($groups as $group) {
+            $builder->group(self::stateGroup($group));
+        }
+
+        $groupIds = $groups->pluck('id')->all();
+        $roomIds = [];
+
+        GroupSession::query()->whereIn('group_id', $groupIds)
+            ->orderBy('day')->orderBy('starts_at')
+            ->get(['id', 'group_id', 'day', 'starts_at', 'ends_at', 'room_id', 'kind'])
+            ->each(function (GroupSession $session) use ($builder, &$roomIds): void {
+                $builder->session(new StateSession($session->id, $session->group_id, $session->day,
+                    Minutes::of($session->starts_at), Minutes::of($session->ends_at), $session->room_id, $session->kind));
+
+                if ($session->room_id !== null) {
+                    $roomIds[$session->room_id] = true;
+                }
+            });
+
+        $focus = $modalityId === null ? collect() : $groups->where('modality_id', $modalityId);
+        $campusIds = $focus->pluck('campus_id')->unique()->values()->all();
+
+        GroupQuota::query()->whereIn('group_id', $focus->reject(fn (Group $group): bool => $group->status === GroupStatus::Cancelled)->pluck('id')->all())
+            ->get(['group_id', 'career_id', 'max_seats', 'is_owner'])
+            ->each(fn (GroupQuota $quota) => $builder->quota(new StateQuota($quota->group_id, $quota->career_id, $quota->max_seats, $quota->is_owner)));
+
+        Subject::query()->withTrashed()->whereIn('id', $groups->pluck('subject_id')->unique()->all())
+            ->get(['id', 'code', 'name', 'theory_hours', 'practice_hours', 'needs_lab', 'is_active', 'deleted_at', 'counts_teacher_hours'])
+            ->each(fn (Subject $subject) => $builder->subject(new StateSubject($subject->id, $subject->code, $subject->name,
+                $subject->theory_hours, $subject->practice_hours, $subject->needs_lab, $subject->is_active && ! $subject->trashed(), $subject->counts_teacher_hours)));
+
+        $this->addRooms($builder, $term, $campusIds, array_keys($roomIds));
+
+        foreach ($campusIds as $campusId) {
+            $this->roomLoans->liveFor($term->id, $campusId)
+                ->each(fn (InterdepartmentalAgreement $loan) => $builder->loan(new StateRoomLoan($loan->group_id, $loan->room_id, (int) $loan->day,
+                    Minutes::of($loan->starts_at), Minutes::of($loan->ends_at), $loan->status === AgreementStatus::Accepted)));
+        }
+
+        $this->addTeachers($builder, $term, $groups->pluck('teacher_id')->filter()->unique()->values()->all());
+
+        foreach (Modality::query()->withTrashed()->get(['id', 'settings']) as $each) {
+            $builder->profile($each->id, $each->valid_profile ?? ModalityProfile::fromArray([]));
+        }
+
+        foreach (Campus::query()->withTrashed()->get(['id', 'code']) as $each) {
+            $builder->campusCode($each->id, $each->code);
+        }
+
+        CareerCampus::query()->where('is_active', true)->get(['career_id', 'campus_id'])
+            ->each(fn (CareerCampus $offering) => $builder->offering($offering->career_id, $offering->campus_id));
+
+        StudyPlan::query()->where('is_active', true)->pluck('id')
+            ->each(fn (string $id) => $builder->activePlan($id));
+
+        Setting::query()->where('scope', SettingScope::Global)->whereNull('scope_id')
+            ->where(function (Builder $query): void {
+                foreach (self::SETTING_PREFIXES as $prefix) {
+                    $query->orWhere('key', 'like', $prefix.'%');
+                }
+            })
+            ->get(['key', 'value'])
+            ->each(fn (Setting $setting) => $builder->setting($setting->key, $setting->value));
+
+        return $builder->build();
+    }
+
+    /**
+     * Docentes que la foto no trae (los candidatos del ranking): su nombre, horas y no disponibilidad del periodo. Un
+     * docente borrado no entra (sus horas base ya no cuentan), así que las reglas de horas no lo revisan.
+     *
+     * @param  list<string>  $teacherIds
+     * @return list<StateTeacher>
+     */
+    public function teachers(Term $term, array $teacherIds): array
+    {
+        if ($teacherIds === []) {
+            return [];
+        }
+
+        // Una lectura de las plazas vigentes al inicio del periodo da las horas base (como TeacherBaseHoursQuery), las
+        // horas frente a grupo (PL-01, como TeacherTeachingHoursQuery) y si es de honorarios.
+        $positions = TeacherPosition::query()->currentOn($term->starts_on)->whereIn('teacher_id', $teacherIds)
+            ->get(['teacher_id', 'kind', 'category', 'base_hours'])->groupBy('teacher_id');
+        $base = $positions->map(fn ($plazas): int => (int) $plazas->sum('base_hours'));
+        $teaching = $positions->map(fn ($plazas): int => TeachingHours::forPositions($plazas->map(fn (TeacherPosition $position): array => [
+            'kind' => $position->kind, 'category' => $position->category, 'base_hours' => $position->base_hours,
+        ])));
+        $administrative = $positions->map(fn ($plazas): ?int => TeachingHours::administrativeHours($plazas->map(fn (TeacherPosition $position): array => [
+            'kind' => $position->kind, 'base_hours' => $position->base_hours,
+        ])));
+        $honorarios = $positions->filter(fn ($plazas): bool => $plazas->contains(fn (TeacherPosition $position): bool => $position->kind === PositionKind::Honorarios));
+        $csv = $this->csvHours->forTerm($term, $teacherIds);
+
+        $external = TeacherExternalLoad::query()->where('term_id', $term->id)->whereIn('teacher_id', $teacherIds)
+            ->groupBy('teacher_id')->selectRaw('teacher_id, sum(hours) as hours')
+            ->pluck('hours', 'teacher_id');
+
+        $unavailable = [];
+
+        TeacherAvailability::query()->where('term_id', $term->id)->whereIn('teacher_id', $teacherIds)
+            ->where('kind', AvailabilityKind::Unavailable->value)
+            ->get(['teacher_id', 'day', 'starts_at', 'ends_at'])
+            ->each(function (TeacherAvailability $block) use (&$unavailable): void {
+                $unavailable[$block->teacher_id][] = [(int) $block->day, Minutes::of($block->starts_at), Minutes::of($block->ends_at)];
+            });
+
+        return Teacher::query()
+            ->whereIn('teachers.id', $teacherIds)
+            ->orderBy('teachers.id')
+            ->select(['teachers.id', 'teachers.name'])
+            ->addSelect(['allowance_hours' => TeacherHourAllowance::query()->select('hours')
+                ->whereColumn('teacher_hour_allowances.teacher_id', 'teachers.id')
+                ->where('teacher_hour_allowances.term_id', $term->id)
+                ->limit(1)])
+            ->get()
+            ->map(fn (Teacher $teacher): StateTeacher => new StateTeacher(
+                $teacher->id,
+                $teacher->name,
+                $base[$teacher->id] ?? 0,
+                (int) ($external[$teacher->id] ?? 0),
+                $unavailable[$teacher->id] ?? [],
+                $honorarios->has($teacher->id),
+                $teacher->allowance_hours === null ? null : (int) $teacher->allowance_hours,
+                // PL-03: con plaza administrativa no hay banda, así que no se le inventan horas frente a grupo con el CSV.
+                ($administrative[$teacher->id] ?? null) !== null ? 0 : (($teaching[$teacher->id] ?? 0) > 0 ? $teaching[$teacher->id] : ($csv[$teacher->id] ?? 0)),
+                null,
+                $administrative[$teacher->id] ?? null,
+            ))
+            ->all();
+    }
+
+    /**
+     * @param  list<string>  $teacherIds
+     */
+    private function addTeachers(ScheduleStateBuilder $builder, Term $term, array $teacherIds): void
+    {
+        foreach ($this->teachers($term, $teacherIds) as $teacher) {
+            $builder->teacher($teacher);
+        }
+    }
+
+    /**
+     * Los salones de los campus indicados y los de otros campus que usan las sesiones cargadas, con sus bloqueos del
+     * periodo.
+     *
+     * @param  list<string>  $campusIds
+     * @param  list<string>  $usedRoomIds
+     */
+    private function addRooms(ScheduleStateBuilder $builder, Term $term, array $campusIds, array $usedRoomIds): void
+    {
+        $rooms = Room::query()->withTrashed()
+            ->where(fn (Builder $query) => $query->whereIn('campus_id', $campusIds)->orWhereIn('id', $usedRoomIds))
+            ->get(['id', 'campus_id', 'code', 'capacity', 'type', 'department_id', 'is_active', 'deleted_at']);
+
+        foreach ($rooms as $room) {
+            $builder->room(new StateRoom($room->id, $room->campus_id, $room->code, $room->capacity, $room->type,
+                $room->department_id, $room->is_active && ! $room->trashed()));
+        }
+
+        RoomBlock::query()->whereIn('room_id', $rooms->pluck('id')->all())
+            ->where(fn (Builder $query) => $query->whereNull('term_id')->orWhere('term_id', $term->id))
+            ->get(['room_id', 'day', 'starts_at', 'ends_at', 'reason'])
+            ->each(fn (RoomBlock $block) => $builder->block(new StateRoomBlock($block->room_id, $block->day,
+                Minutes::of($block->starts_at), Minutes::of($block->ends_at), (string) $block->reason)));
+    }
+
+    private static function stateGroup(Group $group): StateGroup
+    {
+        return new StateGroup(
+            $group->id,
+            $group->campus_id,
+            $group->modality_id,
+            $group->subject_id,
+            $group->department_id,
+            $group->owner_career_id,
+            $group->study_plan_id,
+            $group->semester,
+            $group->code,
+            $group->teacher_id,
+            $group->capacity,
+            $group->status !== GroupStatus::Cancelled,
+            $group->package_id,
+            $group->package_number,
+        );
+    }
+}

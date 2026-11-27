@@ -1,0 +1,404 @@
+<?php
+
+use App\Modules\Academic\Enums\SubjectKind;
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Actions\Proposals\StartCareerProposal;
+use App\Modules\AcademicLoad\Enums\ProposalStatus;
+use App\Modules\AcademicLoad\Events\CareerProposalStarted;
+use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalItem;
+use App\Modules\Core\Enums\SettingScope;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Setting;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
+use App\Modules\Core\Models\User;
+use App\Modules\Students\Models\Student;
+use App\Modules\Students\Models\StudentProgress;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Validation\ValidationException;
+use Spatie\Activitylog\Models\Activity;
+
+/*
+| StartCareerProposal arma la propuesta de una carrera en una modalidad y un periodo (reglas-de-negocio.md,
+| "Propuesta de carrera"; M6): por cada campus donde se ofrece la carrera (MS5), una fila por materia activa de la
+| retícula de los planes activos (HC-13), con los alumnos posibles del momento en ese campus, esperados = posibles y los
+| grupos sugeridos (35, o 25 con laboratorio; confirmado el 2 de noviembre de 2026). Solo en un periodo abierto en la
+| modalidad y para una carrera ofrecida en algún campus, y una sola vez: después devuelve la que ya existe (supuestos
+| por confirmar).
+*/
+
+beforeEach(function () {
+    $this->actor = User::factory()->create();
+    $this->campus = Campus::factory()->create(['code' => 'C2']);
+    $this->term = Term::factory()->create(['code' => '20271']);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id]);
+    $this->career = Career::factory()->create(['code' => 'ISC']);
+    CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $this->campus->id]);
+    $this->plan = StudyPlan::factory()->create(['career_id' => $this->career->id, 'code' => 'ISIC-2010-224']);
+});
+
+function startProposal(?Term $term = null, ?Modality $modality = null, ?Career $career = null): CareerProposal
+{
+    return app(StartCareerProposal::class)->handle(
+        $term ?? test()->term,
+        $modality ?? modalityOf('PRES'),
+        $career ?? test()->career,
+        test()->actor,
+    );
+}
+
+/**
+ * `$count` alumnos activos del plan en el campus que ya pueden cursar `$subjects`.
+ *
+ * @param  list<Subject>  $subjects
+ */
+function eligibleInProposal(StudyPlan $plan, Campus $campus, array $subjects, int $count): void
+{
+    Student::factory()->count($count)->for($plan)->create(['campus_id' => $campus->id])
+        ->each(fn (Student $student) => StudentProgress::factory()->for($student)->create([
+            'subjects_available' => array_map(fn (Subject $subject): string => $subject->id, $subjects),
+        ]));
+}
+
+/**
+ * Las filas de la propuesta por clave de materia: [plan, semestre, elegibles, esperados, grupos].
+ *
+ * @return array<string, array{0: string, 1: int, 2: int, 3: int, 4: int}>
+ */
+function proposalRowsOf(CareerProposal $proposal): array
+{
+    return $proposal->items()->with(['subject', 'studyPlan'])->get()
+        ->sortBy(fn (ProposalItem $item): string => $item->subject->code)
+        ->mapWithKeys(fn (ProposalItem $item): array => [$item->subject->code => [
+            $item->studyPlan->code, $item->semester, $item->eligible_students, $item->expected_students, $item->requested_groups,
+        ]])
+        ->all();
+}
+
+it('arma la propuesta en borrador con una fila por materia, sus elegibles y la precarga 35 / 25', function () {
+    $calculo = Subject::factory()->create(['code' => 'ACF-0901']);
+    $redes = Subject::factory()->create(['code' => 'SCD-1015', 'needs_lab' => true]);
+    $etica = Subject::factory()->create(['code' => 'ACA-0907']);
+    placeInPlan($this->plan, $calculo, 1);
+    placeInPlan($this->plan, $redes, 5);
+    placeInPlan($this->plan, $etica, 2);
+    eligibleInProposal($this->plan, $this->campus, [$calculo, $redes], 36);
+    eligibleInProposal($this->plan, $this->campus, [$calculo], 35);
+
+    $proposal = startProposal();
+
+    expect($proposal->status)->toBe(ProposalStatus::Draft)
+        ->and($proposal->term_id)->toBe($this->term->id)
+        ->and($proposal->modality_id)->toBe(modalityOf('PRES')->id)
+        ->and($proposal->career_id)->toBe($this->career->id)
+        ->and($proposal->items()->pluck('campus_id')->unique()->all())->toBe([$this->campus->id])
+        ->and(proposalRowsOf($proposal))->toBe([
+            'ACA-0907' => ['ISIC-2010-224', 2, 0, 0, 0],
+            'ACF-0901' => ['ISIC-2010-224', 1, 71, 71, 3],
+            'SCD-1015' => ['ISIC-2010-224', 5, 36, 36, 2],
+        ])
+        ->and($proposal->eligible_students)->toBe(71);
+});
+
+it('M2: la propuesta de EAD, una modalidad con salones, lleva las columnas de los campus donde se ofrece la carrera', function () {
+    $ead = Modality::query()->where('code', 'EAD')->sole();
+    $ead->update(['is_active' => true]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $ead->id]);
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'ACF-0901']), 1);
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'SCD-1015']), 5);
+
+    $proposal = startProposal(modality: $ead);
+
+    expect($proposal->fresh()->modality->code)->toBe('EAD')
+        ->and($proposal->items()->pluck('campus_id')->all())->toBe([$this->campus->id, $this->campus->id]);
+});
+
+it('HC-13: deja fuera las materias inactivas o borradas, las quitadas de la retícula y las de planes inactivos, borrados o de otra carrera', function () {
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'A-ACTIVA']));
+    placeInPlan($this->plan, Subject::factory()->inactive()->create(['code' => 'B-INACTIVA']));
+    $deleted = Subject::factory()->create(['code' => 'C-BORRADA']);
+    placeInPlan($this->plan, $deleted);
+    $deleted->delete();
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'D-QUITADA']))->delete();
+    placeInPlan(StudyPlan::factory()->inactive()->create(['career_id' => $this->career->id]), Subject::factory()->create(['code' => 'E-PLAN-INACTIVO']));
+    $deletedPlan = StudyPlan::factory()->create(['career_id' => $this->career->id]);
+    placeInPlan($deletedPlan, Subject::factory()->create(['code' => 'F-PLAN-BORRADO']));
+    $deletedPlan->delete();
+    placeInPlan(StudyPlan::factory()->create(), Subject::factory()->create(['code' => 'G-OTRA-CARRERA']));
+
+    expect(array_keys(proposalRowsOf(startProposal())))->toBe(['A-ACTIVA']);
+});
+
+it('deja fuera residencia, servicio social y actividades complementarias, y las materias sin horas de clase, tengan o no tipo', function () {
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'A-CLASE', 'kind' => SubjectKind::Basica, 'theory_hours' => 3, 'practice_hours' => 2]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'B-SIN-TIPO', 'kind' => null, 'theory_hours' => 2, 'practice_hours' => 0]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'RP', 'kind' => SubjectKind::Residencia, 'theory_hours' => 0, 'practice_hours' => 0]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'SS', 'kind' => SubjectKind::ServicioSocial, 'theory_hours' => 0, 'practice_hours' => 0]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'AC', 'kind' => SubjectKind::Complementaria, 'theory_hours' => 0, 'practice_hours' => 0]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'X-CON-TIPO-Y-HORAS', 'kind' => SubjectKind::Residencia, 'theory_hours' => 0, 'practice_hours' => 4]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'Z-SIN-HORAS', 'kind' => null, 'theory_hours' => 0, 'practice_hours' => 0]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'Z-CON-TIPO-SIN-HORAS', 'kind' => SubjectKind::Basica, 'theory_hours' => 0, 'practice_hours' => 0]));
+
+    expect(array_keys(proposalRowsOf(startProposal())))->toBe(['A-CLASE', 'B-SIN-TIPO']);
+});
+
+it('una materia en dos planes activos es una sola fila, con el plan y el semestre del primer plan por clave', function () {
+    $later = StudyPlan::factory()->create(['career_id' => $this->career->id, 'code' => 'ISIC-2020-301']);
+    $earlier = StudyPlan::factory()->create(['career_id' => $this->career->id, 'code' => 'ISIC-2004-296']);
+    $calculo = Subject::factory()->create(['code' => 'ACF-0901']);
+    placeInPlan($this->plan, $calculo, 2);
+    placeInPlan($later, $calculo, 1);
+    placeInPlan($earlier, $calculo, 3);
+
+    expect(proposalRowsOf(startProposal()))->toBe(['ACF-0901' => ['ISIC-2004-296', 3, 0, 0, 0]]);
+});
+
+it('cuenta solo los elegibles de la carrera en el campus de cada columna', function () {
+    $calculo = Subject::factory()->create(['code' => 'ACF-0901']);
+    placeInPlan($this->plan, $calculo);
+    eligibleInProposal($this->plan, $this->campus, [$calculo], 2);
+    eligibleInProposal($this->plan, Campus::factory()->create(), [$calculo], 5);
+
+    expect(proposalRowsOf(startProposal()))->toBe(['ACF-0901' => ['ISIC-2010-224', 1, 2, 2, 1]]);
+});
+
+it('precarga los grupos con el tamaño objetivo del parámetro global', function () {
+    Setting::query()->create(['scope' => SettingScope::Global, 'key' => 'demand.target_group_size', 'value' => ['default' => 40, 'lab' => 20]]);
+    $calculo = Subject::factory()->create(['code' => 'ACF-0901']);
+    $redes = Subject::factory()->create(['code' => 'SCD-1015', 'needs_lab' => true]);
+    placeInPlan($this->plan, $calculo);
+    placeInPlan($this->plan, $redes);
+    eligibleInProposal($this->plan, $this->campus, [$calculo, $redes], 41);
+
+    expect(proposalRowsOf(startProposal()))->toBe([
+        'ACF-0901' => ['ISIC-2010-224', 1, 41, 41, 2],
+        'SCD-1015' => ['ISIC-2010-224', 1, 41, 41, 3],
+    ]);
+});
+
+it('es idempotente: la segunda vez devuelve la misma propuesta sin tocar sus filas ni volver a contar', function () {
+    $calculo = Subject::factory()->create(['code' => 'ACF-0901']);
+    placeInPlan($this->plan, $calculo);
+    $first = startProposal();
+    ProposalItem::query()->update(['requested_groups' => 4]);
+    eligibleInProposal($this->plan, $this->campus, [$calculo], 3);
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'ACA-0907']));
+    Event::fake([CareerProposalStarted::class]);
+
+    $second = startProposal();
+
+    expect($second->id)->toBe($first->id)
+        ->and(CareerProposal::query()->count())->toBe(1)
+        ->and(proposalRowsOf($second))->toBe(['ACF-0901' => ['ISIC-2010-224', 1, 0, 0, 4]])
+        ->and(Activity::query()->where('subject_id', $first->id)->count())->toBe(1);
+    Event::assertNotDispatched(CareerProposalStarted::class);
+});
+
+it('devuelve la propuesta que ya existe aunque el periodo o la oferta ya no la dejarían armar', function () {
+    $existing = CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'career_id' => $this->career->id]);
+    CareerCampus::query()->update(['is_active' => false]);
+
+    expect(startProposal()->id)->toBe($existing->id);
+});
+
+it('M4: rechaza un periodo que no está abierto en la modalidad y no escribe nada', function () {
+    $closed = Term::factory()->create(['code' => '20273']);
+    TermOpening::factory()->create(['term_id' => $closed->id, 'modality_id' => Modality::factory()->create()->id]);
+
+    expect(fn () => startProposal(term: $closed))->toThrow(
+        fn (ValidationException $e) => expect($e->errors())->toBe(['term' => ['El periodo 20273 no está abierto en Presencial.']]),
+    );
+
+    expect(CareerProposal::query()->count())->toBe(0)
+        ->and(Activity::query()->count())->toBe(0);
+});
+
+it('rechaza una carrera que no se ofrece en ningún campus activo y no escribe nada', function (string $offering) {
+    $other = Career::factory()->create(['code' => 'IGE']);
+    match ($offering) {
+        'inactive' => CareerCampus::factory()->inactive()->create(['career_id' => $other->id, 'campus_id' => $this->campus->id]),
+        'deleted' => CareerCampus::factory()->create(['career_id' => $other->id, 'campus_id' => $this->campus->id])->delete(),
+        'inactive campus' => CareerCampus::factory()->create(['career_id' => $other->id, 'campus_id' => Campus::factory()->inactive()->create()->id]),
+        default => null,
+    };
+
+    expect(fn () => startProposal(career: $other))->toThrow(
+        fn (ValidationException $e) => expect($e->errors())->toBe(['career' => ['IGE no se ofrece en ningún campus.']]),
+    );
+
+    expect(CareerProposal::query()->count())->toBe(0);
+})->with([
+    'sin oferta' => ['none'],
+    'oferta inactiva' => ['inactive'],
+    'oferta borrada' => ['deleted'],
+    'ofrecida solo en un campus inactivo' => ['inactive campus'],
+]);
+
+it('M10: rechaza una modalidad inactiva y no escribe nada', function () {
+    $ead = Modality::query()->where('code', 'EAD')->sole();
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $ead->id]);
+
+    expect(fn () => startProposal(modality: $ead))->toThrow(
+        fn (ValidationException $e) => expect($e->errors())->toBe(['term' => ['EAD está inactiva: su carga no se trabaja.']]),
+    );
+
+    expect(CareerProposal::query()->count())->toBe(0);
+});
+
+it('deja bitácora de la propuesta armada con quién la armó y sus alumnos posibles', function () {
+    $calculo = Subject::factory()->create();
+    placeInPlan($this->plan, $calculo);
+    placeInPlan($this->plan, Subject::factory()->create());
+    eligibleInProposal($this->plan, $this->campus, [$calculo], 3);
+
+    $proposal = startProposal();
+
+    $activity = Activity::query()->sole();
+    expect($activity->subject_id)->toBe($proposal->id)
+        ->and($activity->causer_id)->toBe($this->actor->id)
+        ->and($activity->event)->toBe('created')
+        ->and($activity->attribute_changes['attributes'])->toBe([
+            'term_id' => $this->term->id,
+            'modality_id' => modalityOf('PRES')->id,
+            'career_id' => $this->career->id,
+            'status' => 'draft',
+            'eligible_students' => 3,
+        ])
+        ->and($activity->properties['items'])->toBe(2)
+        ->and($activity->properties['campus_ids'])->toBe([$this->campus->id])
+        ->and($activity->description)->toBe('Armó la propuesta de ISC en Presencial (C2) para el periodo 20271');
+});
+
+it('avisa con CareerProposalStarted solo después del commit', function () {
+    Event::fake([CareerProposalStarted::class]);
+
+    $proposal = startProposal();
+
+    Event::assertDispatched(CareerProposalStarted::class, fn (CareerProposalStarted $event): bool => $event->proposal->is($proposal));
+});
+
+it('no avisa si la transacción externa se revierte', function () {
+    Event::fake([CareerProposalStarted::class]);
+
+    try {
+        DB::transaction(function () {
+            startProposal();
+
+            throw new RuntimeException('revertir');
+        });
+    } catch (RuntimeException) {
+    }
+
+    Event::assertNotDispatched(CareerProposalStarted::class);
+    expect(CareerProposal::query()->count())->toBe(0);
+});
+
+it('si otra sesión la arma entre la revisión y la escritura, devuelve la suya y no le agrega filas', function () {
+    placeInPlan($this->plan, Subject::factory()->create());
+    $rivalInserted = false;
+    DB::listen(function (QueryExecuted $query) use (&$rivalInserted) {
+        if (! $rivalInserted && str_contains($query->sql, 'career_campus')) {
+            $rivalInserted = true;
+            DB::table('career_proposals')->insert(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'career_id' => $this->career->id]);
+        }
+    });
+
+    $proposal = startProposal();
+
+    expect(CareerProposal::query()->count())->toBe(1)
+        ->and($proposal->id)->toBe(CareerProposal::query()->sole()->id)
+        ->and(ProposalItem::query()->count())->toBe(0)
+        ->and(Activity::query()->count())->toBe(0);
+});
+
+/**
+ * Las filas de la propuesta por campus y clave de materia: «<campus>|<clave>» => [elegibles, esperados, grupos]; el
+ * campus nulo se escribe «—».
+ *
+ * @return array<string, array{0: int, 1: int, 2: int}>
+ */
+function proposalCellsOf(CareerProposal $proposal): array
+{
+    return $proposal->items()->with(['subject', 'campus'])->get()
+        ->mapWithKeys(fn (ProposalItem $item): array => [($item->campus?->code ?? '—').'|'.$item->subject->code => [
+            $item->eligible_students, $item->expected_students, $item->requested_groups,
+        ]])
+        ->sortKeys()
+        ->all();
+}
+
+it('M6: una sola propuesta de Sistemas presencial con filas de C1 y C2, cada una con los alumnos posibles de su campus', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $c1->id]);
+    $calculo = Subject::factory()->create(['code' => 'ACF-0901']);
+    $redes = Subject::factory()->create(['code' => 'SCD-1015', 'needs_lab' => true]);
+    placeInPlan($this->plan, $calculo, 1);
+    placeInPlan($this->plan, $redes, 5);
+    eligibleInProposal($this->plan, $c1, [$calculo, $redes], 40);
+    eligibleInProposal($this->plan, $this->campus, [$calculo], 12);
+    $presencial = Modality::query()->where('code', 'PRES')->sole();
+
+    $proposal = app(StartCareerProposal::class)->handle($this->term, $presencial, $this->career, $this->actor);
+    $again = app(StartCareerProposal::class)->handle($this->term, $presencial, $this->career, $this->actor);
+
+    expect($again->id)->toBe($proposal->id)
+        ->and(CareerProposal::query()->count())->toBe(1)
+        ->and($proposal->modality_id)->toBe($presencial->id)
+        ->and(proposalCellsOf($proposal))->toBe([
+            'C1|ACF-0901' => [40, 40, 2],
+            'C1|SCD-1015' => [40, 40, 2],
+            'C2|ACF-0901' => [12, 12, 1],
+            'C2|SCD-1015' => [0, 0, 0],
+        ])
+        ->and($proposal->eligible_students)->toBe(52)
+        ->and($proposal->fresh()->eligible_students_by_campus)->toEqualCanonicalizing([$c1->id => 40, $this->campus->id => 12]);
+});
+
+it('MS5: una carrera solo de C1 tiene una columna', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $itic = Career::factory()->create(['code' => 'ITIC']);
+    CareerCampus::factory()->create(['career_id' => $itic->id, 'campus_id' => $c1->id]);
+    CareerCampus::factory()->inactive()->create(['career_id' => $itic->id, 'campus_id' => $this->campus->id]);
+    $plan = StudyPlan::factory()->create(['career_id' => $itic->id]);
+    placeInPlan($plan, Subject::factory()->create(['code' => 'TIF-1019']));
+
+    $proposal = app(StartCareerProposal::class)->handle($this->term, Modality::query()->where('code', 'PRES')->sole(), $itic, $this->actor);
+
+    expect(array_keys(proposalCellsOf($proposal)))->toBe(['C1|TIF-1019']);
+});
+
+it('MS5: en una modalidad sin salones la propuesta lleva una sola columna sin campus, con los alumnos de todos los campus', function () {
+    $online = Modality::factory()->create(['code' => 'M901', 'settings' => ['uses_rooms' => false]]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $online->id]);
+    $calculo = Subject::factory()->create(['code' => 'ACF-0901']);
+    placeInPlan($this->plan, $calculo);
+    Student::factory()->count(3)->for($this->plan)->create(['campus_id' => $this->campus->id, 'modality_id' => $online->id])
+        ->each(fn (Student $student) => StudentProgress::factory()->for($student)->create(['subjects_available' => [$calculo->id]]));
+    eligibleInProposal($this->plan, $this->campus, [$calculo], 5);
+
+    $proposal = app(StartCareerProposal::class)->handle($this->term, $online, $this->career, $this->actor);
+
+    expect(proposalCellsOf($proposal))->toBe(['—|ACF-0901' => [3, 3, 1]])
+        ->and($proposal->eligible_students)->toBe(3)
+        ->and($proposal->fresh()->eligible_students_by_campus)->toBe(['none' => 3]);
+});
+
+it('los alumnos posibles de cada campus son los activos de la carrera, la modalidad y ese campus', function () {
+    $calculo = Subject::factory()->create(['code' => 'ACF-0901']);
+    placeInPlan($this->plan, $calculo);
+    eligibleInProposal($this->plan, $this->campus, [$calculo], 4);
+    Student::factory()->count(6)->for($this->plan)->create(['campus_id' => $this->campus->id, 'modality_id' => Modality::query()->where('code', 'EAD')->value('id')])
+        ->each(fn (Student $student) => StudentProgress::factory()->for($student)->create(['subjects_available' => [$calculo->id]]));
+
+    $proposal = app(StartCareerProposal::class)->handle($this->term, Modality::query()->where('code', 'PRES')->sole(), $this->career, $this->actor);
+
+    expect(proposalCellsOf($proposal))->toBe(['C2|ACF-0901' => [4, 4, 1]])
+        ->and($proposal->eligible_students)->toBe(4);
+});

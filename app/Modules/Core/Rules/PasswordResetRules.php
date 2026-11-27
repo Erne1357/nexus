@@ -1,0 +1,86 @@
+<?php
+
+namespace App\Modules\Core\Rules;
+
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\InstitutionalMail;
+
+/**
+ * AC-16 (confirmado el 11 de noviembre de 2026): quién puede restablecer su contraseña por su correo institucional.
+ * Un usuario activo, con acceso (con contraseña: el restablecimiento no da acceso a quien no lo tiene, AC-01; supuesto
+ * por confirmar) y con correo institucional (InstitutionalMail, CE-01). El del personal tiene que estar
+ * confirmado (`email_verified_at`, lo deja la invitación de AC-08); el del alumno, no
+ * (acceptsUnverifiedInstitutionalEmail()). Lo preguntan SendPasswordResetLink, para mandar el enlace, y
+ * PasswordResetTokens, para dejarlo usar.
+ *
+ * CF-08 (confirmado el 14 de noviembre de 2026): el enlace que manda el admin desde el panel (`$issuedByAdmin`,
+ * SendUserPasswordReset) no pide el correo confirmado, porque el admin lo capturó; al usarlo queda confirmado (AC-18).
+ * El autoservicio («¿Olvidaste tu contraseña?», sin el parámetro) sigue pidiéndolo.
+ */
+final class PasswordResetRules
+{
+    public const string INACTIVE = 'La cuenta está dada de baja.';
+
+    public const string NO_PASSWORD = 'Todavía no tiene acceso: no hay contraseña que restablecer.';
+
+    public const string NO_EMAIL = 'No tiene correo institucional.';
+
+    public const string UNVERIFIED = 'Su correo institucional no está confirmado.';
+
+    public function __construct(private readonly Actor $actor) {}
+
+    public function allows(User $user, bool $issuedByAdmin = false): bool
+    {
+        return $this->denial($user, $issuedByAdmin) === null;
+    }
+
+    /**
+     * Por qué `$user` no puede restablecer su contraseña por correo; nulo si puede. Es la regla de `allows()`, condición
+     * por condición y en su orden, para que el panel diga el motivo (CF-08); la pantalla pública nunca lo dice (AC-16).
+     * Con `$issuedByAdmin` (el enlace del panel) no pide el correo confirmado.
+     */
+    public function denial(User $user, bool $issuedByAdmin = false): ?string
+    {
+        return match (true) {
+            ! $user->is_active => self::INACTIVE,
+            $user->password === null => self::NO_PASSWORD,
+            ! $this->hasInstitutionalEmail($user) => self::NO_EMAIL,
+            ! $issuedByAdmin && $user->email_verified_at === null && ! $this->acceptsUnverifiedInstitutionalEmail($user) => self::UNVERIFIED,
+            default => null,
+        };
+    }
+
+    /**
+     * Si su correo es institucional (isInstitutionalEmail()).
+     */
+    public function hasInstitutionalEmail(User $user): bool
+    {
+        return $this->isInstitutionalEmail($user->email);
+    }
+
+    /**
+     * Si `$email` es un correo institucional (InstitutionalMail, CE-01): una dirección válida de un dominio institucional,
+     * sin importar mayúsculas; un subdominio o un dominio que solo lo contiene no cuenta. También lo pregunta el aviso de
+     * la validación para el correo de la ficha del jefe (CV11).
+     */
+    public function isInstitutionalEmail(?string $email): bool
+    {
+        return InstitutionalMail::isInstitutional($email);
+    }
+
+    /**
+     * Si a `$user` le basta su correo institucional sin confirmar: al alumno sí (supuesto por confirmar), porque su
+     * correo lo fija la regla del TecNM a partir de su número de control (AC-13) y el enlace solo llega al buzón del
+     * dueño. Alumno es quien tiene algún puesto vigente y ninguno es del personal (Role::isStaff(); hoy, solo `alumno`,
+     * AC-10). Al personal no, aunque también sea alumno: su correo lo captura el jefe y solo queda confirmado cuando el
+     * usuario abre la invitación que llegó ahí (AC-08).
+     */
+    public function acceptsUnverifiedInstitutionalEmail(User $user): bool
+    {
+        $roles = $this->actor->forUser($user)->heldRoles();
+
+        return $roles !== [] && array_all($roles, fn (Role $role): bool => ! $role->isStaff());
+    }
+}

@@ -11,24 +11,53 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <testsuite name="Arch">
+            <directory>tests/Arch</directory>
+        </testsuite>
+        <testsuite name="Browser">
+            <directory>tests/Browser</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
             <directory>app</directory>
         </include>
+        <!-- Livewire compila Blade y los componentes MFC a storage/: sobre el archivo fuente la cobertura
+             siempre da cero. Los cubren las pruebas feature y browser. Migraciones y factories corren en
+             toda prueba y no son lógica del módulo: inflarían su mínimo (docs/arquitectura/testing.md). -->
+        <exclude>
+            <directory suffix=".blade.php">app</directory>
+            <directory>app/Modules/*/Livewire</directory>
+            <directory>app/Modules/*/Database/Migrations</directory>
+            <directory>app/Modules/*/Database/Factories</directory>
+        </exclude>
     </source>
     <php>
+        <!-- La suite completa (unit, feature, arch y browser) corre en un proceso y acumula memoria
+             entre pruebas: con los 128 MB de la imagen dev no llega a los browser tests. Con la
+             cobertura de CI, desde la fase 2 pasaba de 512 MB al escribir el reporte, y cerca del
+             límite las pruebas que reservan mucha memoria se volvían cientos de veces más lentas. -->
+        <!-- En la fase 6 el shard 1 de CI, con pcov, se quedó sin memoria con 1 GB en tests/Arch: la suite ya no cabe. -->
+        <ini name="memory_limit" value="2G"/>
         <env name="APP_ENV" value="testing"/>
+        <env name="APP_LOCALE" value="es"/>
+        <env name="APP_FAKER_LOCALE" value="es_MX"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="sqlite"/>
-        <env name="DB_DATABASE" value=":memory:"/>
+        <env name="CAMPUS_MAP_3D" value="false"/>
+        <!-- Sin force="true": se puede sobreescribir con `docker compose exec -e DB_DATABASE=...` (worktrees en paralelo) -->
+        <env name="DB_CONNECTION" value="pgsql"/>
+        <env name="DB_DATABASE" value="nexus_test"/>
         <env name="DB_URL" value=""/>
+        <env name="NEXUS_DEFAULT_PASSWORD" value="Prueba#2026"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <!-- Sin token, el motor `cpsat` no se registra: las pruebas nunca llaman al servicio del motor real aunque
+             el .env lo tenga. CpSatEngineTest lo simula con Http::fake(). -->
+        <env name="SOLVER_TOKEN" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

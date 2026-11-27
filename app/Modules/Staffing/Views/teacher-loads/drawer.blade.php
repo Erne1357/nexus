@@ -1,0 +1,139 @@
+{{--
+    El drawer de un docente (staffing::pages.teacher-loads): sus cifras (frente a grupo con su banda, otra modalidad,
+    asignadas y restantes), el aviso de HC-08 si pasa su banda (tarea 1.50: oficio de conformidad pendiente, o aceptado
+    por el docente con la casilla), sus grupos por campus y su semana de lunes a viernes de 7 a 21 h, con el campus por
+    color. `close()` es del x-drawer.
+--}}
+@php
+    $status = $row->status();
+    $rowHeight = 22;
+    $first = 7;
+    $last = 21;
+    $campusText = ['text-base-content', 'text-primary-content', 'text-neutral-content', 'text-warning-content'];
+    $days = [1 => 'Lun', 2 => 'Mar', 3 => 'Mié', 4 => 'Jue', 5 => 'Vie'];
+    $byCampus = collect($row->groups)->groupBy('campus');
+@endphp
+<div class="flex min-h-dvh flex-col" data-testid="teacher-panel">
+    <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
+        <div class="min-w-0 flex-1">
+            <p class="font-mono text-[15px] font-semibold">{{ $row->rfc !== '' ? $row->rfc : 'Sin RFC' }} · {{ implode(' + ', $row->positionLabels) ?: 'Sin plaza' }}</p>
+            <h2 id="teacher-drawer-title" class="mt-0.5 text-xl font-bold leading-tight">{{ $row->name }}</h2>
+            <p class="mt-2 flex flex-wrap gap-1.5">
+                @if ($status === 'over')
+                    <x-core::status-badge tone="warning" icon="o-document-text" :label="'Excede +'.$row->excessHours().' h'" />
+                @elseif ($status === 'none')
+                    <x-core::status-badge tone="warning" label="Sin carga" icon="o-clock" />
+                @elseif ($status === 'full')
+                    <x-core::status-badge tone="success" label="Carga completa" />
+                @elseif ($status === 'hon')
+                    <x-core::status-badge tone="draft" label="Honorarios" icon="o-pencil-square" />
+                @else
+                    <x-core::status-badge tone="info" :label="$row->remainingHours.' h libres'" icon="o-arrow-trending-down" />
+                @endif
+            </p>
+        </div>
+        <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle max-md:h-11 max-md:w-11" @click="close()" aria-label="Cerrar el panel" />
+    </header>
+
+    <div class="flex-1 space-y-6 px-5 py-4">
+        <dl class="grid grid-cols-2 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 min-[480px]:grid-cols-4">
+            @foreach ([[$row->isNoPlaza() ? 'Sin plaza docente' : ($row->isAdministrative() ? 'Plaza administrativa' : ($row->teachingHours === null ? 'Base' : 'Frente a grupo')), $row->isNoPlaza() ? '—' : ($row->isAdministrative() ? $row->administrativeHours : ($row->teachingHours ?? $row->baseHours)), ''], ['Otra modalidad', $row->externalHours, ''], ['Asignadas', $row->assignedHours, ''], ['Restan', $row->isNoPlaza() ? '—' : $row->remainingHours, $row->remainingHours < 0 && ! $row->isNoPlaza() ? 'text-warning' : '']] as [$label, $value, $tone])
+                <div class="min-w-0 bg-base-100 p-3">
+                    <dt class="truncate text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $label }}</dt>
+                    <dd class="mt-1 font-mono text-2xl font-semibold leading-none tabular-nums {{ $tone }}" data-testid="drawer-{{ Str::slug($label) }}">{{ $value }}</dd>
+                </div>
+            @endforeach
+        </dl>
+        @if ($row->isNoPlaza())
+            <p class="-mt-3 text-sm text-neutral" data-testid="drawer-band">{{ \App\Modules\Scheduling\Rules\TeacherHourLimit::NO_PLAZA_LABEL }}</p>
+        @elseif ($row->administrativeSummary() !== null)
+            <p class="-mt-3 text-sm text-neutral" data-testid="drawer-band"><span class="font-mono text-base-content">{{ $row->administrativeSummary() }}</span></p>
+        @elseif ($row->bandLabel() !== null)
+            <p class="-mt-3 text-sm text-neutral" data-testid="drawer-band">Frente a grupo: <span class="font-mono text-base-content">{{ $row->bandLabel() }}</span> · base de su plaza <span class="font-mono text-base-content">{{ $row->baseHours }} h</span></p>
+        @endif
+        @if ($row->hourNotice() !== null)
+            <div role="note" @class(['alert alert-soft items-start text-sm', 'alert-warning' => $status === 'over', 'alert-info' => $status !== 'over']) data-testid="drawer-hour-notice">
+                <x-icon :name="$status === 'over' ? 'o-document-text' : 'o-check-circle'" class="h-5 w-5 shrink-0" aria-hidden="true" />
+                <span>{{ $row->hourNotice() }}</span>
+            </div>
+        @endif
+
+        @if ($row->extraLabel() !== null)
+            {{-- PL-04 (tarea 1.81): el estado de sus horas extra y, para quien tiene el permiso (jefe de su departamento), decidirlas. --}}
+            @php
+                $extraState = $row->extraHours->state;
+            @endphp
+            <section class="space-y-3 rounded-box border border-base-300 p-4" aria-labelledby="extra-title" data-testid="drawer-extra">
+                <h3 id="extra-title" class="font-semibold">Horas extra · honorarios</h3>
+                <p class="flex items-start gap-2 text-sm" data-testid="drawer-extra-label">
+                    <x-icon :name="$extraState->value === 'authorized' ? 'o-check-circle' : 'o-document-text'" :class="'mt-0.5 h-4 w-4 shrink-0 '.match ($extraState->value) { 'pending' => 'text-warning', 'authorized' => 'text-success', default => 'text-neutral' }" aria-hidden="true" />
+                    <span>{{ $row->extraLabel() }}</span>
+                </p>
+                @if ($row->extraHours->isDecidable() && $canDecide)
+                    <div class="flex flex-wrap gap-2">
+                        <x-button label="Autorizar honorarios" icon="o-check" class="btn-primary btn-sm max-md:min-h-11" wire:click="decideExtra('authorized')" spinner="decideExtra" data-testid="extra-authorize" />
+                        <x-button label="No autorizar" icon="o-x-mark" class="btn-outline btn-sm max-md:min-h-11" wire:click="decideExtra('unauthorized')" spinner="decideExtra" data-testid="extra-unauthorize" />
+                    </div>
+                    <p class="text-xs text-neutral">Sin autorización, el docente firma el oficio de conformidad y no se le pagan esas horas.</p>
+                @elseif ($row->extraHours->isDecidable())
+                    <p class="text-xs text-neutral">Las autoriza el jefe del departamento al que está adscrito el docente.</p>
+                @endif
+            </section>
+        @endif
+
+        @forelse ($byCampus as $code => $groups)
+            <section aria-labelledby="campus-{{ $code }}" data-testid="drawer-campus-{{ $code }}">
+                <h3 id="campus-{{ $code }}" class="mb-2 flex items-center gap-2 font-semibold">
+                    <i class="inline-block h-2.5 w-2.5 rounded-sm {{ $campusBar[$campusTones[$code] % count($campusBar)] }}"></i>{{ $code }}
+                    <span class="badge badge-sm badge-neutral badge-soft font-mono">{{ $groups->sum('hours') }} h</span>
+                    <span class="badge badge-sm badge-neutral badge-soft font-mono">{{ $groups->count() }} {{ $groups->count() === 1 ? 'grupo' : 'grupos' }}</span>
+                </h3>
+                <ul class="divide-y divide-base-300 rounded-box border border-base-300">
+                    @foreach ($groups as $group)
+                        <li class="flex items-center gap-3 px-3 py-2">
+                            <span class="w-14 shrink-0 font-mono text-[15px] font-semibold">{{ $group['code'] }}</span>
+                            <span class="min-w-0 flex-1"><span class="block truncate font-medium">{{ $group['subject'] }}</span><span class="font-mono text-xs text-neutral">{{ $group['subject_code'] }}</span></span>
+                            @if ($group['counts_teacher_hours'] ?? true)
+                                <span class="font-mono text-sm tabular-nums">{{ $group['hours'] }} h</span>
+                            @else
+                                {{-- PL-02 (tarea 1.73): ocupa su horario, pero sus horas no cuentan en su carga. --}}
+                                <span class="text-end text-sm text-neutral" data-testid="drawer-no-teacher-hours"><span class="font-mono tabular-nums">0 h</span> · no cuenta</span>
+                            @endif
+                        </li>
+                    @endforeach
+                </ul>
+            </section>
+        @empty
+            <p class="text-neutral" data-testid="drawer-no-groups">Sin grupos en este periodo.</p>
+        @endforelse
+
+        @if ($row->sessions !== [])
+        <section aria-labelledby="week-title">
+            <h3 id="week-title" class="mb-2 font-semibold">Horario semanal</h3>
+            <div class="grid grid-cols-[2rem_repeat(5,minmax(0,1fr))] gap-x-px text-xs" role="img" aria-label="Horario semanal de {{ $row->name }}" data-testid="drawer-week">
+                <div></div>
+                @foreach ($days as $label)
+                    <div class="pb-1 text-center font-medium text-neutral">{{ $label }}</div>
+                @endforeach
+                <div class="font-mono text-neutral">
+                    @for ($hour = $first; $hour < $last; $hour++)
+                        <div class="pr-1 text-right" style="height: {{ $rowHeight }}px">{{ $hour }}</div>
+                    @endfor
+                </div>
+                @foreach ($days as $day => $label)
+                    <div class="relative rounded-sm border border-base-300 bg-base-100" style="height: {{ ($last - $first) * $rowHeight }}px; background-image: repeating-linear-gradient(to bottom, transparent 0, transparent {{ $rowHeight - 1 }}px, var(--color-base-300) {{ $rowHeight - 1 }}px, var(--color-base-300) {{ $rowHeight }}px)">
+                        @foreach (array_filter($row->sessions, fn ($session) => $session['day'] === $day) as $session)
+                            @php
+                                $top = max(0, ($session['from'] / 60 - $first) * $rowHeight);
+                                $height = max($rowHeight / 2, (min($session['to'] / 60, $last) - max($session['from'] / 60, $first)) * $rowHeight);
+                            @endphp
+                            <div class="absolute inset-x-0.5 overflow-hidden rounded-sm px-1 font-mono font-semibold leading-tight {{ $campusBar[$campusTones[$session['campus']] % count($campusBar)] }} {{ $campusText[$campusTones[$session['campus']] % count($campusText)] }}"
+                                style="top: {{ $top }}px; height: {{ $height }}px" title="{{ $session['code'] }} · {{ $session['subject'] }} · {{ $session['campus'] }}">{{ $session['code'] }}</div>
+                        @endforeach
+                    </div>
+                @endforeach
+            </div>
+        </section>
+        @endif
+    </div>
+</div>

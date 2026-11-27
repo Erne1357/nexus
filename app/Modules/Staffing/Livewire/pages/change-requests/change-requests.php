@@ -1,0 +1,778 @@
+<?php
+
+use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Staffing\Actions\ChangeRequests\ApplyChosenAlternative;
+use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
+use App\Modules\Staffing\Actions\ChangeRequests\AssessChangeImpact;
+use App\Modules\Staffing\Actions\ChangeRequests\ChooseChangeAlternative;
+use App\Modules\Staffing\Actions\ChangeRequests\MarkChangeRequestApplied;
+use App\Modules\Staffing\Actions\ChangeRequests\ProposeChangeAlternatives;
+use App\Modules\Staffing\Actions\ChangeRequests\RejectChangeRequest;
+use App\Modules\Staffing\Actions\ChangeRequests\RequestChange;
+use App\Modules\Staffing\Enums\ChangeAlternativesStatus;
+use App\Modules\Staffing\Enums\ChangeRequestKind;
+use App\Modules\Staffing\Enums\ChangeRequestStatus;
+use App\Modules\Staffing\Enums\StaffingPermission;
+use App\Modules\Staffing\Livewire\Concerns\ProposesStructuredChange;
+use App\Modules\Staffing\Models\ChangeRequest;
+use App\Modules\Staffing\Queries\ChangeAlternativesQuery;
+use App\Modules\Staffing\Queries\ChangeRequestsQuery;
+use App\Modules\Staffing\Rules\ChangeRequestRules;
+use App\Modules\Staffing\Support\ChangeAlternatives;
+use App\Modules\Staffing\Support\SessionLabels;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
+use Livewire\Component;
+use Mary\Traits\Toast;
+
+/**
+ * Solicitudes de cambio (tarea 3.11, maqueta A «Lista y detalle»): las solicitudes de cambio de horario y de salón de
+ * un departamento en el periodo activo y la modalidad de la página (`?modalidad=`, WithModalityCampusFilter; M1: de los
+ * grupos de todos sus campus), que se elige con el select «Modalidad» (maqueta U2, opción A; sin select con una sola,
+ * MS16). El campus es un filtro (`?campus=`, «Todos» por omisión) con las solicitudes que ve en cada uno, y cada renglón
+ * lleva el campus de hoy de su grupo (M8). A la izquierda la lista (pendientes, luego aprobadas por
+ * aplicar, luego el resto) con filtros de estado, tipo y texto; a la derecha el detalle de la elegida, con la foto de
+ * las sesiones contra lo que se propone, el motivo y el historial. Arriba, el estado de la carga del departamento.
+ *
+ * Quién hace qué (reglas-de-negocio.md, "Solicitudes de cambio"; ChangeRequestPolicy antes de cada método): el jefe
+ * del departamento aprueba (comentario opcional) o rechaza (comentario obligatorio); aplica el coordinador de la carrera
+ * dueña si es de horario y el jefe si es de salón: «Abrir en el editor» (si existe el editor de horarios) y «Marcar
+ * como aplicada». Si Scheduling veta el regreso de la carga a Asignación, la pantalla muestra los motivos.
+ *
+ * El coordinador también pide desde aquí (confirmado el 7 de noviembre de 2026): «Nueva solicitud» (solo con el
+ * permiso de pedir en un grupo de su carrera) abre un modal con los grupos de su carrera en la modalidad, el periodo y el
+ * campus del filtro (los de su campus si su nombramiento lo tiene, MS6) cuya carga está en Asignación o Ajustes
+ * (ChangeRequestsQuery::requestableGroups), el tipo, qué propone y el motivo, y
+ * llama a RequestChange; la solicitud del coordinador no lleva docente, así que no la limita la de una abierta por
+ * docente. Al enviarla, la pantalla la abre.
+ *
+ * Entra quien puede ver, decidir, aplicar o pedir alguna; cada quien ve solo lo de su alcance (ChangeRequestsQuery).
+ * El departamento es el primero que puede ver; con varios, `?depto=<código>` lo elige, y `?solicitud=<id>` (el de los
+ * avisos) abre esa solicitud en su departamento y su modalidad, con el filtro en «Todos» si el campus la esconde.
+ *
+ * «Impacto y alternativas» (tarea 8.7, maqueta A «Pestañas», elegida por el usuario el 18 de noviembre de 2026): el
+ * impacto de lo pedido (CR-01) y las alternativas del motor (CR-02) son pestañas del mismo cambio, y el pie aprueba la
+ * pestaña abierta (`$alternative`; '' es la de omisión de ChangeAlternativesQuery): lo pedido con ApproveChangeRequest
+ * (bloqueado con choques duros) o la alternativa con ChooseChangeAlternative (CR-03). El jefe las pide con «Buscar
+ * alternativas» (ProposeChangeAlternatives); si al elegir algo cambió, la pantalla lo dice («Esto cambió…») y ofrece
+ * buscar otra vez. Ya aprobada con una alternativa, quien la aplica la escribe de una vez con «Aplicar la alternativa»
+ * (ApplyChosenAlternative, CR-04) o la abre en el editor con sus sesiones por colocar (`?solicitud=`).
+ */
+new #[Title('Solicitudes de cambio')] class extends Component
+{
+    use ProposesStructuredChange;
+    use Toast;
+    use WithModalityCampusFilter;
+
+    /** Valores de `?estado=` y el estado que filtran. */
+    private const array STATUSES = [
+        'pendientes' => ChangeRequestStatus::Pending,
+        'aprobadas' => ChangeRequestStatus::Approved,
+        'rechazadas' => ChangeRequestStatus::Rejected,
+        'aplicadas' => ChangeRequestStatus::Applied,
+    ];
+
+    /** Valores de `?tipo=` y el tipo que filtran. */
+    private const array KINDS = [
+        'horario' => ChangeRequestKind::Schedule,
+        'salon' => ChangeRequestKind::Room,
+    ];
+
+    /** Código del departamento; '' es el primero que puede ver. */
+    #[Url(as: 'depto')]
+    public string $department = '';
+
+    /** Id de la solicitud abierta; '' es la primera de la lista. */
+    #[Url(as: 'solicitud')]
+    public string $requestId = '';
+
+    #[Url(as: 'estado')]
+    public string $status = '';
+
+    #[Url(as: 'tipo')]
+    public string $kind = '';
+
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    /** El comentario del jefe al decidir. */
+    public string $comment = '';
+
+    /** El modal «Nueva solicitud» del coordinador: el grupo elegido (se revisa de nuevo al enviar), el tipo, qué propone y el motivo. */
+    public bool $showRequest = false;
+
+    public string $requestGroupId = '';
+
+    /** 'schedule' o 'room' (ChangeRequestKind). */
+    public string $requestKind = 'schedule';
+
+    public string $proposal = '';
+
+    public string $reason = '';
+
+    /**
+     * El periodo, la modalidad, el campus del filtro (null, «Todos») y el departamento con los que pinta y escribe. El
+     * navegador no los puede cambiar: cambian al elegir otra modalidad, campus o departamento, que se resuelven de nuevo.
+     */
+    #[Locked]
+    public ?string $termId = null;
+
+    #[Locked]
+    public ?string $modalityId = null;
+
+    #[Locked]
+    public ?string $campusId = null;
+
+    #[Locked]
+    public ?string $departmentId = null;
+
+    /** @var list<array{code: string, name: string, label: string}> */
+    #[Locked]
+    public array $departments = [];
+
+    #[Locked]
+    public ?string $message = null;
+
+    /** La pestaña abierta de «Impacto y alternativas»: 'pedido', el id de una alternativa o '' (la de omisión). */
+    public string $alternative = '';
+
+    /** Si al elegir o aplicar la alternativa resultó vencida («Esto cambió…»). */
+    #[Locked]
+    public bool $staleAlternatives = false;
+
+    /**
+     * La solicitud cuyas alternativas se están calculando y si el cálculo seguía en la cola, como se pintaron: el poll
+     * solo vuelve a pintar cuando eso cambia (skipRender), así un tick no rearma la lista ni el detalle.
+     */
+    #[Locked]
+    public ?string $pollingRequestId = null;
+
+    #[Locked]
+    public ?bool $pollingQueued = null;
+
+    /** En pantallas angostas, la lista y el detalle van por separado. */
+    #[Locked]
+    public bool $mobileDetail = false;
+
+    /**
+     * Los motivos con que Scheduling vetó el regreso de la carga a Asignación al aplicar la última solicitud.
+     *
+     * @var list<string>
+     */
+    #[Locked]
+    public array $vetoReasons = [];
+
+    public function mount(Actor $context, ChangeRequestsQuery $query): void
+    {
+        abort_unless($this->canEnter($context), 403);
+
+        $this->mobileDetail = $this->requestId !== '';
+        $this->updatedStatus();
+        $this->updatedKind();
+        $this->resolve($context, $query);
+    }
+
+    /**
+     * Otro campus en el filtro: la lista de ese campus en la misma modalidad (se recuerda para la siguiente pantalla,
+     * AZ-02); la solicitud abierta se suelta si ya no está en la lista.
+     */
+    public function updatedCampus(Actor $context, ChangeRequestsQuery $query): void
+    {
+        $chosen = $this->campusFilter();
+
+        if ($chosen !== null) {
+            session()->put(Campus::LAST_CHOSEN_KEY, $chosen->code);
+        }
+
+        $this->reset('requestId', 'comment', 'mobileDetail', 'vetoReasons', 'alternative', 'staleAlternatives');
+        $this->resolve($context, $query);
+    }
+
+    /**
+     * Otra modalidad en el select: las solicitudes del departamento en ella (M1); si no lo puede elegir ahí, el primero.
+     */
+    public function updatedModalidad(Actor $context, ChangeRequestsQuery $query): void
+    {
+        $modality = $this->requiredModality();
+        $term = $context->loadTerm();
+
+        if ($term === null || ! $query->departmentsFor($context, $term->id, $modality->getKey(), $this->campusFilter()?->getKey(), $this->campusesOf($modality)->modelKeys())->contains('code', $this->department)) {
+            $this->department = '';
+        }
+
+        $this->updatedDepartment($context, $query);
+    }
+
+    public function updatedDepartment(Actor $context, ChangeRequestsQuery $query): void
+    {
+        $this->reset('requestId', 'comment', 'mobileDetail', 'vetoReasons', 'alternative', 'staleAlternatives');
+        $this->resolve($context, $query);
+    }
+
+    public function updatedStatus(): void
+    {
+        $this->status = array_key_exists($this->status, self::STATUSES) ? $this->status : '';
+    }
+
+    public function updatedKind(): void
+    {
+        $this->kind = array_key_exists($this->kind, self::KINDS) ? $this->kind : '';
+    }
+
+    /**
+     * Abre una solicitud de la lista; en pantallas angostas, su detalle.
+     */
+    public function pick(string $id, Actor $context, ChangeRequestsQuery $query, AssessChangeImpact $assess): void
+    {
+        $request = $this->visibleOrFail($id, $context, $query);
+
+        $this->requestId = $request->id;
+        $this->comment = '';
+        $this->vetoReasons = [];
+        $this->alternative = '';
+        $this->staleAlternatives = false;
+        $this->resetErrorBag();
+        $this->mobileDetail = true;
+        $this->refreshImpact($request, $assess);
+        $this->dispatch('request-detail-opened');
+    }
+
+    /**
+     * Recalcula el impacto de la solicitud elegida (CR-01); lo hace quien la decide.
+     */
+    public function recalculateImpact(Actor $context, ChangeRequestsQuery $query, AssessChangeImpact $assess): void
+    {
+        $request = $this->selectedOrFail($context, $query);
+        $this->authorize('decide', $request);
+
+        $assess->handle($request);
+    }
+
+    /**
+     * Al abrir una pendiente, quien la decide la recalcula siempre (unos 0.6 s con el masivo): el impacto guardado no
+     * detecta lo que cambió en otras sesiones, salones, bloqueos o modalidades. Los demás ven el guardado, sin escribir.
+     */
+    private function refreshImpact(ChangeRequest $request, AssessChangeImpact $assess): void
+    {
+        if ($request->status === ChangeRequestStatus::Pending && Gate::allows('decide', $request)) {
+            $assess->handle($request);
+        }
+    }
+
+    public function back(): void
+    {
+        $this->mobileDetail = false;
+    }
+
+    public function approve(Actor $context, ChangeRequestsQuery $query, ApproveChangeRequest $approve): void
+    {
+        $request = $this->selectedOrFail($context, $query);
+        $this->authorize('decide', $request);
+        $this->validateComment(required: false);
+
+        try {
+            $approve->handle($request, auth()->user(), $this->comment);
+        } catch (ValidationException $e) {
+            $this->report($e, 'No se aprobó');
+
+            return;
+        }
+
+        $this->comment = '';
+        $load = $query->loadOf((string) $this->termId, (string) $this->modalityId, (string) $this->departmentId)['load'];
+        $this->success('Aprobaste la solicitud', $load?->status === LoadStatus::Adjusting
+            ? 'La carga del departamento está en Ajustes. Se avisó a quien la aplica.'
+            : 'Se avisó a quien la aplica.');
+    }
+
+    /**
+     * Pide al motor acomodos sin choques para la solicitud elegida (CR-02); lo hace quien la decide. Deja abierta la
+     * pestaña de omisión (la primera alternativa, si hay).
+     */
+    public function searchAlternatives(Actor $context, ChangeRequestsQuery $query, ProposeChangeAlternatives $propose): void
+    {
+        $request = $this->selectedOrFail($context, $query);
+        $this->authorize('decide', $request);
+
+        try {
+            $request = $propose->handle($request, auth()->user());
+        } catch (ValidationException $e) {
+            $this->report($e, 'No se buscaron alternativas');
+
+            return;
+        }
+
+        $this->alternative = '';
+        $this->staleAlternatives = false;
+        $this->resetErrorBag();
+        $this->announceAlternatives($request);
+    }
+
+    /**
+     * Lo que dice el aviso cuando las alternativas ya están: cuántas, o que no hubo. Solo a quien decide: el coordinador
+     * y quien la pidió ven la pantalla actualizarse sin el aviso, porque no pueden aprobar.
+     */
+    private function announceAlternatives(ChangeRequest $request): void
+    {
+        if (! Gate::allows('decide', $request)) {
+            return;
+        }
+
+        $count = count($request->alternatives['items'] ?? []);
+
+        match (ChangeAlternativesStatus::of($request->alternatives)) {
+            ChangeAlternativesStatus::Ready => $this->success($count === 1 ? 'Una alternativa sin choques duros' : "{$count} alternativas sin choques duros", 'Revísalas en sus pestañas y aprueba la que prefieras.'),
+            ChangeAlternativesStatus::None => $this->warning('El motor no encontró un acomodo sin choques duros', 'Puedes rechazarla o liberar el lugar en el editor y buscar otra vez.'),
+            ChangeAlternativesStatus::Failed => $this->error('No se encontraron alternativas', e((string) ChangeAlternativesStatus::messageOf($request->alternatives))),
+            default => null,
+        };
+    }
+
+    /**
+     * Mientras el motor busca, la pantalla pregunta cada 2 segundos (`wire:poll`, solo entonces). Cada tick lee solo las
+     * alternativas y el estado de la solicitud que se pintó calculando (`$pollingRequestId`, fija); mientras siga pendiente
+     * y en el mismo estado (en cola o calculando) no vuelve a pintar. Al terminar, o si la deciden en otra pestaña, pinta
+     * todo y, si terminó, avisa a quien decide.
+     */
+    public function pollAlternatives(Actor $context, ChangeRequestsQuery $query): void
+    {
+        if ($this->pollingRequestId === null) {
+            $this->skipRender();
+
+            return;
+        }
+
+        $polled = ChangeRequest::query()->whereKey($this->pollingRequestId)->first(['id', 'status', 'alternatives']);
+        $alternatives = $polled?->alternatives;
+
+        if ($polled?->status === ChangeRequestStatus::Pending && ChangeAlternativesStatus::of($alternatives) === ChangeAlternativesStatus::Computing
+            && ChangeAlternativesStatus::isQueued($alternatives) === $this->pollingQueued) {
+            $this->skipRender();
+
+            return;
+        }
+
+        $request = $this->visibleOrFail($this->pollingRequestId, $context, $query);
+
+        if (ChangeAlternativesStatus::of($request->alternatives) !== ChangeAlternativesStatus::Computing) {
+            $this->announceAlternatives($request);
+        }
+    }
+
+    /**
+     * Aprueba la solicitud con la alternativa de la pestaña abierta (CR-03; el pie manda su id, porque la de omisión no
+     * está en `$alternative`). Si algo cambió desde que se calcularon, no aprueba y marca las alternativas vencidas.
+     */
+    public function chooseAlternative(Actor $context, ChangeRequestsQuery $query, ChooseChangeAlternative $choose, string $alternativeId = ''): void
+    {
+        $request = $this->selectedOrFail($context, $query);
+        $this->authorize('decide', $request);
+        $this->validateComment(required: false);
+        $this->alternative = $alternativeId !== '' ? $alternativeId : $this->alternative;
+
+        if (ChangeAlternativesStatus::of($request->alternatives) !== ChangeAlternativesStatus::Ready || ! collect($request->alternatives['items'] ?? [])->contains('id', $this->alternative)) {
+            $this->addError('alternative', 'Elige una de las alternativas del motor.');
+
+            return;
+        }
+
+        try {
+            $choose->handle($request, auth()->user(), $this->alternative, $this->comment);
+        } catch (ValidationException $e) {
+            $this->staleAlternatives = str_starts_with((string) ($e->errors()['alternative'][0] ?? ''), 'Esto cambió');
+            $this->report($e, 'No se aprobó');
+
+            return;
+        }
+
+        $letter = ChangeAlternatives::letter($request->fresh()->alternatives, $this->alternative);
+        $this->comment = '';
+        $this->alternative = '';
+        $this->success("Aprobaste la solicitud con la alternativa {$letter}", 'Se avisó a quien la aplica y, si la cadena mueve grupos de otra carrera, a su coordinación.');
+    }
+
+    /**
+     * Escribe de una vez la alternativa elegida y deja la solicitud aplicada (CR-04); lo hace quien la aplica.
+     */
+    public function applyAlternative(Actor $context, ChangeRequestsQuery $query, ApplyChosenAlternative $apply): void
+    {
+        $request = $this->selectedOrFail($context, $query);
+        $this->authorize('apply', $request);
+
+        try {
+            $result = $apply->handle($request, auth()->user());
+        } catch (ValidationException $e) {
+            $this->staleAlternatives = str_starts_with((string) ($e->errors()['alternative'][0] ?? ''), 'Esto cambió');
+            $this->report($e, 'No se aplicó');
+
+            return;
+        }
+
+        $this->vetoReasons = $result->vetoReasons;
+
+        match (true) {
+            $result->vetoReasons !== [] => $this->warning('Aplicaste la alternativa', 'La carga sigue en Ajustes: '.e(implode(' ', $result->vetoReasons))),
+            $result->returnedToStaffing => $this->success('Aplicaste la alternativa', 'Se escribió el horario y se avisó a los docentes. No quedan cambios por aplicar: la carga regresó a Asignación.'),
+            default => $this->success('Aplicaste la alternativa', 'Se escribió el horario y se avisó a los docentes cuyos grupos cambiaron.'),
+        };
+    }
+
+    public function reject(Actor $context, ChangeRequestsQuery $query, RejectChangeRequest $reject): void
+    {
+        $request = $this->selectedOrFail($context, $query);
+        $this->authorize('decide', $request);
+        $this->validateComment(required: true);
+
+        try {
+            $reject->handle($request, auth()->user(), $this->comment);
+        } catch (ValidationException $e) {
+            $this->report($e, 'No se rechazó');
+
+            return;
+        }
+
+        $this->comment = '';
+        $this->warning('Rechazaste la solicitud', 'Se avisó a quien la pidió.');
+    }
+
+    public function markApplied(Actor $context, ChangeRequestsQuery $query, MarkChangeRequestApplied $markApplied): void
+    {
+        $request = $this->selectedOrFail($context, $query);
+        $this->authorize('apply', $request);
+
+        try {
+            $result = $markApplied->handle($request, auth()->user());
+        } catch (ValidationException $e) {
+            $this->report($e, 'No se marcó como aplicada');
+
+            return;
+        }
+
+        $this->vetoReasons = $result->vetoReasons;
+
+        match (true) {
+            $result->vetoReasons !== [] => $this->warning('Marcaste la solicitud como aplicada', 'La carga sigue en Ajustes: '.e(implode(' ', $result->vetoReasons))),
+            $result->returnedToStaffing => $this->success('Marcaste la solicitud como aplicada', 'No quedan cambios por aplicar: la carga regresó a Asignación.'),
+            default => $this->success('Marcaste la solicitud como aplicada'),
+        };
+    }
+
+    /**
+     * Abre el modal «Nueva solicitud» del coordinador.
+     */
+    public function openRequest(Actor $context): void
+    {
+        abort_unless($this->canRequest($context), 403);
+
+        $this->resetStructuredProposal();
+        $this->reset('requestGroupId', 'proposal', 'reason');
+        $this->requestKind = ChangeRequestKind::Schedule->value;
+        $this->resetErrorBag();
+        $this->showRequest = true;
+    }
+
+    public function updatedRequestGroupId(Actor $context, ChangeRequestsQuery $query): void
+    {
+        abort_unless($this->canRequest($context), 403);
+        $this->resetStructuredProposal();
+
+        if ($this->requestGroupId !== '' && $this->modalityId !== null) {
+            $group = $query->requestableGroup($context, (string) $context->loadTerm()?->id, $this->modalityId, $this->campusId, $this->requestGroupId);
+            $group === null || $this->prefillProposedSessions($group);
+        }
+    }
+
+    public function sendRequest(Actor $context, ChangeRequestsQuery $query, RequestChange $requestChange): void
+    {
+        abort_unless($this->canRequest($context), 403);
+
+        $max = ChangeRequestRules::MAX_TEXT_LENGTH;
+        $this->validate([
+            'requestGroupId' => ['required', 'string'],
+            'requestKind' => ['required', Rule::enum(ChangeRequestKind::class)],
+            'proposal' => ['required', 'string', "max:{$max}"],
+            'reason' => ['required', 'string', "max:{$max}"],
+        ], [
+            'requestGroupId.*' => 'Elige el grupo.',
+            'requestKind.*' => 'Elige si es de horario o de salón.',
+            'proposal.required' => 'Describe qué cambio pides.',
+            'proposal.max' => "Lo que propones lleva hasta {$max} caracteres.",
+            'reason.required' => 'Escribe el motivo del cambio.',
+            'reason.max' => "El motivo lleva hasta {$max} caracteres.",
+        ]);
+
+        abort_if($this->modalityId === null, 404);
+        $group = $query->requestableGroup($context, (string) $context->loadTerm()?->id, $this->modalityId, $this->campusId, $this->requestGroupId) ?? abort(404);
+        $this->authorize('create', [ChangeRequest::class, $group]);
+
+        try {
+            $request = $requestChange->handle($group, auth()->user(), ChangeRequestKind::from($this->requestKind), $this->proposal, $this->reason, $this->structuredProposal());
+        } catch (ValidationException $e) {
+            foreach ($e->errors() as $field => $messages) {
+                $this->addError($field === 'description' ? 'proposal' : $field, $messages[0]);
+            }
+
+            return;
+        }
+
+        $this->showRequest = false;
+        $this->resetStructuredProposal();
+        $this->reset('requestGroupId', 'proposal', 'reason', 'status', 'kind', 'search', 'comment', 'vetoReasons');
+        $this->requestId = $request->id;
+        $this->mobileDetail = true;
+        $this->resolve($context, $query);
+        $this->success("Pediste un cambio del grupo {$group->code}", 'El jefe del departamento la revisa.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function with(Actor $context, ChangeRequestsQuery $query, ChangeAlternativesQuery $alternatives): array
+    {
+        $termId = (string) $context->loadTerm()?->id;
+        $modality = $this->modalityId === null ? null : $this->modalityOptions()->first(fn (Modality $option): bool => $option->getKey() === $this->modalityId);
+        $campuses = $modality === null ? collect() : $this->campusesOf($modality);
+        $canRequest = $this->canRequest($context) && $modality !== null;
+        $scope = [
+            'modalityOptions' => $this->modalityOptions(),
+            'shownModality' => $modality,
+            'campusOptions' => $campuses,
+            'shownCampus' => $this->campusId === null ? null : $campuses->firstWhere('id', $this->campusId),
+            'multiCampus' => $campuses->count() > 1,
+        ];
+        $requesting = [
+            'canRequest' => $canRequest,
+            'requestBlocked' => $canRequest && ! $query->hasRequestableGroups($context, $termId, $modality->getKey(), $this->campusId) ? 'No hay grupos de tu carrera con la carga en Asignación o Ajustes.' : null,
+            'groupOptions' => $canRequest && $this->showRequest ? self::groupOptions($query->requestableGroups($context, $termId, $modality->getKey(), $this->campusId), $scope['multiCampus']) : [],
+            'maxText' => ChangeRequestRules::MAX_TEXT_LENGTH,
+        ];
+
+        if ($this->departmentId === null) {
+            return ['requests' => null, ...$scope, ...$requesting];
+        }
+
+        $requests = $query->listFor($context, (string) $this->termId, (string) $this->modalityId, $this->campusId, $this->departmentId);
+        $visible = $this->filtered($requests);
+        $selected = ($this->requestId === '' ? null : $requests->firstWhere('id', $this->requestId)) ?? $visible->first();
+        $department = collect($this->departments)->firstWhere('code', $this->department);
+        $selected?->group->loadMissing(['teacher' => fn ($teacher) => $teacher->withTrashed()->select('id', 'name')]);
+        $view = $selected !== null && ($selected->status->isOpen() || ChangeAlternatives::chosen($selected->alternatives) !== null) ? $alternatives->for($selected, $this->alternative) : null;
+        $chosen = $view['chosen'] ?? null;
+        $computing = $selected !== null && $selected->status === ChangeRequestStatus::Pending && ($view['status'] ?? null) === ChangeAlternativesStatus::Computing->value;
+        $this->pollingRequestId = $computing ? $selected->id : null;
+        $this->pollingQueued = $computing ? $view['queued'] : null;
+
+        return [
+            'requests' => $requests,
+            'visible' => $visible,
+            'counts' => ['' => $requests->count()] + array_map(fn (ChangeRequestStatus $status): int => $requests->where('status', $status)->count(), self::STATUSES),
+            'selected' => $selected,
+            'departmentName' => $department['label'] ?? $this->department,
+            'loadState' => $query->loadOf((string) $this->termId, (string) $this->modalityId, $this->departmentId),
+            'campusCounts' => $query->campusCounts($context, (string) $this->termId, (string) $this->modalityId, $this->departmentId),
+            'approvedListed' => $requests->where('status', ChangeRequestStatus::Approved)->count(),
+            'listScope' => $context->allowsAny(StaffingPermission::ChangeRequestApplySchedule) ? 'de tu carrera' : 'en tu lista',
+            'canDecide' => $selected !== null && $selected->status === ChangeRequestStatus::Pending && Gate::allows('decide', $selected),
+            'canApply' => $selected !== null && $selected->status === ChangeRequestStatus::Approved && Gate::allows('apply', $selected),
+            'editorUrl' => $selected !== null ? route('scheduling.editor', array_filter(['modalidad' => $modality?->code, 'campus' => $selected->group->campus?->code, 'grupo' => $selected->group_id,
+                'solicitud' => $chosen !== null && $selected->status === ChangeRequestStatus::Approved ? $selected->id : null])) : null,
+            'alternatives' => $view,
+            'approvedLines' => $chosen !== null ? $alternatives->approvedLines($selected, $chosen['option']) : [],
+            ...$scope,
+            'termName' => $context->loadTerm()?->name,
+            ...$requesting,
+        ];
+    }
+
+    /**
+     * Los grupos del modal «Nueva solicitud»: clave, materia y «C2 · Sem. 3 · SC · Lu Mi 7:00–9:00» (el campus, si la
+     * modalidad tiene más de uno).
+     *
+     * @param  iterable<Group>  $groups
+     * @return list<array{id: string, code: string, subject: string, detail: string, reason: null}>
+     */
+    private static function groupOptions(iterable $groups, bool $withCampus): array
+    {
+        $options = [];
+
+        foreach ($groups as $group) {
+            $options[] = [
+                'id' => $group->id,
+                'code' => $group->code,
+                'subject' => $group->subject->name,
+                'detail' => implode(' · ', [...($withCampus && $group->campus !== null ? [$group->campus->code] : []), 'Sem. '.$group->semester, $group->department->code, ...array_map(fn (array $line): string => $line['days'].' '.$line['time'], SessionLabels::schedule($group->sessions))]),
+                'reason' => null,
+            ];
+        }
+
+        return $options;
+    }
+
+    /**
+     * Si puede pedir un cambio como coordinador (el permiso de pedir en un grupo de su carrera) con un campus y un periodo
+     * en la credencial.
+     */
+    private function canRequest(Actor $context): bool
+    {
+        return $context->allowsAny(StaffingPermission::ChangeRequestRequest) && $context->loadTerm() !== null;
+    }
+
+    /**
+     * La lista con los filtros de estado, tipo y texto (docente, quien pidió, grupo o materia, sin importar mayúsculas
+     * ni acentos), en el mismo orden.
+     *
+     * @param  Collection<int, ChangeRequest>  $requests
+     * @return Collection<int, ChangeRequest>
+     */
+    private function filtered(Collection $requests): Collection
+    {
+        $status = self::STATUSES[$this->status] ?? null;
+        $kind = self::KINDS[$this->kind] ?? null;
+        $needle = self::fold($this->search);
+
+        return $requests->filter(fn (ChangeRequest $request): bool => ($status === null || $request->status === $status)
+            && ($kind === null || $request->kind === $kind)
+            && ($needle === '' || str_contains(self::fold(implode(' ', [
+                $request->teacher?->name, $request->requestedBy?->name, $request->group->code, $request->group->subject->code, $request->group->subject->name,
+            ])), $needle)))->values();
+    }
+
+    /**
+     * Resuelve con la credencial el periodo, la modalidad (la elegida, o la de `?solicitud=`, o la de omisión, MS30; queda
+     * fija en `?modalidad=`), el campus del filtro (uno que no es de la modalidad es «Todos») y el departamento, y deja en
+     * propiedades bloqueadas con qué pinta y escribe la página (o por qué no hay lista). `?solicitud=` que no ve en el
+     * periodo y la modalidad es 404 (si el filtro de campus la esconde, el filtro pasa a «Todos»); un departamento pedido
+     * por `?depto=` que no puede elegir, 403.
+     */
+    private function resolve(Actor $context, ChangeRequestsQuery $query): void
+    {
+        $this->termId = $this->modalityId = $this->campusId = $this->departmentId = null;
+        $this->departments = [];
+
+        $term = $context->loadTerm();
+
+        if ($this->requestId !== '' && $term !== null && blank($this->modalidad)) {
+            $modalityId = $query->modalityIdOf($this->requestId, $term->id);
+            $this->modalidad = $this->modalityOptions()->first(fn (Modality $option): bool => $option->getKey() === $modalityId)?->code;
+        }
+
+        $modality = $this->requiredModality();
+        $this->modalidad = $modality->code;
+        $campus = $this->campusFilter();
+
+        if ($term === null) {
+            $this->message = 'No hay un periodo activo: elige uno en tu credencial.';
+
+            return;
+        }
+
+        $requestedDepartment = null;
+
+        if ($this->requestId !== '') {
+            $requestedDepartment = $query->departmentOf($context, $this->requestId, $term->id, $modality->getKey(), $campus?->getKey());
+
+            if ($requestedDepartment === null && $campus !== null) {
+                $requestedDepartment = $query->departmentOf($context, $this->requestId, $term->id, $modality->getKey());
+                $campus = $requestedDepartment === null ? $campus : null;
+            }
+
+            abort_if($requestedDepartment === null, 404);
+        }
+
+        $this->campus = $campus?->code;
+        $this->termId = $term->id;
+        $this->modalityId = $modality->getKey();
+        $this->campusId = $campus?->getKey();
+        $departments = $query->departmentsFor($context, $term->id, $modality->getKey(), $campus?->getKey(), $this->campusesOf($modality)->modelKeys());
+
+        $department = match (true) {
+            $requestedDepartment !== null => $departments->firstWhere('id', $requestedDepartment),
+            $this->department !== '' => $departments->first(fn (Department $department): bool => $department->code === $this->department),
+            default => $departments->first(),
+        };
+
+        abort_if($department === null && ($this->department !== '' || $requestedDepartment !== null), 403);
+
+        $this->departments = $departments->map(fn (Department $department): array => ['code' => $department->code, 'name' => "{$department->code} · {$department->name}", 'label' => $department->name])->all();
+
+        if ($department === null) {
+            $this->message = $campus === null ? "No tienes solicitudes de cambio en {$modality->name}." : "No tienes solicitudes de cambio en {$campus->code}.";
+
+            return;
+        }
+
+        $this->department = $department->code;
+        $this->departmentId = $department->id;
+        $this->message = null;
+    }
+
+    /**
+     * La solicitud abierta en el detalle (la elegida o la primera de la lista), con las mismas reglas de la lista.
+     */
+    private function selectedOrFail(Actor $context, ChangeRequestsQuery $query): ChangeRequest
+    {
+        abort_if($this->departmentId === null, 403);
+
+        $id = $this->requestId !== '' ? $this->requestId : (string) $this->filtered($query->listFor($context, (string) $this->termId, (string) $this->modalityId, $this->campusId, $this->departmentId))->first()?->id;
+
+        return $this->visibleOrFail($id, $context, $query);
+    }
+
+    private function visibleOrFail(string $id, Actor $context, ChangeRequestsQuery $query): ChangeRequest
+    {
+        abort_if($this->departmentId === null, 403);
+
+        return $query->find($context, $id, (string) $this->termId, (string) $this->modalityId, $this->campusId, $this->departmentId) ?? abort(404);
+    }
+
+    private function validateComment(bool $required): void
+    {
+        $max = ChangeRequestRules::MAX_TEXT_LENGTH;
+
+        $this->validate(
+            ['comment' => [$required ? 'required' : 'nullable', 'string', "max:{$max}"]],
+            ['comment.required' => 'Para rechazar, escribe un comentario.', 'comment.max' => "El comentario lleva hasta {$max} caracteres."],
+        );
+    }
+
+    private function canEnter(Actor $context): bool
+    {
+        foreach ([
+            StaffingPermission::ChangeRequestView, StaffingPermission::ChangeRequestDecide, StaffingPermission::ChangeRequestApplySchedule,
+            StaffingPermission::ChangeRequestApplyRoom, StaffingPermission::ChangeRequestRequest, StaffingPermission::ChangeRequestRequestOwn,
+        ] as $permission) {
+            if ($context->allowsAny($permission)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function report(ValidationException $e, string $title): void
+    {
+        foreach ($e->errors() as $field => $messages) {
+            $this->addError($field, $messages[0]);
+        }
+
+        $this->error($title, e(collect($e->errors())->flatten()->first()));
+    }
+
+    private static function fold(string $text): string
+    {
+        $ascii = transliterator_transliterate('NFD; [:Nonspacing Mark:] Remove; NFC; Lower()', $text);
+
+        return trim($ascii === false ? mb_strtolower($text) : $ascii);
+    }
+};

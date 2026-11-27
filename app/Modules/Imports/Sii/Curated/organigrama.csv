@@ -1,0 +1,93 @@
+clave_sii,destino,codigo,nombre,tipo,padre,activo,departamento_de,nota
+100000,omitir,,,,,,,lo cubre el organigrama del sitio
+110000,omitir,,,,,,,lo cubre el organigrama del sitio
+110100,departamento,110100,Ciencias Básicas,departamento_academico,,si,110100,
+110101,unidad,110101,Coordinacion de Ciencias Basicas,oficina,110100,no,110100,coordinación del SII
+110102,omitir,,,,,,110100,laboratorio/taller del SII
+110200,departamento,110200,Metal Mecánica,departamento_academico,,si,110200,
+110201,unidad,110201,Coordinacion de Ingenieria Mecanica,oficina,110200,no,110200,coordinación del SII
+110202,omitir,,,,,,110200,laboratorio/taller del SII
+110203,omitir,,,,,,110200,laboratorio/taller del SII
+110204,omitir,,,,,,110200,laboratorio/taller del SII
+110205,omitir,,,,,,110200,laboratorio/taller del SII
+110300,departamento,110300,Ingeniería Industrial,departamento_academico,,si,110300,
+110301,unidad,110301,Coordinacion de Ingenieria Industrial,oficina,110300,no,110300,coordinación del SII
+110302,omitir,,,,,,110300,laboratorio/taller del SII
+110303,departamento,110303,Ingeniería Industrial EAD,departamento_academico,,no,110303,"departamento viejo sin docentes, materias ni grupos en 2026"
+110401,omitir,,,,,,,lo cubre el organigrama del sitio
+110402,omitir,,,,,,,lo cubre el organigrama del sitio
+110403,omitir,,,,,,,lo cubre el organigrama del sitio
+110500,departamento,110500,Ingeniería Eléctrica y Electrónica,departamento_academico,,si,110500,
+110501,unidad,110501,Coordinacion de Ingenieria Electrica,oficina,110500,no,110500,coordinación del SII
+110502,unidad,110502,Coordinacion de Ingenieria Electronica,oficina,110500,no,110500,coordinación del SII
+110503,omitir,,,,,,110500,laboratorio/taller del SII
+110504,omitir,,,,,,110500,laboratorio/taller del SII
+110600,departamento,110600,Sistemas y Computación,departamento_academico,,si,110600,
+110601,unidad,110601,Coordinacion de Ing. en Sistemas Computacionales,oficina,110600,no,110600,coordinación del SII
+110700,departamento,110700,Ciencias Económico Administrativas,departamento_academico,,si,110700,
+110701,unidad,110701,Coordinacion de de Administracion,oficina,110700,no,110700,coordinación del SII
+110702,unidad,110702,Depto. Administracion,oficina,110700,no,110700,coordinación del SII
+110703,unidad,110703,Depto. Contabilidad,oficina,110700,no,110700,coordinación del SII
+110704,unidad,110704,Depto. Ciencias Sociales,oficina,110700,no,110700,coordinación del SII
+110800,omitir,,,,,,,lo cubre el organigrama del sitio
+110801,omitir,,,,,,,lo cubre el organigrama del sitio
+110802,omitir,,,,,,,lo cubre el organigrama del sitio
+110803,omitir,,,,,,,lo cubre el organigrama del sitio
+110804,omitir,,,,,,,lo cubre el organigrama del sitio
+110805,omitir,,,,,,,lo cubre el organigrama del sitio
+110900,departamento,110900,Estudios de Posgrado e Investigación,departamento_academico,,si,110900,
+111000,omitir,,,,,,,lo cubre el organigrama del sitio
+111200,departamento,111200,Ingeniería Mecatrónica,departamento_academico,,no,111200,"departamento viejo sin docentes, materias ni grupos en 2026"
+111201,unidad,111201,Coordinación de Carrera Mecatronica,oficina,111200,no,111200,coordinación del SII
+111300,departamento,111300,Ingeniería en Logística,departamento_academico,,no,111300,"departamento viejo sin docentes, materias ni grupos en 2026"
+112300,departamento,112300,Ingeniería Empresarial,departamento_academico,,no,112300,"departamento viejo sin docentes, materias ni grupos en 2026"
+120000,omitir,,,,,,,lo cubre el organigrama del sitio
+120100,omitir,,,,,,,lo cubre el organigrama del sitio
+120101,omitir,,,,,,,lo cubre el organigrama del sitio
+120102,omitir,,,,,,,lo cubre el organigrama del sitio
+120103,omitir,,,,,,,lo cubre el organigrama del sitio
+120200,omitir,,,,,,,lo cubre el organigrama del sitio
+120201,omitir,,,,,,,lo cubre el organigrama del sitio
+120202,omitir,,,,,,,lo cubre el organigrama del sitio
+120203,omitir,,,,,,,lo cubre el organigrama del sitio
+120204,omitir,,,,,,,lo cubre el organigrama del sitio
+120205,omitir,,,,,,,lo cubre el organigrama del sitio
+120300,omitir,,,,,,,lo cubre el organigrama del sitio
+120301,omitir,,,,,,,lo cubre el organigrama del sitio
+120302,omitir,,,,,,,lo cubre el organigrama del sitio
+120303,omitir,,,,,,,lo cubre el organigrama del sitio
+120400,omitir,,,,,,,lo cubre el organigrama del sitio
+120401,omitir,,,,,,,lo cubre el organigrama del sitio
+120402,omitir,,,,,,,lo cubre el organigrama del sitio
+120500,omitir,,,,,,,lo cubre el organigrama del sitio
+120501,omitir,,,,,,,lo cubre el organigrama del sitio
+120502,omitir,,,,,,,lo cubre el organigrama del sitio
+120503,omitir,,,,,,,lo cubre el organigrama del sitio
+120600,omitir,,,,,,,lo cubre el organigrama del sitio
+120601,omitir,,,,,,,lo cubre el organigrama del sitio
+120602,omitir,,,,,,,lo cubre el organigrama del sitio
+120603,omitir,,,,,,,lo cubre el organigrama del sitio
+120604,omitir,,,,,,,lo cubre el organigrama del sitio
+130000,omitir,,,,,,,lo cubre el organigrama del sitio
+130100,omitir,,,,,,,lo cubre el organigrama del sitio
+130101,omitir,,,,,,,lo cubre el organigrama del sitio
+130102,omitir,,,,,,,lo cubre el organigrama del sitio
+130103,omitir,,,,,,,lo cubre el organigrama del sitio
+130104,omitir,,,,,,,lo cubre el organigrama del sitio
+130105,omitir,,,,,,,lo cubre el organigrama del sitio
+130106,omitir,,,,,,,lo cubre el organigrama del sitio
+130200,omitir,,,,,,,lo cubre el organigrama del sitio
+130201,omitir,,,,,,,lo cubre el organigrama del sitio
+130300,omitir,,,,,,,lo cubre el organigrama del sitio
+130301,omitir,,,,,,,lo cubre el organigrama del sitio
+130400,omitir,,,,,,,lo cubre el organigrama del sitio
+130401,omitir,,,,,,,lo cubre el organigrama del sitio
+130402,omitir,,,,,,,lo cubre el organigrama del sitio
+130403,omitir,,,,,,,lo cubre el organigrama del sitio
+130600,omitir,,,,,,,lo cubre el organigrama del sitio
+140000,omitir,,,,,,,lo cubre el organigrama del sitio
+150000,omitir,,,,,,,lo cubre el organigrama del sitio
+160000,omitir,,,,,,,lo cubre el organigrama del sitio
+170000,omitir,,,,,,,lo cubre el organigrama del sitio
+200000,omitir,,,,,,,no es unidad
+999999,omitir,,,,,,,no es unidad

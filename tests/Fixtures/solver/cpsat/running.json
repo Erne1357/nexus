@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "body": {
+    "run_id": "de64364d-0e84-4a1b-9e56-6bbef5c2e52b",
+    "status": "running",
+    "progress": 40,
+    "best_score": 120
+  }
+}

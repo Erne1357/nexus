@@ -1,0 +1,322 @@
+<?php
+
+use App\Modules\Core\Actions\AppointRole;
+use App\Modules\Core\Actions\EndRoleAssignment;
+use App\Modules\Core\Enums\AssignmentEnding;
+use App\Modules\Core\Enums\DeactivationReason;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\UserAccess;
+use App\Modules\Core\Livewire\Concerns\AppointsRoles;
+use App\Modules\Core\Livewire\Concerns\ManagesAccount;
+use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\AssignmentLabels;
+use App\Modules\Core\Queries\DeactivationPreviewQuery;
+use App\Modules\Core\Queries\PeopleQuery;
+use App\Modules\Core\Queries\PersonRecordQuery;
+use App\Modules\Core\Queries\UserAccountQuery;
+use App\Modules\Core\Rules\RoleAssignmentRules;
+use App\Modules\Core\Support\AccessInvitationLink;
+use App\Modules\Core\Support\PasswordResetTokens;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\Title;
+use Livewire\Component;
+use Mary\Traits\Toast;
+
+/**
+ * Ficha de una persona en «Personas y puestos» (3.P7, maqueta C): el encabezado con «Nombrar», las cifras, la línea de
+ * vigencias, una tarjeta por nombramiento con «Terminar…», el panel «¿Quién ocupa un puesto?» y la bitácora de sus
+ * puestos. Nombrar y terminar los hacen AppointRole y EndRoleAssignment, que hacen cumplir las reglas del alcance
+ * (RoleAssignmentRules): sus errores salen junto al campo.
+ *
+ * Aquí se nombran y terminan todos los puestos salvo el de docente (AZ-S11), que se ve de solo lectura con el aviso de
+ * dónde se maneja, aunque la llamada llegue forzada desde el navegador. El admin sí puede terminar su propio puesto de
+ * Administración si otro cubre los días que siguen; si no, queda deshabilitado con su motivo (AZ-S12), y quien pierde
+ * así su puesto vuelve a Inicio. La ven el admin con ese perfil activo y, de solo lectura, el directivo (AZ-03;
+ * RoleAssignmentPolicy): «Nombrar», «Terminar…», el menú «Acciones» y sus cajones salen solo a quien tiene su ability
+ * (`create` y `end` de RoleAssignmentPolicy, UserPolicy). El componente autoriza en mount(), al renderizar y en cada
+ * método público.
+ *
+ * El encabezado muestra el estado del acceso de la persona (AC-04). El bloque «Cuenta» (UserAccountQuery) muestra
+ * usuario, correo, estado, acceso y último acceso, y el menú «Acciones» del encabezado lleva Editar datos, Enviar o
+ * Reenviar invitación (CF-07, a quien no tiene contraseña, tenga o no un puesto), Restablecer contraseña, Dar de baja y
+ * Reactivar según el estado (ManagesAccount, 1.22-C1 y C2); lo que no se puede queda deshabilitado con su motivo. El
+ * panel no usa la contraseña por defecto. La cuenta de un alumno se ve de solo lectura, salvo
+ * Restablecer (CF-S4). El cajón «Dar de baja» muestra DeactivationPreviewQuery.
+ */
+new #[Title('Ficha de la persona')] class extends Component
+{
+    use AppointsRoles;
+    use ManagesAccount;
+    use Toast;
+
+    /** La persona de la ficha. El navegador no la puede cambiar. */
+    #[Locked]
+    public string $personId = '';
+
+    public bool $showModal = false;
+
+    /** El nombramiento que se está terminando. El navegador no lo puede cambiar. */
+    #[Locked]
+    public ?string $endingId = null;
+
+    public string $lastDay = '';
+
+    /** El panel «¿Quién ocupa un puesto?». La modalidad empieza en la única activa (AZ-S17). */
+    public string $whoRole = 'coordinador';
+
+    public string $whoModality = '';
+
+    public string $whoCampus = '';
+
+    public string $whoUnit = '';
+
+    public string $whoCareer = '';
+
+    /** Búsqueda de otra persona, por nombre o usuario. */
+    public string $find = '';
+
+    public function mount(string $user, PeopleQuery $people): void
+    {
+        $this->authorize('viewAny', RoleAssignment::class);
+
+        $this->personId = $people->findOrFail($user)->id;
+        $this->whoModality = $people->defaultModalityId() ?? '';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function with(PeopleQuery $people, PersonRecordQuery $records, RoleAssignmentRules $rules, AssignmentLabels $labels, UserAccountQuery $accounts, DeactivationPreviewQuery $previews, PasswordResetTokens $tokens): array
+    {
+        $this->authorize('viewAny', RoleAssignment::class);
+
+        $person = $people->findOrFail($this->personId);
+        $role = Role::tryFrom($this->role);
+        $whoRole = Role::tryFrom($this->whoRole);
+        $abilities = $this->accountAbilities($person);
+
+        return [
+            'record' => $records->for($person),
+            'access' => UserAccess::of($person),
+            'account' => $accounts->for($person, auth()->user()),
+            'abilities' => $abilities,
+            'preview' => $this->showDeactivate && $abilities['deactivate'] ? $previews->for($person, auth()->user()) : null,
+            'resetMinutes' => $tokens->minutes(),
+            'inviteDays' => AccessInvitationLink::DAYS,
+            'reasons' => array_map(fn (DeactivationReason $reason): array => ['id' => $reason->value, 'name' => $reason->label()], DeactivationReason::cases()),
+            'mayAppoint' => Gate::allows('create', RoleAssignment::class),
+            'mayEnd' => Gate::allows('end', RoleAssignment::class),
+            'canAppoint' => $person->is_active,
+            'offered' => $this->offeredOptions($rules),
+            'roleCase' => $role,
+            'isCoordinator' => $role === Role::Coordinador,
+            'careerGroups' => $role === Role::Coordinador && $this->showModal ? $people->careerChecklist($this->uuid($this->campus), $this->uuid($this->modality), $person, $this->careerSearch) : [],
+            'options' => $role === null ? ['modalities' => [], 'campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($role, $this->uuid($this->campus), $this->uuid($this->modality)),
+            'whoRoles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], array_filter(Role::cases(), fn (Role $role): bool => $role !== Role::Docente && $role !== Role::Alumno)),
+            'whoRoleCase' => $whoRole,
+            'whoOptions' => $whoRole === null ? ['modalities' => [], 'campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($whoRole, $this->uuid($this->whoCampus)),
+            'who' => $whoRole === null ? null : $this->who($people, $labels, $whoRole),
+            'found' => $people->search($this->find)->reject(fn ($found): bool => $found->id === $person->id)->values(),
+        ];
+    }
+
+    /**
+     * Cada cambio vuelve a autorizar, y un puesto o un campus nuevo olvida lo que dependía del anterior.
+     */
+    public function updated(string $property): void
+    {
+        $this->authorize('viewAny', RoleAssignment::class);
+
+        $this->appointFieldUpdated($property);
+
+        if ($property === 'whoRole') {
+            $this->reset('whoCampus', 'whoUnit', 'whoCareer');
+            $this->whoModality = app(PeopleQuery::class)->defaultModalityId() ?? '';
+        } elseif ($property === 'whoCampus') {
+            $this->reset('whoCareer');
+        }
+    }
+
+    public function openAppoint(): void
+    {
+        $this->authorize('create', RoleAssignment::class);
+
+        $this->resetAppointFields(Role::Coordinador);
+        $this->showModal = true;
+    }
+
+    public function appoint(AppointRole $appointRole, PeopleQuery $people, AssignmentLabels $labels, RoleAssignmentRules $rules): void
+    {
+        $this->authorize('create', RoleAssignment::class);
+
+        $person = $people->findOrFail($this->personId);
+
+        $assignments = $this->appointPerson($appointRole, $people, $person, $this->offeredOptions($rules));
+
+        if (count($assignments) === 1) {
+            $this->success('Nombramiento creado', e($labels->one($assignments[0])->summary));
+        } else {
+            $this->success('Nombramientos creados', e($this->severalSummary($labels, $assignments)));
+        }
+
+        $this->showModal = false;
+    }
+
+    /**
+     * La persona de la ficha, para no volver a nombrarla en las carreras que ya coordina.
+     */
+    protected function appointee(): ?User
+    {
+        return app(PeopleQuery::class)->findOrFail($this->personId);
+    }
+
+    /**
+     * «Coordinador de carrera · 2 carreras (ISC, IIND) · Presencial · Campus II»: el resumen de varios nombramientos
+     * del mismo puesto, modalidad y campus.
+     *
+     * @param  list<RoleAssignment>  $assignments
+     */
+    private function severalSummary(AssignmentLabels $labels, array $assignments): string
+    {
+        $described = $labels->describe($assignments);
+        $first = $described[$assignments[0]->getKey()];
+        $codes = collect($assignments)->map(fn (RoleAssignment $assignment): ?string => $described[$assignment->getKey()]->careerCode)->filter();
+
+        return implode(' · ', array_filter([$first->title, count($assignments).' carreras ('.$codes->implode(', ').')', $first->modalityName, $first->campusName]));
+    }
+
+    /**
+     * Abre el recuadro «Terminar…» en la tarjeta del nombramiento, con el primer último día posible (AZ-S12), que es hoy
+     * salvo un puesto de Administración cuyo sucesor empieza después.
+     */
+    public function confirmEnd(string $id, PeopleQuery $people, PersonRecordQuery $records, RoleAssignmentRules $rules): void
+    {
+        $assignment = $records->assignmentOf($people->findOrFail($this->personId), $id);
+        $this->authorize('end', $assignment);
+
+        $this->resetValidation();
+        $this->endingId = $assignment->id;
+        $this->lastDay = ($rules->earliestLastDay($assignment) ?? today()->toImmutable())->toDateString();
+    }
+
+    public function cancelEnd(): void
+    {
+        $this->authorize('viewAny', RoleAssignment::class);
+
+        $this->resetValidation();
+        $this->endingId = null;
+    }
+
+    public function end(EndRoleAssignment $endRoleAssignment, PeopleQuery $people, PersonRecordQuery $records): void
+    {
+        $this->authorize('viewAny', RoleAssignment::class);
+        $this->authorize('end', RoleAssignment::class);
+
+        if ($this->endingId === null) {
+            return;
+        }
+
+        $assignment = $records->assignmentOf($people->findOrFail($this->personId), $this->endingId);
+        $this->authorize('end', $assignment);
+
+        $this->validate(['lastDay' => ['required', 'date']], [
+            'lastDay.required' => 'Escribe la fecha de fin.',
+            'lastDay.date' => 'La fecha de fin no es válida.',
+        ]);
+
+        if (($blocker = $records->endBlocker($assignment)) !== null) {
+            throw ValidationException::withMessages(['lastDay' => $blocker]);
+        }
+
+        $day = CarbonImmutable::parse($this->lastDay);
+
+        try {
+            $ending = $endRoleAssignment->handle($assignment, $day);
+        } catch (ValidationException $exception) {
+            if (isset($exception->errors()['assignment'])) {
+                throw ValidationException::withMessages(['lastDay' => $exception->errors()['assignment'][0]]);
+            }
+
+            throw $exception;
+        }
+
+        // Quien terminó su propio puesto de Administración desde hoy ya no ve esta pantalla: vuelve a Inicio en lugar
+        // de un 403 al volver a pintarla.
+        if ($assignment->user_id === auth()->id() && Gate::denies('viewAny', RoleAssignment::class)) {
+            $this->success('Terminaste tu puesto de Administración.', e('Último día: '.$day->format('d/m/Y')), redirectTo: route('home'));
+
+            return;
+        }
+
+        match ($ending) {
+            AssignmentEnding::Ended => $this->success('Nombramiento terminado', e('Último día: '.$day->format('d/m/Y'))),
+            AssignmentEnding::Removed => $this->success('Nombramiento quitado', $assignment->valid_from->isToday() ? 'Empezaba hoy.' : 'Todavía no empezaba.'),
+            AssignmentEnding::Unchanged => $this->info('Sin cambios', e('Ese nombramiento ya termina el '.$assignment->valid_to->format('d/m/Y').'.')),
+        };
+
+        $this->endingId = null;
+    }
+
+    /**
+     * @return list<array{id: string, name: string}>
+     */
+    private function offeredOptions(RoleAssignmentRules $rules): array
+    {
+        return array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], $this->offered($rules));
+    }
+
+    /**
+     * Los puestos que esta pantalla nombra: los que no se manejan en otra parte (AZ-S11).
+     *
+     * @return list<Role>
+     */
+    private function offered(RoleAssignmentRules $rules): array
+    {
+        return array_values(array_filter(Role::cases(), fn (Role $role): bool => $rules->managedElsewhere($role) === null));
+    }
+
+    /**
+     * Quién ocupa el puesto sobre el alcance elegido en el panel: `incomplete` si falta elegir una columna del
+     * puesto, `none` si nadie lo ocupa hoy, `found` con los titulares. `title` es el nombre del puesto sobre esa unidad
+     * (AssignmentLabels: «Jefe del Departamento de Servicios Escolares», AZ-02). El campus opcional del coordinador y
+     * del jefe de proyecto docente (AZ-S17) acota si se elige (PeopleQuery::holders()).
+     *
+     * @return array{state: string, title: string, summary: string, holders: Collection<int, RoleAssignment>}
+     */
+    private function who(PeopleQuery $people, AssignmentLabels $labels, Role $role): array
+    {
+        $values = [
+            'campus_id' => $this->uuid($this->whoCampus),
+            'org_unit_id' => $this->uuid($this->whoUnit),
+            'career_id' => $this->uuid($this->whoCareer),
+            'modality_id' => $this->uuid($this->whoModality),
+        ];
+        $columns = $role->scopeColumns();
+        $label = $labels->one(new RoleAssignment([
+            'role' => $role,
+            ...array_intersect_key($values, array_flip([...$columns, ...$role->optionalScopeColumns()])),
+        ]));
+
+        if (array_filter($columns, fn (string $column): bool => $values[$column] === null) !== []) {
+            return ['state' => 'incomplete', 'title' => $label->title, 'summary' => $label->summary, 'holders' => collect()];
+        }
+
+        $holders = $people->holders($role, $values['campus_id'], $values['org_unit_id'], $values['career_id'], $values['modality_id']);
+
+        return ['state' => $holders->isEmpty() ? 'none' : 'found', 'title' => $label->title, 'summary' => $label->summary, 'holders' => $holders];
+    }
+
+    /**
+     * El valor solo si es un id: lo que llega del navegador no se pasa a la base si no lo es.
+     */
+    private function uuid(string $value): ?string
+    {
+        return Str::isUuid($value) ? $value : null;
+    }
+};

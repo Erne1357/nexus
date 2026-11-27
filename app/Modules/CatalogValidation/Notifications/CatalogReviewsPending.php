@@ -1,0 +1,227 @@
+<?php
+
+namespace App\Modules\CatalogValidation\Notifications;
+
+use App\Modules\Academic\Models\Department;
+use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
+use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\CatalogValidation\Queries\HeadMailAddressQuery;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\NexusNotification;
+use App\Modules\Core\Notifications\NotificationMessage;
+use App\Modules\Core\Notifications\PositionNotice;
+use App\Modules\Core\Notifications\PositionRef;
+use App\Modules\Core\Notifications\RoutesMailAddress;
+use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Support\StageTimeline;
+use Carbon\CarbonImmutable;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\MailMessage;
+
+/**
+ * «Tienes catálogos por validar» (tarea 2.9) y su recordatorio (tarea 2.5): al jefe de un departamento o de Servicios
+ * Escolares (CV15), con los catálogos que le faltan del periodo. Lleva a la validación de catálogos de ese departamento
+ * o de Servicios Escolares (tarea 2.4; `?department=` es ReviewOwner::id), con la credencial en el periodo del aviso; no
+ * lleva campus, porque la validación es de todo el Tec (decisión 6). Deja de poder abrirse si el departamento se borró
+ * o el usuario ya no es su jefe.
+ *
+ * CV11 (D3 y D6, confirmados el 14 de noviembre de 2026): los dos dicen la fecha límite, si la etapa tiene ventana
+ * (ValidationWindowQuery), y llegan también al correo del jefe. El recordatorio tiene su propio título y dice cuánto
+ * lleva revisado de cada catálogo que falta (`$progress`, CV7). El correo va al institucional de la ficha de docente del
+ * jefe y, si no tiene, al de su usuario si es institucional; nunca al personal, y sin ninguno, solo la campana
+ * (HeadMailAddressQuery; CV11, confirmado el 15 de noviembre de 2026). La misma dirección decide el canal y recibe el
+ * correo (RoutesMailAddress). Sale de la cola, después del commit; la campana se guarda en el momento
+ * (`viaConnections`, conexión `sync`).
+ *
+ * CE-02 (confirmado el 26 de noviembre de 2026): validar compete a la jefatura, así que el aviso que se manda a un puesto
+ * (NotifyHolders) es de puesto (PositionNotice): su correo va al buzón del nombramiento por el que el jefe valida (su
+ * unidad) y, si todavía no tiene buzón, espera; la campana llega igual. Sin puesto, sigue la regla de CV11.
+ */
+final class CatalogReviewsPending extends NexusNotification implements PositionNotice, RoutesMailAddress, ShouldQueue
+{
+    use Queueable;
+
+    public static function typeKey(): string
+    {
+        return 'catalog-reviews-pending';
+    }
+
+    public static function typeLabel(): string
+    {
+        return 'Catálogos por validar';
+    }
+
+    /** De quién son los catálogos: un departamento o Servicios Escolares (CV15). */
+    private readonly ReviewOwner $owner;
+
+    /**
+     * @param  list<Catalog>  $pending
+     * @param  array<string, array{reviewed: int, total: int}>  $progress  por catálogo (`Catalog->value`), solo en el recordatorio
+     */
+    public function __construct(
+        private readonly Term $term,
+        Department|ReviewOwner $owner,
+        private readonly array $pending,
+        private readonly ?CarbonImmutable $deadline = null,
+        private readonly bool $reminder = false,
+        private readonly array $progress = [],
+    ) {
+        $this->owner = $owner instanceof Department ? ReviewOwner::ofDepartment($owner) : $owner;
+        $this->afterCommit();
+    }
+
+    /**
+     * Un aviso que se guardó en la cola antes de CV15 trae `department` (un Department) en lugar de `owner`: se arma su
+     * dueño con él, para que el correo pendiente salga igual después de desplegar.
+     *
+     * @param  array<string, mixed>  $values
+     */
+    public function __unserialize(array $values): void
+    {
+        parent::__unserialize($values);
+
+        $legacy = "\0".self::class."\0department";
+
+        $department = ! isset($this->owner) && array_key_exists($legacy, $values) ? $this->getRestoredPropertyValue($values[$legacy]) : null;
+
+        if ($department instanceof Department) {
+            $this->owner = ReviewOwner::ofDepartment($department);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function via(object $notifiable): array
+    {
+        return $this->positionChannels()
+            ?? ($notifiable instanceof User && $this->mailAddressFor($notifiable) !== null ? ['database', 'mail'] : ['database']);
+    }
+
+    /**
+     * CE-02: el puesto de quien lo recibe, con el alcance de su nombramiento.
+     */
+    public function position(): ?PositionRef
+    {
+        return $this->holderPosition();
+    }
+
+    /**
+     * CV11: el institucional de la ficha del jefe, el institucional de su usuario o ninguno.
+     */
+    public function mailAddressFor(User $user): ?string
+    {
+        return app(HeadMailAddressQuery::class)->for($user);
+    }
+
+    /**
+     * La campana en el momento; el correo, en la conexión de cola por omisión.
+     *
+     * @return array<string, string>
+     */
+    public function viaConnections(): array
+    {
+        return ['database' => 'sync'];
+    }
+
+    public function message(object $notifiable): NotificationMessage
+    {
+        return new NotificationMessage(
+            title: $this->title(),
+            body: "{$this->term->name} · {$this->owner->name}: {$this->catalogList()}".($this->deadline === null ? '' : ' · fecha límite '.StageTimeline::dateLabel($this->deadline)),
+            icon: 'o-clipboard-document-check',
+            route: 'catalog-validation.review',
+            parameters: ['department' => $this->owner->id],
+            termId: $this->term->getKey(),
+            tone: 'warning',
+        );
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        $mail = (new MailMessage)
+            ->subject($this->title())
+            ->greeting("Hola, {$notifiable->name}")
+            ->line($this->reminder
+                ? "En {$this->owner->name} te falta validar en {$this->term->name}:"
+                : "Se abrió la validación de catálogos de {$this->term->name}. En {$this->owner->name} te falta validar:");
+
+        foreach ($this->ordered() as $catalog) {
+            $mail->line($catalog->label().($this->reminder ? ': '.$this->progressLabel($catalog) : ''));
+        }
+
+        if ($this->deadline !== null) {
+            $mail->line('La fecha límite es el '.$this->deadline->translatedFormat('j \d\e F').'.');
+        }
+
+        return $mail
+            ->action('Ir a validar', route('catalog-validation.review', ['department' => $this->owner->id]))
+            ->line('Revisa cada registro y valida el catálogo cuando esté completo.');
+    }
+
+    public static function unavailableReason(Actor $context, NotificationMessage $message): ?string
+    {
+        $owner = $message->parameters['department'] ?? null;
+
+        if ($owner === ReviewOwner::SCHOOL_SERVICES) {
+            return CatalogReviewQuery::allowsOn($context, CatalogValidationPermission::ReviewValidate, $owner)
+                ? parent::unavailableReason($context, $message)
+                : 'Ya no eres jefe de Servicios Escolares.';
+        }
+
+        $department = KeyLookup::find(Department::query(), $owner);
+
+        if ($department === null) {
+            return 'Ese departamento ya no existe.';
+        }
+
+        if (! CatalogReviewQuery::allowsOn($context, CatalogValidationPermission::ReviewValidate, $department->getKey())) {
+            return "Ya no eres jefe de {$department->name}.";
+        }
+
+        return parent::unavailableReason($context, $message);
+    }
+
+    private function title(): string
+    {
+        return $this->reminder ? 'Recordatorio: te faltan catálogos por validar' : 'Tienes catálogos por validar';
+    }
+
+    /**
+     * «docentes, materias, planes de estudio, carreras y salones»; en el recordatorio, cada uno con cuánto lleva
+     * revisado («docentes (12 de 77 revisados)»).
+     */
+    private function catalogList(): string
+    {
+        $names = array_map(fn (Catalog $catalog): string => mb_strtolower($catalog->label()).($this->reminder ? " ({$this->progressLabel($catalog)})" : ''), $this->ordered());
+
+        $last = array_pop($names);
+
+        return $names === [] ? (string) $last : implode(', ', $names).' y '.$last;
+    }
+
+    /**
+     * «12 de 77 revisados», o «sin registros» si el catálogo no tiene registros activos.
+     */
+    private function progressLabel(Catalog $catalog): string
+    {
+        $progress = $this->progress[$catalog->value] ?? ['reviewed' => 0, 'total' => 0];
+
+        return $progress['total'] === 0 ? 'sin registros' : "{$progress['reviewed']} de {$progress['total']} revisados";
+    }
+
+    /**
+     * Los catálogos en el orden del enum, con los salones al final.
+     *
+     * @return list<Catalog>
+     */
+    private function ordered(): array
+    {
+        return [...array_filter($this->pending, fn (Catalog $catalog): bool => $catalog !== Catalog::Rooms), ...array_filter($this->pending, fn (Catalog $catalog): bool => $catalog === Catalog::Rooms)];
+    }
+}

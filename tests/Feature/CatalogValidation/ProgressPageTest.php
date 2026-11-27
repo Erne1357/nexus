@@ -1,0 +1,582 @@
+<?php
+
+use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Actions\CreateTermLoads;
+use App\Modules\CatalogValidation\Actions\CreateTermReviews;
+use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\ReviewFlag;
+use App\Modules\CatalogValidation\Enums\ReviewStatus;
+use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
+use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
+use App\Modules\CatalogValidation\Models\CatalogReviewMark;
+use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\Stage;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\ModalityProfile;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
+use App\Modules\Core\Models\TermStage;
+use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\TermCalendarQuery;
+use App\Modules\Core\Support\ValidationReturn;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
+use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
+
+/*
+| Tarea 2.5: el tablero de avance de validación (`/catalog-validation/progress`, catalog-validation::pages.progress),
+| variante A «matriz» (DESIGN.md). Lo ven y recuerdan Subdirección y el admin; los demás roles reciben 403
+| (supuesto por confirmar). Resolver una observación desde el drawer sigue a CatalogReviewPolicy::resolveFlag.
+*/
+
+beforeEach(function () {
+    $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $this->sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
+    $this->ele = Department::factory()->create(['code' => 'ELE', 'name' => 'Eléctrica y Electrónica']);
+
+    // El periodo abierto en Presencial: C1 y C2 (M4).
+    TermOpening::factory()->create(['term_id' => $this->term->id]);
+    app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
+    app(CreateTermLoads::class)->handle($this->term, modalityOf('PRES'));
+
+    $this->jefeSis = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create(['name' => 'Dra. Ana Soto']);
+    $this->subdireccion = User::factory()->withRole(Role::Subdireccion, [])->create();
+    $this->admin = User::factory()->admin()->create();
+});
+
+function progressPage(?User $user = null, array $query = [])
+{
+    return Livewire::withQueryParams($query)->actingAs($user ?? test()->subdireccion)->test('catalog-validation::pages.progress');
+}
+
+/**
+ * Una observación sobre una materia del departamento, en la revisión de materias de Servicios Escolares (CV15).
+ */
+function progressMakeFlag(Department $department, ReviewFlag $flag = ReviewFlag::Other, ?string $comment = 'Las horas deben ser 3.'): CatalogReviewFlag
+{
+    $subject = Subject::factory()->create(['code' => 'ACF-0901', 'name' => 'Contabilidad financiera', 'department_id' => $department->id]);
+    $review = CatalogReview::query()->whereNull('department_id')->where('catalog', Catalog::Subjects)->sole();
+
+    return CatalogReviewFlag::factory()->on($subject)->create(['review_id' => $review->id, 'flag' => $flag, 'comment' => $comment, 'flagged_by' => test()->jefeSis->id]);
+}
+
+describe('quién entra', function () {
+    it('Subdirección y el admin ven el avance global, la matriz y los totales; Servicios Escolares, solo el admin (CV-S1)', function (string $who) {
+        $page = progressPage($who === 'admin' ? $this->admin : $this->subdireccion)
+            ->assertOk()
+            ->assertSee('Avance de validación')
+            ->assertSee($who === 'admin' ? '0 de 7' : '0 de 4')
+            ->assertSee('Sistemas y Computación')
+            ->assertSee('Dra. Ana Soto')
+            ->assertSee('Salones')
+            ->assertSee('Total del Tec');
+
+        $who === 'admin' ? $page->assertSeeHtml('data-testid="progress-row-SE"') : $page->assertDontSeeHtml('data-testid="progress-row-SE"');
+    })->with(['admin', 'subdirección']);
+
+    it('la ruta responde con su entrada en el menú', function () {
+        $this->actingAs($this->subdireccion)->get(route('catalog-validation.progress'))->assertOk()->assertSee('Avance de validación');
+    });
+
+    it('jefe, coordinador, jefe de proyecto docente y docente reciben 403 en la página, en la ruta y en cada método', function (Role $role, array $scope, string $department) {
+        $user = User::factory()->withRole($role, $scope)->create();
+
+        progressPage($user)->assertForbidden();
+        $this->actingAs($user)->get(route('catalog-validation.progress'))->assertForbidden();
+
+        $page = progressPage($this->subdireccion);
+        $this->actingAs($user);
+        $page->call('remind')->assertForbidden();
+        $page = progressPage($this->subdireccion);
+        $this->actingAs($user);
+        $page->call('open', $department)->assertForbidden();
+    })->with([
+        'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => test()->ele->id], fn () => test()->ele->id],
+        'coordinador' => [Role::Coordinador, fn () => ['campus_id' => test()->c2->id, 'career_id' => careerKey(20)], fn () => test()->sis->id],
+        'jefe de proyecto docente' => [Role::JefeProyectoDocente, fn () => ['campus_id' => test()->c2->id, 'department_id' => test()->sis->id], fn () => test()->sis->id],
+        'docente' => [Role::Docente, fn () => ['campus_id' => test()->c2->id], fn () => test()->sis->id],
+    ]);
+
+    it('el menú de Académico lo ofrece a Subdirección y no al jefe', function () {
+        $this->actingAs($this->subdireccion)->get(route('catalog-validation.review'))->assertSee('catalog-validation/progress', false);
+        $this->actingAs($this->jefeSis)->get(route('catalog-validation.review'))->assertDontSee('catalog-validation/progress', false);
+    });
+
+    it('un invitado va al login', function () {
+        $this->get(route('catalog-validation.progress'))->assertRedirect(route('login'));
+    });
+});
+
+describe('salones en una sola columna', function () {
+    it('una columna «Salones» con la revisión de salones del departamento, una para todos los campus (decisión 6)', function () {
+        $html = progressPage()->html();
+
+        expect(substr_count($html, 'data-testid="column-rooms"'))->toBe(1)
+            ->and(substr_count($html, 'data-testid="cell-SIS-rooms"'))->toBe(1)
+            ->and($html)->not->toContain('room-badge-');
+    });
+
+    it('no hay filtro de campus ni la lista de campus abiertos: la validación es de todo el Tec', function () {
+        progressPage()->assertSee('Ene-Jun 2027')->assertDontSee('Campus I y Campus II')->assertDontSeeHtml('aria-label="Campus"');
+
+        expect(fn () => progressPage()->set('campus', $this->c1->id))->toThrow(Exception::class);
+    });
+
+    it('el total de Salones cuenta los departamentos', function () {
+        CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
+
+        expect(progressPage()->html())->toMatch('/data-testid="total-rooms".*?1 de 2/s');
+    });
+
+    it('trae una leyenda de símbolos debajo de la matriz', function () {
+        progressPage()->assertSeeHtml('data-testid="progress-legend"');
+    });
+});
+
+describe('accesibilidad y renglones', function () {
+    it('en el celular la fecha del último cambio va visible en los catálogos que faltan', function () {
+        CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::InReview]);
+
+        $html = progressPage()->html();
+
+        expect(preg_match('/data-testid="progress-cards".*?<\/ul>/s', $html, $cards))->toBe(1)
+            ->and($cards[0])->toContain('hoy');
+    });
+
+    it('«Carga:» sale con la carga del departamento en la modalidad de los campus (M1), una aunque haya dos campus', function () {
+        $html = progressPage()->html();
+
+        expect($html)->toContain('data-testid="loads-SIS"')->toContain('data-testid="load-SIS-PRES"')
+            ->and(preg_match('/data-testid="loads-SIS".*?<\/p>/s', $html, $line))->toBe(1)
+            ->and($line[0])->not->toContain('·');
+    });
+
+    it('con una sola carga no hay separador, y sin ninguna no hay «Carga:»', function () {
+        $page = progressPage();
+        expect(preg_match('/data-testid="loads-SIS".*?<\/p>/s', $page->html(), $line))->toBe(1)
+            ->and($line[0])->not->toContain('·');
+
+        DB::table('academic_loads')->delete();
+        $html = progressPage()->html();
+
+        expect($html)->not->toContain('data-testid="loads-SIS"')->not->toContain('Carga:');
+    });
+});
+
+describe('recordar a todos', function () {
+    it('el número de jefes tiene texto accesible propio y, sin nadie por recordar, el botón queda deshabilitado con su motivo', function () {
+        expect(progressPage()->html())->toContain('1 jefe por recordar');
+
+        $html = progressPage()->set('search', 'nadie')->html();
+
+        expect($html)->toMatch('/data-testid="remind-all"[^>]*disabled|disabled[^>]*data-testid="remind-all"/')
+            ->and($html)->toContain('Ningún departamento visible tiene jefe con catálogos pendientes.');
+    });
+
+    it('pinta cuántos jefes se recordarán en la insignia del botón', function () {
+        expect(progressPage()->html())->toMatch('/data-testid="remind-all".*?badge[^>]*>\s*1\s*</s');
+    });
+});
+
+describe('conteos', function () {
+    it('CV7: cada catálogo sin validar dice cuántos registros van revisados, también Salones', function () {
+        $subject = Subject::factory()->create(['department_id' => $this->sis->id]);
+        Subject::factory()->create(['department_id' => $this->sis->id]);
+        $review = CatalogReview::query()->whereNull('department_id')->where('catalog', Catalog::Subjects)->sole();
+        CatalogReviewMark::factory()->for($review, 'review')->on($subject)->create();
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->c2->id]))->create(['department_id' => $this->sis->id]);
+
+        progressPage($this->admin)
+            ->assertSeeHtml('data-testid="reviewed">1 de 2 revisados</span>')
+            ->assertSeeHtml('data-testid="reviewed">0 de 1 revisados</span>')
+            ->assertSee('Pendiente · 0 de 1 revisados');
+
+        expect($room->department_id)->toBe($this->sis->id);
+    });
+
+    it('cuenta las validadas y en revisión del periodo activo, y las observaciones abiertas', function () {
+        CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
+        CatalogReview::query()->whereNull('department_id')->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
+        CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::InReview]);
+        progressMakeFlag($this->sis);
+
+        progressPage($this->admin)
+            ->assertSee('4 de 7')
+            ->assertSee('1 en revisión')
+            ->assertSee('2 pendientes')
+            ->assertSeeInOrder(['Observaciones abiertas', '1', 'en 1 departamento'])
+            ->assertSee('3 de 3')
+            ->assertSee('1 de 2');
+    });
+
+    it('muestra la ventana de validación de catálogos con los días que quedan, y nada si no existe', function () {
+        progressPage()->assertDontSee('Validación de catálogos');
+
+        $this->travelTo(now()->setDate(2026, 11, 12)->startOfDay());
+        TermStage::factory()->create(['term_id' => $this->term->id, 'stage' => Stage::CatalogValidation, 'starts_on' => '2026-11-10', 'ends_on' => '2026-11-19']);
+        // La primera vista guardó el calendario sin etapas por un día (TermCalendarQuery); la factory no avisa como
+        // la pantalla de etapas, así que se olvida a mano. Sin esto la prueba dependía de que el viaje en el tiempo
+        // pasara de ese día y falló desde el 11 de noviembre de 2026.
+        Cache::forget(TermCalendarQuery::key($this->term->id));
+
+        progressPage()->assertSee('Validación de catálogos')->assertSee('10–19 nov')->assertSee('quedan 7 días')
+            ->assertSeeHtml('data-testid="progress-deadline">Fecha límite: <span class="font-semibold text-base-content tabular-nums">19 nov</span>');
+    });
+
+    it('CV11: la ventana y la fecha límite son las generales de la etapa, aunque una modalidad tenga la suya', function () {
+        $this->travelTo(now()->setDate(2026, 11, 12)->startOfDay());
+        TermStage::factory()->create(['term_id' => $this->term->id, 'stage' => Stage::CatalogValidation, 'starts_on' => '2026-11-10', 'ends_on' => '2026-11-19']);
+        TermStage::factory()->create(['term_id' => $this->term->id, 'stage' => Stage::CatalogValidation, 'starts_on' => '2026-11-10', 'ends_on' => '2026-11-30', 'modality_id' => modalityOf('PRES')->id]);
+        Cache::forget(TermCalendarQuery::key($this->term->id));
+
+        progressPage()->assertSee('10–19 nov')->assertDontSee('10–30 nov');
+    });
+
+    it('muestra el estado de la carga de cada departamento por campus', function () {
+        progressPage()->assertSee('Borrador');
+    });
+
+    it('sin periodo activo o sin campus abierto dice por qué no hay matriz', function () {
+        TermOpening::query()->delete();
+
+        progressPage()->assertOk()->assertSee('no está abierto en ningún campus');
+    });
+});
+
+describe('filtros', function () {
+    it('filtra por estado y por búsqueda de departamento o jefe', function () {
+        CatalogReview::query()->where('department_id', $this->sis->id)->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
+
+        progressPage()->set('status', 'pending')->assertSee('Eléctrica y Electrónica')->assertDontSee('Sistemas y Computación');
+        progressPage()->set('status', 'validated')->assertSee('Sistemas y Computación')->assertDontSee('Eléctrica y Electrónica');
+        progressPage()->set('search', 'soto')->assertSee('Sistemas y Computación')->assertDontSee('Eléctrica y Electrónica');
+    });
+});
+
+describe('recordar', function () {
+    it('«Recordar a todos» manda a la cola un job con los departamentos con jefe y pendientes, y lo dice', function () {
+        Queue::fake();
+
+        $page = progressPage()->call('remind');
+
+        Queue::assertPushed(RemindPendingReviewsJob::class, fn (RemindPendingReviewsJob $job) => $job->departmentIds === [$this->sis->id]
+            && $job->actorId === $this->subdireccion->id);
+        expect(lastToastOf($page)['title'])->toBe('Enviando recordatorios a 1 departamento');
+    });
+
+    it('«Recordar a todos» respeta la búsqueda y el estado', function () {
+        $otro = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create(['name' => 'Ing. Raúl Terrazas']);
+        Queue::fake();
+
+        progressPage()->set('search', 'terrazas')->call('remind');
+        Queue::assertPushed(RemindPendingReviewsJob::class, fn (RemindPendingReviewsJob $job) => $job->departmentIds === [$this->ele->id]);
+
+        Queue::fake();
+        $page = progressPage()->set('search', 'nadie')->call('remind');
+        Queue::assertNothingPushed();
+        expect(lastToastOf($page)['title'])->toBe('Nadie por recordar');
+
+        Queue::fake();
+        progressPage()->set('search', '')->call('remind');
+        Queue::assertPushed(RemindPendingReviewsJob::class, fn (RemindPendingReviewsJob $job) => count($job->departmentIds) === 2);
+    });
+
+    it('«Recordar» de una fila avisa en línea y dice a cuántos jefes, o «Nadie por recordar»', function () {
+        Notification::fake();
+
+        $page = progressPage()->call('remind', $this->sis->id);
+        Notification::assertSentTo($this->jefeSis, CatalogReviewsPending::class);
+        expect(lastToastOf($page)['title'])->toBe('Se avisó a 1 jefe');
+
+        $page = progressPage()->call('remind', $this->ele->id);
+        expect(lastToastOf($page)['title'])->toBe('Nadie por recordar');
+        progressPage()->call('remind', 'no-es-uuid')->assertNotFound();
+    });
+
+    it('el último recordatorio aparece en el drawer', function () {
+        Notification::fake();
+
+        progressPage()->call('remind', $this->sis->id)->call('open', $this->sis->id)->assertSee('Último recordatorio')->assertSee('hoy');
+    });
+
+    it('CV11: «Recordar» manda el recordatorio, con su propio título, no el aviso de apertura', function () {
+        Notification::fake();
+
+        progressPage()->call('remind', $this->sis->id);
+
+        Notification::assertSentTo($this->jefeSis, CatalogReviewsPending::class, fn (CatalogReviewsPending $notice) => $notice->message($this->jefeSis)->title === 'Recordatorio: te faltan catálogos por validar');
+        expect(Activity::query()->where('event', 'reminded')->sole()->properties->has('campuses'))->toBeFalse();
+    });
+
+    it('el drawer de un departamento que el filtro dejó fuera se abre igual', function () {
+        progressPage()->set('search', 'sistemas')->call('open', $this->ele->id)->assertSee('Eléctrica y Electrónica')->assertSee('Catálogos');
+    });
+});
+
+describe('drawer', function () {
+    it('muestra los catálogos con quién y cuándo validó y las observaciones abiertas, también los de Servicios Escolares (CV15)', function () {
+        CatalogReview::query()->whereNull('department_id')->where('catalog', Catalog::Careers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefeSis->id, 'validated_at' => now()]);
+        progressMakeFlag($this->sis);
+
+        progressPage($this->admin)->call('open', ReviewOwner::SCHOOL_SERVICES)
+            ->assertSet('showDrawer', true)
+            ->assertSee('Validó Dra. Ana Soto')
+            ->assertSee('ACF-0901')->assertSee('Contabilidad financiera')->assertSee('Las horas deben ser 3.')
+            ->assertSee('Marcar como resuelta');
+    });
+
+    it('un salón sin nombre se muestra con su clave y no como un registro que ya no está', function () {
+        $building = Building::factory()->create(['campus_id' => $this->c2->id]);
+        $room = Room::factory()->create(['building_id' => $building->id, 'code' => 'NEE1', 'name' => null, 'department_id' => $this->sis->id]);
+        $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->sole();
+        CatalogReviewFlag::factory()->on($room)->create(['review_id' => $review->id, 'flag' => ReviewFlag::Other, 'comment' => 'Revisar la clave.', 'flagged_by' => $this->jefeSis->id]);
+
+        progressPage()->call('open', $this->sis->id)->assertSee('NEE1')->assertDontSee('Registro ya no disponible');
+    });
+
+    it('agrupa las observaciones por catálogo y registro', function () {
+        $flag = progressMakeFlag($this->sis);
+        CatalogReviewFlag::factory()->on($flag->flaggable)->create(['review_id' => $flag->review_id, 'flag' => ReviewFlag::Duplicate, 'comment' => 'Otra más.', 'flagged_by' => $this->jefeSis->id]);
+
+        $html = progressPage($this->admin)->call('open', ReviewOwner::SCHOOL_SERVICES)->html();
+
+        expect(substr_count($html, 'data-testid="drawer-record-'))->toBe(1)
+            ->and($html)->toContain('Las horas deben ser 3.')->toContain('Otra más.');
+    });
+
+    it('el pie del drawer no tiene «Cerrar» y los estados se llaman igual que en la matriz', function () {
+        $html = progressPage()->call('open', $this->sis->id)->html();
+
+        expect(preg_match('/<footer.*?<\/footer>/s', $html, $footer))->toBe(1)
+            ->and($footer[0])->toContain('Recordar')->and($footer[0])->not->toContain('Cerrar')
+            ->and($html)->not->toContain('Sin abrir');
+    });
+
+    it('agrupa por revisión: los salones de todos los campus van en un solo grupo', function () {
+        $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->sole();
+
+        foreach ([$this->c1, $this->c2] as $i => $campus) {
+            $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $campus->id])->id, 'code' => 'SAL'.$i, 'department_id' => $this->sis->id]);
+            CatalogReviewFlag::factory()->on($room)->create(['review_id' => $review->id, 'flag' => ReviewFlag::Other, 'comment' => 'Revisar.', 'flagged_by' => $this->jefeSis->id]);
+        }
+
+        $html = progressPage()->call('open', $this->sis->id)->html();
+
+        expect(substr_count($html, 'data-testid="drawer-review-flags-'))->toBe(1)
+            ->and($html)->toContain('SAL0')->toContain('SAL1');
+    });
+
+    it('la fecha de validación se ve en el drawer sin tooltip', function () {
+        CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefeSis->id, 'validated_at' => now()]);
+
+        progressPage()->call('open', $this->sis->id)->assertSee(now()->timezone(config('app.timezone'))->translatedFormat('j M Y'));
+    });
+
+    it('un id que no es de un departamento activo no abre nada', function () {
+        progressPage()->call('open', 'no-es-uuid')->assertNotFound();
+        progressPage()->call('open', fakeKey(999))->assertNotFound();
+    });
+
+    it('el admin resuelve una observación de Servicios Escolares desde el drawer; Subdirección ni la abre ni la resuelve (CV-S1)', function () {
+        $flag = progressMakeFlag($this->sis);
+
+        $page = progressPage($this->admin)->call('open', ReviewOwner::SCHOOL_SERVICES)->call('resolveFlag', $flag->id);
+
+        expect($flag->fresh()->resolved_by)->toBe($this->admin->id)
+            ->and(lastToastOf($page)['title'])->toBe('Observación resuelta');
+
+        $other = CatalogReviewFlag::factory()->on($flag->flaggable)->create(['review_id' => $flag->review_id, 'flag' => ReviewFlag::Duplicate, 'comment' => 'Otra.', 'flagged_by' => $this->jefeSis->id]);
+        progressPage($this->subdireccion)->call('open', ReviewOwner::SCHOOL_SERVICES)->assertNotFound();
+        progressPage($this->subdireccion)->call('resolveFlag', $other->id)->assertForbidden();
+        expect($other->fresh()->resolved_at)->toBeNull();
+    });
+
+    it('no resuelve con un id ajeno ni un usuario sin permiso', function () {
+        $flag = progressMakeFlag($this->sis);
+
+        progressPage()->call('resolveFlag', 'no-es-uuid')->assertNotFound();
+
+        $page = progressPage();
+        $this->actingAs($this->jefeSis);
+        $page->call('resolveFlag', $flag->id)->assertForbidden();
+        expect($flag->fresh()->resolved_at)->toBeNull();
+    });
+});
+
+describe('abrir la validación (CV9)', function () {
+    it('con la validación sin abrir, el admin ve el estado vacío con «Abrir validación» y Subdirección el motivo sin el botón', function () {
+        CatalogReview::query()->delete();
+
+        progressPage($this->admin)->assertSee('La validación de este periodo no está abierta')->assertSeeHtml('data-testid="open-validation-empty"');
+        progressPage($this->subdireccion)->assertSee('La validación de este periodo no está abierta')
+            ->assertSee('Solo el administrador abre la validación')
+            ->assertDontSeeHtml('data-testid="open-validation-empty"')
+            ->assertDontSeeHtml('data-testid="open-drawer"');
+    });
+
+    it('el drawer lista cada catálogo, con los abiertos ya marcados, y abrir agrega su columna', function () {
+        schoolServicesHead();
+        CatalogReview::query()->whereNotIn('catalog', [Catalog::Teachers->value])->delete();
+
+        progressPage($this->admin)
+            ->assertSeeHtml('data-testid="open-validation"')
+            ->assertSeeHtml('data-testid="column-teachers"')
+            ->assertDontSeeHtml('data-testid="column-subjects"')
+            ->assertSeeHtml('data-testid="open-option-subjects"')
+            ->assertSee('Ya está abierto.')
+            ->set('toOpen', [Catalog::Subjects->value])
+            ->call('openValidation')
+            ->assertHasNoErrors();
+
+        progressPage($this->admin)->assertSeeHtml('data-testid="column-subjects"')->assertDontSeeHtml('data-testid="column-careers"');
+
+        expect(CatalogReview::query()->where('catalog', Catalog::Subjects->value)->count())->toBe(1);
+    });
+
+    it('el aviso de «nada abierto» dice la razón: ya abiertos, salones sin modalidad abierta que los use', function () {
+        $page = progressPage($this->admin)->set('toOpen', [Catalog::Teachers->value])->call('openValidation');
+        expect(lastToastOf($page)['description'])->toBe('Esos catálogos ya estaban abiertos.');
+
+        CatalogReview::query()->where('catalog', Catalog::Rooms->value)->delete();
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
+
+        $page = progressPage($this->admin)->set('toOpen', [Catalog::Rooms->value])->call('openValidation');
+        expect(lastToastOf($page)['description'])->toBe('Ninguna modalidad abierta en este periodo usa salones.');
+    });
+
+    it('sin marcar ningún catálogo no abre nada y lo dice', function () {
+        CatalogReview::query()->delete();
+
+        progressPage($this->admin)->call('openValidation')->assertHasErrors('toOpen');
+
+        expect(CatalogReview::count())->toBe(0);
+    });
+
+    it('Subdirección y los demás reciben 403 al abrir', function () {
+        $page = progressPage($this->admin);
+        $this->actingAs($this->subdireccion);
+        $page->call('startOpening')->assertForbidden();
+        $page = progressPage($this->admin);
+        $this->actingAs($this->subdireccion);
+        $page->call('openValidation')->assertForbidden();
+    });
+
+    it('con todo abierto no ofrece el botón del encabezado', function () {
+        progressPage($this->admin)->assertDontSeeHtml('data-testid="open-validation"');
+    });
+});
+
+describe('etiquetas y lista (1.21)', function () {
+    it('«Ver avance» abre el drawer y «Abrir revisión» lleva a la pantalla del jefe, en la fila y en el drawer', function () {
+        $html = progressPage()->call('open', $this->sis->id)->html();
+
+        expect($html)->toContain('Ver avance')->toContain('Abrir revisión')
+            ->not->toContain('Ver detalle')->not->toContain('Ver validación');
+    });
+
+    it('el nombre del departamento se ve completo, en varias líneas si hace falta', function () {
+        expect(progressPage()->html())->toMatch('/<button[^>]*class="group block max-w-full text-start text-pretty"[^>]*data-testid="open-SIS"/');
+    });
+
+    it('solo los departamentos activos están en la matriz y en «Observaciones abiertas»', function () {
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->c2->id]))->create(['code' => 'ELC-1', 'department_id' => $this->ele->id]);
+        $review = CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Rooms)->sole();
+        $flag = CatalogReviewFlag::factory()->on($room)->create(['review_id' => $review->id, 'flag' => ReviewFlag::Other, 'comment' => 'Revisar la capacidad.', 'flagged_by' => $this->jefeSis->id]);
+        $this->ele->update(['is_active' => false]);
+
+        progressPage()->assertDontSeeHtml('data-testid="progress-row-ELE"');
+        progressPage()->call('openFlags')->assertDontSeeHtml('data-testid="flags-department-ELE"')->assertDontSee($flag->comment);
+    });
+});
+
+describe('abrir la validación vuelve a pintar la página (1.21)', function () {
+    it('después de abrir, la página se recarga a sí misma con el aviso', function () {
+        schoolServicesHead();
+        CatalogReview::query()->whereNot('catalog', Catalog::Teachers->value)->delete();
+
+        $page = progressPage($this->admin)->set('toOpen', [Catalog::Subjects->value])->call('openValidation');
+
+        $page->assertRedirect(route('catalog-validation.progress'));
+        expect(lastToastOf($page)['title'])->toBe('Validación abierta');
+    });
+
+    it('CV12: al abrir Salones advierte cuántos salones activos no tienen dueño', function () {
+        CatalogReview::query()->where('catalog', Catalog::Rooms->value)->delete();
+        $building = Building::factory()->create(['campus_id' => $this->c2->id]);
+        Room::factory()->count(2)->create(['building_id' => $building->id, 'department_id' => null]);
+        Room::factory()->create(['building_id' => $building->id, 'department_id' => null, 'is_active' => false]);
+        Room::factory()->create(['building_id' => $building->id, 'department_id' => $this->sis->id]);
+
+        progressPage($this->admin)->call('startOpening')
+            ->assertSeeHtml('data-testid="rooms-without-owner"')
+            ->assertSee('2 salones sin dueño: ningún jefe los revisará.');
+    });
+
+    it('CV12: sin salones sin dueño o con Salones ya abierto no advierte', function () {
+        progressPage($this->admin)->call('startOpening')->assertDontSeeHtml('data-testid="rooms-without-owner"');
+    });
+});
+
+describe('CV10: observaciones abiertas de todos los departamentos', function () {
+    it('Subdirección y el admin las ven juntas por departamento; el enlace al registro, si su Policy lo deja ver', function (string $who) {
+        $sis = progressMakeFlag($this->sis);
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->c2->id]))->create(['code' => 'ELC-1001', 'name' => 'Circuitos', 'department_id' => $this->ele->id]);
+        $review = CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Rooms)->sole();
+        CatalogReviewFlag::factory()->on($room)->create(['review_id' => $review->id, 'flag' => ReviewFlag::Duplicate, 'flagged_by' => $this->jefeSis->id]);
+
+        $page = progressPage($who === 'admin' ? $this->admin : $this->subdireccion)
+            ->assertSeeHtml('data-testid="open-all-flags"')
+            ->call('openFlags')
+            ->assertSet('showFlags', true)
+            ->assertSee($who === 'admin' ? 'Observaciones abiertas (2)' : 'Observaciones abiertas (1)');
+
+        $who === 'admin'
+            ? $page->assertSeeHtml('data-testid="record-link-'.$sis->flaggable_id.'"')->assertSeeHtml('href="'.e(route('academic.subjects', ValidationReturn::params($sis->review->owner_id, 'subjects'))).'"')
+            : $page->assertDontSeeHtml('data-testid="record-link-'.$sis->flaggable_id.'"');
+        $who === 'admin'
+            ? expect($page->html())->toMatch('/data-testid="flags-drawer".*Servicios Escolares.*ACF-0901.*Eléctrica y Electrónica.*ELC-1001/s')
+            : expect($page->html())->toMatch('/data-testid="flags-drawer".*Eléctrica y Electrónica.*ELC-1001/s')->not->toContain('ACF-0901');
+    })->with(['admin', 'subdirección']);
+
+    it('se resuelve desde la lista con la nota de lo que se hizo', function () {
+        $flag = progressMakeFlag($this->sis);
+
+        $page = progressPage($this->admin)->call('openFlags')->assertSeeHtml('data-testid="resolve-submit-'.$flag->id.'"')->call('resolveFlag', $flag->id, 'Se corrigieron las horas.');
+
+        expect($flag->fresh())->resolution_note->toBe('Se corrigieron las horas.')->resolved_by->toBe($this->admin->id)
+            ->and(lastToastOf($page)['title'])->toBe('Observación resuelta');
+        $page->assertDontSee('Las horas deben ser 3.');
+    });
+
+    it('sin observaciones abiertas no ofrece la lista', function () {
+        progressPage()->assertDontSeeHtml('data-testid="open-all-flags"');
+    });
+
+    it('un jefe no ve las observaciones de otro departamento ni las resuelve desde aquí', function () {
+        $flag = progressMakeFlag($this->ele);
+        $jefeEle = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create();
+
+        progressPage($this->jefeSis)->assertForbidden();
+
+        $page = progressPage();
+        $this->actingAs($this->jefeSis);
+        $page->call('openFlags')->assertForbidden();
+
+        $page = progressPage();
+        $this->actingAs($jefeEle);
+        $page->call('resolveFlag', $flag->id, 'Nada')->assertForbidden();
+
+        expect($flag->fresh()->resolved_at)->toBeNull();
+    });
+});

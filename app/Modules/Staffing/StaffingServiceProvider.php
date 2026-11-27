@@ -1,0 +1,520 @@
+<?php
+
+namespace App\Modules\Staffing;
+
+use App\Modules\Academic\Events\SubjectUpdated;
+use App\Modules\AcademicLoad\Database\Seeders\ReanalysisDemoSeeder;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Events\LoadTransitioning;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Demo\DemoCheck;
+use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Demo\DemoStep;
+use App\Modules\Core\Enums\DemoCheckpoint;
+use App\Modules\Core\Enums\DemoVolume;
+use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Settings\SettingDefinition;
+use App\Modules\Core\Settings\SettingType;
+use App\Modules\Core\Support\HomePanels;
+use App\Modules\Faculty\Events\AdscriptionChanged;
+use App\Modules\Faculty\Events\AvailabilityChanged;
+use App\Modules\Faculty\Events\ExternalLoadChanged;
+use App\Modules\Faculty\Events\HourAllowanceChanged;
+use App\Modules\Faculty\Events\PositionChanged;
+use App\Modules\Faculty\Events\QualificationChanged;
+use App\Modules\Faculty\Events\TeacherAccessChanged;
+use App\Modules\Faculty\Events\TeacherUpdated;
+use App\Modules\Faculty\Events\TeachingHoursChanged;
+use App\Modules\Faculty\Queries\SelectionCsvHours;
+use App\Modules\Faculty\Queries\SelectionQueueMembership;
+use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
+use App\Modules\Faculty\Rules\TeachingHours;
+use App\Modules\Scheduling\Enums\GroupStatus;
+use App\Modules\Scheduling\Events\GroupCancelled;
+use App\Modules\Scheduling\Events\GroupMovedToCampus;
+use App\Modules\Scheduling\Events\GroupsCancelling;
+use App\Modules\Scheduling\Events\GroupScheduleChanged;
+use App\Modules\Scheduling\Events\GroupsCreated;
+use App\Modules\Scheduling\Events\GroupTeacherChanged;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
+use App\Modules\Scheduling\Queries\PendingPlacements;
+use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
+use App\Modules\Staffing\Console\AdvanceSelectionsCommand;
+use App\Modules\Staffing\Console\ImportPriorChoicesCommand;
+use App\Modules\Staffing\Console\RankTerm;
+use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
+use App\Modules\Staffing\Database\Seeders\ChangeRequestsDemoSeeder;
+use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
+use App\Modules\Staffing\Database\Seeders\ReanalysisRepublicationDemoSeeder;
+use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
+use App\Modules\Staffing\Database\Seeders\StaffingSupplyDemoSeeder;
+use App\Modules\Staffing\Enums\ChangeRequestKind;
+use App\Modules\Staffing\Enums\ChangeRequestStatus;
+use App\Modules\Staffing\Enums\StaffingPermission;
+use App\Modules\Staffing\Listeners\BlockCancellingWithOpenChangeRequests;
+use App\Modules\Staffing\Listeners\BlockClosingWithPendingChangeRequests;
+use App\Modules\Staffing\Listeners\BlockReturnWithApprovedChangeRequests;
+use App\Modules\Staffing\Listeners\FollowGroupMovedToCampus;
+use App\Modules\Staffing\Listeners\QueueTeacherLoadRefresh;
+use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
+use App\Modules\Staffing\Listeners\RerankOnGroupChange;
+use App\Modules\Staffing\Listeners\RerankOnGroupsCreated;
+use App\Modules\Staffing\Listeners\RerankOnSubjectTeacherHours;
+use App\Modules\Staffing\Models\ChangeRequest;
+use App\Modules\Staffing\Models\GroupTeacherAssignment;
+use App\Modules\Staffing\Models\Selection;
+use App\Modules\Staffing\Models\StaffingRanking;
+use App\Modules\Staffing\Models\TeacherTermLoad;
+use App\Modules\Staffing\Notifications\SelectionTeacherNotice;
+use App\Modules\Staffing\Policies\ChangeRequestPolicy;
+use App\Modules\Staffing\Policies\SelectionPolicy;
+use App\Modules\Staffing\Queries\ChosenAlternativePlacementsQuery;
+use App\Modules\Staffing\Queries\SelectionCsvHoursQuery;
+use App\Modules\Staffing\Queries\SelectionQueueMembershipQuery;
+use App\Modules\Staffing\Queries\SelectionTimetableQuery;
+use App\Modules\Staffing\Queries\TeacherWeeklyLoadQuery;
+use App\Modules\Staffing\Rules\RankingWindowSizes;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
+
+/**
+ * Módulo Staffing: ranking docente y asignación de docentes a los grupos (docs/dominio/modelo-de-datos.md,
+ * "Staffing"). Está a la derecha de Scheduling (ADR-0020); puede usar Scheduling, Faculty, AcademicLoad, Academic y Core.
+ *
+ * Escucha a Scheduling y a Faculty, que no dependen de Staffing, para recalcular el ranking docente en la cola
+ * (ComputeRankings) cuando cambia cualquiera de sus entradas.
+ */
+final class StaffingServiceProvider extends ModuleServiceProvider
+{
+    /**
+     * Lo que recalcula `teacher_term_loads`: los grupos con docente de Scheduling y las plazas, horas externas y
+     * autorizadas, horas frente a grupo del CSV de la selección (TeachingHoursChanged), datos y adscripciones de Faculty.
+     */
+    private const array REFRESH_LOADS_ON = [
+        GroupTeacherChanged::class,
+        GroupCancelled::class,
+        GroupsCreated::class,
+        PositionChanged::class,
+        ExternalLoadChanged::class,
+        HourAllowanceChanged::class,
+        TeachingHoursChanged::class,
+        TeacherUpdated::class,
+        AdscriptionChanged::class,
+        SubjectUpdated::class,
+    ];
+
+    /**
+     * @var array<class-string, class-string>
+     */
+    protected array $policies = [
+        ChangeRequest::class => ChangeRequestPolicy::class,
+        Selection::class => SelectionPolicy::class,
+    ];
+
+    /**
+     * El editor de horarios muestra «por colocar» la alternativa del motor elegida en una solicitud de cambio
+     * (`?solicitud=`, tarea 8.7).
+     */
+    public function register(): void
+    {
+        parent::register();
+
+        $this->app->bind(PendingPlacements::class, ChosenAlternativePlacementsQuery::class);
+        $this->app->bind(TeacherWeeklyLoad::class, TeacherWeeklyLoadQuery::class);
+        $this->app->bind(SelectionQueueMembership::class, SelectionQueueMembershipQuery::class);
+        $this->app->bind(SelectionCsvHours::class, SelectionCsvHoursQuery::class);
+    }
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        // IN-03 (1.85): el Resumen del docente es el tablero de Staffing (Core no lo conoce: lo pinta con HomePanels).
+        $this->app->make(HomePanels::class)->register('docente', 'staffing::components.teacher-summary', 'Tus clases de hoy, tu carga y lo que necesita tu atención.');
+
+        foreach (self::REFRESH_LOADS_ON as $event) {
+            Event::listen($event, QueueTeacherLoadRefresh::class);
+        }
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([RankTerm::class, RefreshTeacherLoadsCommand::class, AdvanceSelectionsCommand::class, ImportPriorChoicesCommand::class]);
+        }
+
+        Event::listen(LoadTransitioning::class, BlockClosingWithPendingChangeRequests::class);
+        Event::listen(LoadTransitioning::class, BlockReturnWithApprovedChangeRequests::class);
+        Event::listen(GroupsCancelling::class, BlockCancellingWithOpenChangeRequests::class);
+        Event::listen(GroupsCreated::class, RerankOnGroupsCreated::class);
+        Event::listen(GroupMovedToCampus::class, FollowGroupMovedToCampus::class);
+        Event::listen([GroupScheduleChanged::class, GroupCancelled::class, GroupTeacherChanged::class], RerankOnGroupChange::class);
+        Event::listen([
+            PositionChanged::class, ExternalLoadChanged::class, AvailabilityChanged::class, QualificationChanged::class,
+            AdscriptionChanged::class, TeacherUpdated::class, TeacherAccessChanged::class, TeachingHoursChanged::class,
+        ], RerankOnFacultyChange::class);
+        Event::listen(SubjectUpdated::class, RerankOnSubjectTeacherHours::class);
+    }
+
+    /**
+     * «Asignación docente» para quienes ven el ranking de algún departamento (StaffingPermission::RankingView); «Cierre
+     * de la carga» para quienes cierran la carga de algún departamento (`academic_load.load.close`: el jefe y
+     * Subdirección) y «Avance del cierre» para quienes la reabren (`academic_load.load.reopen`: Subdirección y el admin).
+     *
+     * «Mi espacio › Orden de selección» (decisión 8 de la 1.33) lleva al horario de la selección (`staffing.offer`) a
+     * quien la ve con `staffing.selection.view` sin ser docente (el jefe, el JPD, directivos y Subdirección): no es del
+     * área Carga académica, así que sigue en el menú con la carga oculta (MN-05), y solo sale mientras hay una selección
+     * suya a la vista (viva, o la última terminada de su periodo de carga). El docente llega por «Oferta» y el admin, que
+     * la maneja, por «Administración › Orden de selección».
+     *
+     * @return list<NavigationItem>
+     */
+    public function navigation(): array
+    {
+        // MN-02: la misma closure en todos los módulos que la usan, así el menú consulta una vez.
+        $loadInProgress = LoadProgressQuery::menuCondition();
+        $selectionOnScreen = static function (Actor $context): ?string {
+            $gate = Gate::forUser($context->user());
+
+            return app(SelectionTimetableQuery::class)->onScreen($context->loadTerm())->contains(fn (Selection $selection): bool => $gate->allows('view', $selection))
+                ? null
+                : 'No hay una orden de selección de tu departamento';
+        };
+
+        return [
+            new NavigationItem('Carga actual', 'staffing.current-load', 'o-table-cells', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, order: -1, whyUnavailable: $loadInProgress,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView)),
+            new NavigationItem('Asignación docente', 'staffing.assign', 'o-user-plus', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::RankingView)),
+            new NavigationItem('Orden de selección', 'staffing.selection.admin', 'o-queue-list', NavigationArea::Administracion, group: NavigationGroup::Configuracion, order: -1,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::SelectionManage)),
+            new NavigationItem('Carga por docente', 'staffing.teacher-loads', 'o-user-group', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::TeacherLoadView)),
+            new NavigationItem('Mi carga', 'staffing.my-load', 'o-calendar-days', NavigationArea::MiEspacio,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::MyLoadView)),
+            new NavigationItem('Oferta', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::OfferView)),
+            new NavigationItem('Orden de selección', 'staffing.offer', 'o-queue-list', NavigationArea::MiEspacio, whyUnavailable: $selectionOnScreen,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::SelectionView)
+                    && ! $context->allowsAny(StaffingPermission::OfferView)
+                    && ! $context->allowsAny(StaffingPermission::SelectionManage)),
+            new NavigationItem('Solicitudes de cambio', 'staffing.change-requests', 'o-arrow-path-rounded-square', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::ChangeRequestView)
+                    || $context->allowsAny(StaffingPermission::ChangeRequestDecide)
+                    || $context->allowsAny(StaffingPermission::ChangeRequestApplySchedule)
+                    || $context->allowsAny(StaffingPermission::ChangeRequestApplyRoom)),
+            new NavigationItem('Cierre de la carga', 'staffing.closing', 'o-lock-closed', NavigationArea::CargaAcademica, group: NavigationGroup::CierrePublicacion, whyUnavailable: $loadInProgress,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadClose)),
+            new NavigationItem('Avance del cierre', 'staffing.closing-board', 'o-chart-bar-square', NavigationArea::CargaAcademica, group: NavigationGroup::CierrePublicacion, whyUnavailable: $loadInProgress,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadReopen)),
+        ];
+    }
+
+    /**
+     * @return list<class-string>
+     */
+    /**
+     * SEL-15 (CE-01): los avisos de la orden de selección al docente caen a su correo personal si no tiene institucional.
+     */
+    public function personalMailExceptions(): array
+    {
+        return [SelectionTeacherNotice::class => 'SEL-15'];
+    }
+
+    public function permissions(): array
+    {
+        return [StaffingPermission::class];
+    }
+
+    /**
+     * Ven el ranking los jefes, el jefe de proyecto docente y la Subdirección; asignan los jefes (reglas-de-negocio.md,
+     * "Aprobaciones y permisos"). Solicitudes de cambio: piden el docente del grupo y el coordinador de su carrera;
+     * ven los jefes, el jefe de proyecto docente y la Subdirección; decide el jefe del departamento; aplica el
+     * coordinador (horario) o el jefe (salón).
+     */
+    /**
+     * Los parámetros de `settings` que lee Asignación docente (CF-S7): los pesos y las ventanas del ranking, y los topes
+     * de horas y de traslado que revisan las reglas de horarios (TeacherHourLimit, CampusTravel). Los valores por
+     * omisión y los límites son los de las clases que los leen.
+     *
+     * @return list<SettingDefinition>
+     */
+    public function settings(): array
+    {
+        $module = ['staffing', 'Asignación docente'];
+
+        return [
+            new SettingDefinition('staffing.weights', ...$module, label: 'Pesos del ranking docente',
+                help: 'Cuánto suma cada cosa al puntaje con el que se ordena a los docentes que pueden tomar un grupo. Cada peso es un número de cero en adelante; con cero, esa cosa no cuenta.',
+                type: SettingType::DecimalTable, default: ['per_group_taught' => 1.0, 'preferente' => 3.0, 'apto' => 1.0, 'evaluation' => 2.0],
+                rules: ['min:0', 'max:100'],
+                fields: ['per_group_taught' => 'Por cada grupo impartido', 'preferente' => 'Experiencia académica preferente en la materia', 'apto' => 'Experiencia académica apta en la materia', 'evaluation' => 'Por punto de evaluación docente']),
+            new SettingDefinition('staffing.history_terms', ...$module, label: 'Semestres del historial',
+                help: 'Cuántos semestres hacia atrás cuenta el ranking los grupos que el docente ya impartió.',
+                type: SettingType::Integer, default: RankingWindowSizes::DEFAULT_HISTORY, rules: ['min:1', 'max:20'], unit: 'semestres'),
+            new SettingDefinition('staffing.evaluation_terms', ...$module, label: 'Semestres de la evaluación',
+                help: 'Cuántos semestres hacia atrás promedia el ranking la evaluación docente.',
+                type: SettingType::Integer, default: RankingWindowSizes::DEFAULT_EVALUATION, rules: ['min:1', 'max:20'], unit: 'semestres'),
+            new SettingDefinition('staffing.extra_hours_tolerance', ...$module, label: 'Horas de más que se toleran',
+                help: 'Cuántas horas semanales, además de las 2 de la banda del reglamento, puede tener un docente por encima de sus horas frente a grupo antes de que Nexus avise que se pasó.',
+                type: SettingType::Integer, default: 0, rules: ['min:0', 'max:40'], unit: 'horas'),
+            new SettingDefinition('staffing.honorarios_max_hours', ...$module, label: 'Tope de horas de un docente por honorarios',
+                help: 'Las horas semanales máximas de quien da clases por honorarios. Sin valor, se usa su banda de horas frente a grupo más la tolerancia.',
+                type: SettingType::Integer, default: null, rules: ['min:1', 'max:40'], unit: 'horas', nullable: true),
+            new SettingDefinition('staffing.administrative_max_hours', ...$module, label: 'Tope de horas de quien tiene plaza administrativa',
+                help: 'Las horas semanales que pueden sumar las clases, las horas externas y las horas de la plaza administrativa (apoyo y asistencia) de un docente. Nexus no deja asignarle más clases que pasen de ahí. No lleva la banda de más o menos 2 horas.',
+                type: SettingType::Integer, default: TeachingHours::ADMINISTRATIVE_MAX, rules: ['min:1', 'max:60'], unit: 'horas'),
+            new SettingDefinition('staffing.max_hours_with_honorarios', ...$module, label: 'Tope de horas con honorarios de quien tiene plaza docente',
+                help: 'Las horas semanales que pueden sumar la plaza de un docente (TC de 40 h, tres cuartos de 30 h, medio tiempo de 20 h, asignatura) y sus horas extra pagadas como honorarios. Nexus no deja asignarle más clases que pasen de ahí. Las horas extra son las que pasan de sus horas frente a grupo más 2.',
+                type: SettingType::Integer, default: TeachingHours::MAX_WITH_HONORARIOS, rules: ['min:1', 'max:60'], unit: 'horas'),
+            new SettingDefinition('staffing.min_campus_travel_minutes', ...$module, label: 'Minutos mínimos para cambiar de campus',
+                help: 'El tiempo que necesita un docente entre dos clases seguidas en campus distintos. Con menos, Nexus avisa del traslado (no bloquea).',
+                type: SettingType::Integer, default: CampusTravel::DEFAULT_MINUTES, rules: ['min:0', 'max:240'], unit: 'minutos'),
+        ];
+    }
+
+    public function grants(): array
+    {
+        return [
+            Role::Docente->value => [
+                StaffingPermission::OfferView,
+                StaffingPermission::MyLoadView,
+                StaffingPermission::ChangeRequestRequestOwn,
+                StaffingPermission::SelectionPickOwn,
+            ],
+            Role::Directivo->value => [
+                StaffingPermission::RankingView,
+                StaffingPermission::TeacherLoadView,
+                StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
+            ],
+            Role::Subdireccion->value => [
+                StaffingPermission::RankingView,
+                StaffingPermission::TeacherLoadView,
+                StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
+            ],
+            Role::JefeDepartamento->value => [
+                StaffingPermission::RankingView,
+                StaffingPermission::TeacherAssign,
+                StaffingPermission::TeacherLoadView,
+                StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
+                StaffingPermission::ChangeRequestDecide,
+                StaffingPermission::ChangeRequestApplyRoom,
+                StaffingPermission::HonorariosAuthorize,
+            ],
+            Role::JefeProyectoDocente->value => [
+                StaffingPermission::RankingView,
+                StaffingPermission::TeacherAssign,
+                StaffingPermission::TeacherLoadView,
+                StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
+            ],
+            Role::Coordinador->value => [
+                StaffingPermission::ChangeRequestRequest,
+                StaffingPermission::ChangeRequestApplySchedule,
+            ],
+        ];
+    }
+
+    /**
+     * «Mi espacio» es del docente sobre lo suyo: el admin no es docente, así que no tiene la oferta ni «mi carga» y
+     * no los ve en el menú (y el menú no consulta la ficha del docente en cada página).
+     */
+    public function adminDenies(): array
+    {
+        return [
+            StaffingPermission::OfferView,
+            StaffingPermission::MyLoadView,
+        ];
+    }
+
+    /**
+     * Demo por puntos:
+     * - a «validación», altas de docentes de asignatura donde la capacidad no llega a 1.35 veces la demanda esperada
+     *   (StaffingSupplyDemoSeeder), antes de validar 20271;
+     * - a «asignación», cada carga en propuesta pasa a asignación con su jefe y se calcula el ranking de todos los grupos;
+     * - a «salones», docente para todo grupo activo, `teacher_term_loads` y choques al día;
+     * - a «publicación» (LoadClosingDemoSeeder), el cierre de la 4.1: primero el terreno limpio (solicitudes pendientes
+     *   rechazadas, acuerdos propuestos respondidos); luego la variedad de justificaciones, grupos a los que se les quita
+     *   el docente o el salón de una sesión con su justificación; y al final cada carga con grupos se cierra con su jefe.
+     *   Staffing ve AcademicLoad, Scheduling y lo suyo, así que el paso vive aquí.
+     */
+    public function demoSteps(): array
+    {
+        $profile = fn (DemoContext $demo): string => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo';
+        $staffing = fn (DemoContext $demo, string $mode) => $demo->runSeederPerModality(StaffingDemoSeeder::class, [
+            'profile' => $profile($demo),
+            'campuses' => $demo->campuses,
+            'term' => $demo->termCode,
+            'seed' => $demo->seed,
+            'mode' => $mode,
+        ]);
+        $closing = fn (DemoContext $demo, string $mode) => $demo->runSeederPerModality(LoadClosingDemoSeeder::class, [
+            'profile' => $profile($demo),
+            'campuses' => $demo->campuses,
+            'term' => $demo->termCode,
+            'seed' => $demo->seed,
+            'mode' => $mode,
+        ]);
+
+        return [
+            new DemoStep(DemoCheckpoint::CatalogValidation, 'Plantilla suficiente para la asignación', fn (DemoContext $demo) => $demo->runSeederPerModality(StaffingSupplyDemoSeeder::class, [
+                'campuses' => $demo->campuses, 'term' => $demo->termCode, 'seed' => $demo->seed,
+            ])),
+            new DemoStep(DemoCheckpoint::Staffing, 'Cargas a asignación y rankings', fn (DemoContext $demo) => $staffing($demo, 'start')),
+            new DemoStep(DemoCheckpoint::Rooms, 'Docente para todo grupo', fn (DemoContext $demo) => $staffing($demo, 'staffed')),
+            new DemoStep(DemoCheckpoint::Publication, 'Terreno limpio para cerrar: solicitudes de cambio pendientes rechazadas y acuerdos propuestos aceptados o cancelados', fn (DemoContext $demo) => $closing($demo, 'clean')),
+            new DemoStep(DemoCheckpoint::Publication, 'Grupos sin docente o sin salón, con la justificación del jefe', fn (DemoContext $demo) => $closing($demo, 'justified')),
+            new DemoStep(DemoCheckpoint::Publication, 'Cada carga con grupos, cerrada por su jefe (grupos confirmados)', fn (DemoContext $demo) => $closing($demo, 'closed')),
+            // Los casos del re-análisis (fase 8, #614), después de los ajustes de Scheduling: docentes cambiados, cierres, la
+            // devolución de Subdirección, las versiones 2, la reimportación del kárdex y la corrección en versión 3.
+            new DemoStep(DemoCheckpoint::ReanalysisCases, 'Docentes cambiados, re-análisis cerrados y republicados, una devolución y una corrección en versión 3', fn (DemoContext $demo) => $demo->runSeederPerModality(ReanalysisRepublicationDemoSeeder::class, [
+                'term' => $demo->termCode,
+            ])),
+            // Las solicitudes de cambio de la fase 8 (8.6 y 8.7) en la carga que el re-análisis reserva, después de sus casos.
+            new DemoStep(DemoCheckpoint::ReanalysisCases, 'Solicitudes de cambio en cada estado: con choques, con alternativas del motor, aprobadas y aplicadas', fn (DemoContext $demo) => $demo->runSeederPerModality(ChangeRequestsDemoSeeder::class, [
+                'term' => $demo->termCode,
+            ])),
+        ];
+    }
+
+    public function demoChecks(): array
+    {
+        $groups = fn (DemoContext $demo): Builder => Group::query()->active()
+            ->where('term_id', $demo->term()->getKey())
+            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+            ->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'));
+
+        return [
+            new DemoCheck([DemoCheckpoint::Staffing], 'Toda carga con grupos está en asignación', function (DemoContext $demo): true|string {
+                $pending = AcademicLoad::query()->where('term_id', $demo->term()->getKey())
+                    ->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'))->where('status', '!=', LoadStatus::Staffing)
+                    ->whereExists(Group::query()->active()->selectRaw('1')
+                        ->whereColumn('groups.term_id', 'academic_loads.term_id')
+                        ->whereColumn('groups.modality_id', 'academic_loads.modality_id')
+                        ->whereColumn('groups.department_id', 'academic_loads.department_id')
+                        ->whereIn('groups.campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+                        ->whereIn('groups.modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'))
+                        ->toBase())
+                    ->count();
+
+                return $pending === 0 ? true : "{$pending} cargas con grupos no están en asignación.";
+            }),
+            new DemoCheck([DemoCheckpoint::Staffing], 'Todo grupo activo tiene ranking', fn (DemoContext $demo): true|string => ($missing = $groups($demo)->whereNotIn('id', StaffingRanking::query()->select('group_id'))->count()) === 0
+                ? true
+                : "{$missing} grupos sin ranking."),
+            // Desde «publicacion», el grupo sin docente pasa con la justificación del jefe (HC-15).
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Rooms), 'Todo grupo activo tiene docente con su asignación vigente, o justificación', function (DemoContext $demo) use ($groups): true|string {
+                $unstaffed = $groups($demo)->whereNull('teacher_id')->whereNull('close_justification')->count();
+                $unrecorded = $groups($demo)->whereNotNull('teacher_id')
+                    ->whereNotIn('id', GroupTeacherAssignment::query()->whereNull('replaced_at')->select('group_id'))->count();
+
+                return $unstaffed === 0 && $unrecorded === 0 ? true : "{$unstaffed} grupos sin docente ni justificación y {$unrecorded} con docente sin asignación vigente.";
+            }),
+            new DemoCheck([DemoCheckpoint::Rooms], 'La carga por docente está al día', function (DemoContext $demo): true|string {
+                $teachers = Group::query()->active()->where('term_id', $demo->term()->getKey())->whereNotNull('teacher_id')->distinct()->count('teacher_id');
+                $loads = TeacherTermLoad::query()->where('term_id', $demo->term()->getKey())->where('groups_count', '>', 0)->count();
+
+                return $teachers === $loads ? true : "{$teachers} docentes con grupos y {$loads} cargas por docente con grupos.";
+            }),
+            // HC-08 es aviso desde la tarea 1.50: cuenta el que pasa también lo autorizado (oficio pendiente), que la demo no deja.
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Rooms), 'Cero choques duros de docente (HC-01, HC-09) ni horas de más sin oficio (HC-08)', fn (DemoContext $demo): true|string => ($hard = DB::table('schedule_conflicts')
+                ->where('term_id', $demo->term()->getKey())->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+                ->whereIn('group_id', Group::query()->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'))->select('id'))
+                ->where(fn ($query) => $query->where(fn ($hard) => $hard->where('severity', 'hard')->whereIn('rule', ['HC-01', 'HC-09']))
+                    ->orWhere(fn ($hours) => $hours->where('rule', 'HC-08')->whereRaw("(related->>'remaining_hours')::int < 0")))
+                ->whereNull('resolved_at')->count()) === 0
+                ? true
+                : "{$hard} choques duros de docente."),
+            ...$this->publicationChecks(),
+            $this->changeRequestsCheck(),
+        ];
+    }
+
+    /**
+     * Lo que deja ChangeRequestsDemoSeeder en `reanalisis-casos`: la carga reservada para las solicitudes de cambio
+     * (ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS) en ajustes y cada escenario en su estado
+     * (ChangeRequestsDemoSeeder::problems()), con las alternativas listas y la elegida sin aplicar vigentes según la huella
+     * barata que compara la pantalla. Un volumen sin carga reservada (el demo) no tiene qué revisar y pasa.
+     */
+    private function changeRequestsCheck(): DemoCheck
+    {
+        return new DemoCheck([DemoCheckpoint::ReanalysisCases], 'La carga reservada tiene solicitudes de cambio en cada estado de la pantalla, con sus alternativas vigentes', function (DemoContext $demo): true|string {
+            $missing = [];
+
+            foreach (Modality::query()->whereIn('code', $demo->volume->modalities())->orderBy('code')->get() as $modality) {
+                foreach (ReanalysisDemoSeeder::loadsIn($demo->term()->getKey(), $modality->getKey(), [ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS]) as $load) {
+                    if (($problems = ChangeRequestsDemoSeeder::problems($load)) !== []) {
+                        $missing[] = "{$load->department->code} en {$modality->code}: ".implode(', ', $problems);
+                    }
+                }
+            }
+
+            return $missing === [] ? true : implode('; ', $missing).'.';
+        });
+    }
+
+    /**
+     * Lo que deja el cierre al llegar a «publicacion», comparado por modalidad y periodo (M1): cada carga con grupos activos,
+     * cerrada y limpia según ClosingBlockersQuery (HC-15); sus grupos activos confirmados; al menos un grupo justificado;
+     * y las cargas sin grupos, todavía en borrador.
+     *
+     * @return list<DemoCheck>
+     */
+    private function publicationChecks(): array
+    {
+        $loads = fn (DemoContext $demo, bool $withGroups): Builder => AcademicLoad::query()->where('term_id', $demo->term()->getKey())
+            ->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'))
+            ->whereExists(Group::query()->active()->selectRaw('1')
+                ->whereColumn('groups.term_id', 'academic_loads.term_id')
+                ->whereColumn('groups.modality_id', 'academic_loads.modality_id')
+                ->whereColumn('groups.department_id', 'academic_loads.department_id')
+                ->toBase(), not: ! $withGroups);
+        $groups = fn (DemoContext $demo): Builder => Group::query()->active()->where('term_id', $demo->term()->getKey())
+            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+            ->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'));
+
+        return [
+            new DemoCheck([DemoCheckpoint::Publication], 'Toda carga con grupos está cerrada y sin pendientes de cierre (HC-15)', function (DemoContext $demo) use ($loads): true|string {
+                $withGroups = $loads($demo, true)->with(['department', 'modality', 'term'])->get();
+                $open = $withGroups->filter(fn (AcademicLoad $load): bool => $load->status !== LoadStatus::Closed);
+                $blocked = $withGroups->diff($open)->mapWithKeys(fn (AcademicLoad $load): array => [
+                    "{$load->department->code} en {$load->modality->code}" => app(ClosingBlockersQuery::class)->of($load)->reasons(),
+                ])->filter();
+
+                return match (true) {
+                    $open->isNotEmpty() => $open->count().' cargas con grupos no están cerradas: '.$open->map(fn (AcademicLoad $load): string => "{$load->department->code} en {$load->modality->code} ({$load->status->label()})")->implode(', ').'.',
+                    $blocked->isNotEmpty() => 'Cargas cerradas con pendientes: '.$blocked->map(fn (array $reasons, string $load): string => "{$load}: ".implode(' ', $reasons))->implode('; '),
+                    default => true,
+                };
+            }),
+            new DemoCheck([DemoCheckpoint::Publication], 'Todo grupo activo está confirmado', fn (DemoContext $demo): true|string => ($planned = $groups($demo)->where('status', '!=', GroupStatus::Confirmed)->count()) === 0
+                ? true
+                : "{$planned} grupos activos siguen sin confirmar."),
+            new DemoCheck([DemoCheckpoint::Publication], 'Hay grupos sin docente o sin salón que pasan con justificación', fn (DemoContext $demo): true|string => $groups($demo)->whereNotNull('close_justification')->exists()
+                ? true
+                : 'Ningún grupo justificado.'),
+            new DemoCheck([DemoCheckpoint::Publication], 'Las cargas sin grupos siguen en borrador', fn (DemoContext $demo): true|string => ($moved = $loads($demo, false)->where('status', '!=', LoadStatus::Draft)->count()) === 0
+                ? true
+                : "{$moved} cargas sin grupos salieron de borrador."),
+        ];
+    }
+
+    public function activityAttributes(): array
+    {
+        return [
+            ChangeRequest::class => ['status' => ['Estado de la solicitud', ChangeRequestStatus::class], 'kind' => ['Tipo de solicitud', ChangeRequestKind::class], 'current' => 'Valor actual', 'proposed' => 'Valor propuesto', 'decision_comment' => 'Comentario de la decisión'],
+        ];
+    }
+}

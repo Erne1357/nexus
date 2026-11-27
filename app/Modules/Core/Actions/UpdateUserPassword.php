@@ -1,0 +1,91 @@
+<?php
+
+namespace App\Modules\Core\Actions;
+
+use App\Modules\Core\Enums\PasswordOrigin;
+use App\Modules\Core\Models\User;
+use App\Modules\Core\Rules\AccessRequirements;
+use App\Modules\Core\Support\DefaultPassword;
+use App\Modules\Core\Support\SiiNip;
+use Closure;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
+use Laravel\Fortify\Contracts\UpdatesUserPasswords;
+
+/**
+ * Cambio de contraseña del propio usuario, el que Fortify llama desde `PUT /user/password`
+ * (contrato UpdatesUserPasswords). Es también el cambio obligatorio del primer acceso: al
+ * guardar, `must_change_password` pasa a false.
+ *
+ * A diferencia de las demás Actions, valida su entrada: el controlador de Fortify le pasa la
+ * petición sin validar. Exige la contraseña actual y una nueva confirmada, distinta de la actual
+ * y conforme a Password::defaults() (FortifyServiceProvider de Core). Rechaza también la contraseña
+ * por defecto (DefaultPassword) como contraseña nueva. La contraseña actual de un alumno que sigue con el NIP del SII
+ * acepta las dos formas de un NIP corto, como el login (AC-11). La nueva queda como **propia** (`password_origin =
+ * user`, AC-12): una nueva corrida de la migración del SII ya no la pisa. El alumno que no ha aceptado el aviso de
+ * privacidad vigente lo acepta aquí (AC-22): sin la casilla `privacy_notice` no cambia nada, y con ella
+ * AcceptPrivacyNotice lo guarda en la misma transacción, antes que la contraseña, para que el último guardado del
+ * usuario sea el de la contraseña (PasswordUpdateResponse lo lee). Rota el remember token, así que ninguna cookie de
+ * "recordarme" anterior vuelve a servir; las demás sesiones abiertas las cierra AuthenticateSession en su siguiente
+ * petición. La bitácora registra el cambio, nunca
+ * la contraseña.
+ */
+final class UpdateUserPassword implements UpdatesUserPasswords
+{
+    public function __construct(private readonly DefaultPassword $defaultPassword) {}
+
+    /**
+     * @param  array<string, mixed>  $input
+     *
+     * @throws ValidationException
+     */
+    public function update(User $user, array $input): void
+    {
+        // Fortify la registra como singleton: lo que depende de la petición (Actor) se pide aquí, no en el constructor (Octane).
+        $acceptsNotice = app(AccessRequirements::class)->mustAcceptPrivacyNotice($user);
+
+        $validated = Validator::make($input, [
+            'current_password' => ['required', 'string', $this->currentPassword($user)],
+            'password' => ['required', 'string', Password::defaults(), 'confirmed', 'different:current_password', $this->defaultPassword->rejectionRule()],
+            ...($acceptsNotice ? ['privacy_notice' => ['accepted']] : []),
+        ], [
+            'privacy_notice.accepted' => 'Para seguir, marca que leíste el aviso de privacidad y aceptas el tratamiento de tus datos personales.',
+        ])->validate();
+
+        DB::transaction(function () use ($user, $validated, $acceptsNotice): void {
+            if ($acceptsNotice) {
+                app(AcceptPrivacyNotice::class)->handle($user);
+            }
+
+            $user->forceFill([
+                'password' => $validated['password'],
+                'must_change_password' => false,
+                'password_origin' => PasswordOrigin::User,
+            ]);
+            $user->setRememberToken(Str::random(60));
+            $user->save();
+
+            activity()
+                ->performedOn($user)
+                ->causedBy($user)
+                ->event('password-changed')
+                ->log('Cambió su contraseña');
+        });
+    }
+
+    /**
+     * Lo mismo que la regla `current_password`, pero con la entrada normalizada como en el login (SiiNip::forUser()).
+     */
+    private function currentPassword(User $user): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail) use ($user): void {
+            if (! is_string($value) || $user->password === null || ! Hash::check(SiiNip::forUser($user, $value), $user->password)) {
+                $fail(__('validation.current_password'));
+            }
+        };
+    }
+}

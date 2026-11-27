@@ -1,0 +1,25 @@
+name: Épica
+description: Agrupa las tareas de una fase o de un módulo
+title: "Épica: "
+labels: ["type:epic"]
+body:
+  - type: input
+    id: fase
+    attributes:
+      label: Fase del plan
+      description: Enlace al archivo en docs/plan/
+    validations:
+      required: true
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: Objetivo
+    validations:
+      required: true
+  - type: textarea
+    id: tareas
+    attributes:
+      label: Tareas
+      description: Lista de issues (se completa al iniciar la fase)
+      value: |
+        - [ ] #

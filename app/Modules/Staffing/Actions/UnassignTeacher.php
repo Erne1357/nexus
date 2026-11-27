@@ -1,0 +1,66 @@
+<?php
+
+namespace App\Modules\Staffing\Actions;
+
+use App\Modules\Core\Models\User;
+use App\Modules\Scheduling\Actions\SetGroupTeacher;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Rules\LoadEditability;
+use App\Modules\Staffing\Models\GroupTeacherAssignment;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+/**
+ * Quita el docente de un grupo (supuesto por confirmar: con motivo, y queda en el historial). Misma regla de estado de
+ * la carga que AssignTeacher (LoadStatus::acceptsTeacherAssignment): `staffing`, `adjusting` o `reanalysis`. Marca la
+ * asignación vigente como reemplazada, llama a SetGroupTeacher con null y deja bitácora con el motivo. Quién puede lo
+ * decide GroupTeacherAssignmentPolicy::create. La llama «Quitar docente» de Asignación docente (incidencia F-02): sin
+ * docente, el grupo ya se puede cerrar en el re-análisis o cancelar al armar paralelos (CancelGroup).
+ */
+final class UnassignTeacher
+{
+    public function __construct(private readonly SetGroupTeacher $setGroupTeacher) {}
+
+    /**
+     * @throws ValidationException
+     */
+    public function handle(Group $group, User $actor, string $reason): void
+    {
+        $reason = trim($reason);
+
+        $editability = app(LoadEditability::class);
+
+        $editability->guard(fn () => DB::transaction(function () use ($group, $actor, $reason, $editability): void {
+            $load = $editability->lockLoad($group);
+            $group->setRawAttributes($group->newQuery()->lockForUpdate()->findOrFail($group->getKey())->getAttributes(), sync: true);
+
+            if ($load === null || ! $load->status->acceptsTeacherAssignment()) {
+                $label = $load?->status->label() ?? 'sin carga';
+
+                throw ValidationException::withMessages(['group' => "La carga está en {$label}: los docentes se asignan en Asignación, Ajustes o Re-análisis."]);
+            }
+
+            if ($group->teacher_id === null) {
+                throw ValidationException::withMessages(['group' => 'El grupo no tiene docente.']);
+            }
+
+            if ($reason === '') {
+                throw ValidationException::withMessages(['reason' => 'Escribe el motivo para quitar al docente.']);
+            }
+
+            $previous = $group->teacher_id;
+
+            GroupTeacherAssignment::query()->current()->where('group_id', $group->id)
+                ->update(['replaced_at' => now(), 'replaced_by' => $actor->getKey()]);
+
+            $this->setGroupTeacher->handle($group, null, $actor);
+
+            activity()
+                ->performedOn($group)
+                ->causedBy($actor)
+                ->event('teacher_unassigned')
+                ->withProperties(['previous_teacher_id' => $previous, 'reason' => $reason])
+                ->log("Quitó el docente del grupo {$group->code}");
+        }), 'group');
+    }
+}

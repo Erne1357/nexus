@@ -1,0 +1,45 @@
+{{--
+    Las observaciones de un registro en el drawer (catalog-validation::review.drawer): `$card`, `$editing`, `$flagOptions`.
+    A quien solo mira no se le dice por qué no observa: ya lo dice la cabecera (tarea 1.21). Si el jefe oprime «Guardar»
+    con el tipo o el comentario sin agregar, el error sale aquí, junto al campo, y `pending-flag` lleva la vista y el foco a
+    ese campo (CV13).
+--}}
+<section class="space-y-3" aria-labelledby="drawer-flags" data-testid="flags-section">
+    <h3 id="drawer-flags" class="flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">
+        Observaciones
+        <span class="tracking-normal text-base-content"><span class="font-mono">{{ $editing['flags']->whereNull('resolved_at')->count() }}</span> {{ trans_choice('{1} abierta|[0,*] abiertas', $editing['flags']->whereNull('resolved_at')->count()) }}</span>
+    </h3>
+
+    @forelse ($editing['flags'] as $item)
+        <article wire:key="flag-{{ $item->id }}" @class(['space-y-1.5 rounded-box border p-3 text-sm', 'border-warning/50 bg-warning/10' => $item->resolved_at === null, 'border-base-300 text-neutral' => $item->resolved_at !== null])>
+            <p class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <x-core::status-badge :tone="$item->resolved_at === null ? 'warning' : 'neutral'" icon="o-chat-bubble-left-ellipsis" :label="$item->flag->label()" />
+                <span>{{ $item->flagger?->name }} · <span class="tabular-nums">{{ $item->created_at->timezone(config('app.timezone'))->translatedFormat('j M Y') }}</span></span>
+            </p>
+            @if ($item->comment)
+                <p>{{ $item->comment }}</p>
+            @endif
+            @if ($item->resolved_at !== null)
+                <p class="text-xs">Resuelta por {{ $item->resolver?->name }} · <span class="tabular-nums">{{ $item->resolved_at->timezone(config('app.timezone'))->translatedFormat('j M Y') }}</span></p>
+                @if ($item->resolution_note)
+                    <p class="text-xs" data-testid="resolution-note">Qué se hizo: {{ $item->resolution_note }}</p>
+                @endif
+            @elseif ($card['canResolve'])
+                @include('catalog-validation::flag-resolve', ['flag' => $item, 'testid' => 'resolve-flag', 'buttonClass' => 'btn-outline btn-sm'])
+            @endif
+        </article>
+    @empty
+        <p class="text-sm text-neutral">Este registro no tiene observaciones.</p>
+    @endforelse
+
+    @if ($card['canFlag'] && ! ($card['review']->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Teachers && ! $editing['record']->is_active)) {{-- CV14 --}}
+        <form wire:submit="addFlag" class="space-y-3 border-t border-dashed border-base-300 pt-4" data-testid="flag-form"
+            x-on:pending-flag.window="$nextTick(() => { const field = $el.querySelector('[name=' + $event.detail.field + ']'); field?.scrollIntoView({ block: 'center' }); field?.focus({ preventScroll: true }) })">
+            <x-select label="Tipo de observación" name="flag" wire:model="flag" :options="$flagOptions" placeholder="Elige el tipo" placeholder-value="" />
+            <x-textarea label="Comentario" name="comment" wire:model="comment" rows="3" hint="Obligatorio en «Otra»" />
+            <x-button label="Agregar observación" type="submit" icon="o-chat-bubble-left-ellipsis" class="btn-outline btn-sm" spinner="addFlag" data-testid="add-flag" />
+        </form>
+    @elseif ($card['flagReason'] !== null && ! $card['viewOnly'])
+        <p class="text-sm text-neutral">{{ $card['flagReason'] }}</p>
+    @endif
+</section>

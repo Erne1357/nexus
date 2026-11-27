@@ -1,0 +1,81 @@
+<?php
+
+namespace App\Modules\Imports\Jobs;
+
+use App\Modules\Core\Models\User;
+use App\Modules\Imports\Actions\ApplyImportBatch;
+use App\Modules\Imports\Actions\BatchNotReady;
+use App\Modules\Imports\Actions\ExportBatchErrors;
+use App\Modules\Imports\Actions\InterruptImportBatch;
+use App\Modules\Imports\Enums\BatchStatus;
+use App\Modules\Imports\Models\ImportBatch;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Str;
+use Throwable;
+
+/**
+ * Aplica en la cola un lote validado (ApplyImportBatch) a nombre de quien lo aplica. Se comporta como
+ * ValidateQueuedBatch: un solo intento con su corrida (`run`), termina sin tocar el lote si ya no está
+ * validado (dos clics en "aplicar", o un lote que ya terminó o falló), y si falla deja el lote fallido
+ * con InterruptImportBatch, que conserva lo que alcanzó a escribirse. La página revisa que el lote esté
+ * validado antes de despachar, y le pasa cuántos registros confirmó desactivar el admin si eligió
+ * "desactivar faltantes" (tarea 1.3).
+ */
+final class ApplyQueuedBatch implements ShouldQueue
+{
+    use Queueable;
+
+    public int $tries = 1;
+
+    /** Media hora, por debajo del `retry_after` de la conexión (ver ValidateQueuedBatch); ImportBatchQuery::stalled() la usa. */
+    public const int TIMEOUT = 1800;
+
+    public int $timeout = self::TIMEOUT;
+
+    public bool $failOnTimeout = true;
+
+    public string $run;
+
+    /**
+     * @param  int|null  $confirmedMissing  con "desactivar faltantes", cuántos registros confirmó desactivar
+     *                                      el admin; null si no lo eligió
+     */
+    public function __construct(public ImportBatch $batch, public User $user, public ?int $confirmedMissing = null)
+    {
+        $this->run = (string) Str::uuid7();
+    }
+
+    public function handle(ApplyImportBatch $apply, ExportBatchErrors $export): void
+    {
+        try {
+            $batch = $apply->handle($this->batch, $this->user, $this->run, $this->confirmedMissing);
+        } catch (BatchNotReady) {
+            // Ya no está validado: otra corrida lo tomó, ya terminó o falló.
+            return;
+        } catch (Throwable $exception) {
+            // Lo que alcanzó a pasar a error antes del fallo también va al archivo.
+            $export->handle($this->batch->refresh());
+
+            throw $exception;
+        }
+
+        // Al aplicar, una fila que el catálogo ya no acepta pasa a error: el archivo se rehace.
+        $export->handle($batch);
+    }
+
+    /**
+     * Si la interrupción lo dejó fallido sin archivo de errores (el proceso murió o pasó del tiempo, así que handle() no
+     * alcanzó a rehacerlo), lo encola: el asistente lo espera.
+     */
+    public function failed(?Throwable $exception): void
+    {
+        app(InterruptImportBatch::class)->handle($this->batch, $this->run, $this->user);
+
+        $batch = $this->batch->refresh();
+
+        if ($batch->status === BatchStatus::Failed && $batch->errors_exported_at === null) {
+            ExportQueuedBatchErrors::dispatch($batch);
+        }
+    }
+}

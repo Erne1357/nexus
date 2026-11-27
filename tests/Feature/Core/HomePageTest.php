@@ -1,0 +1,279 @@
+<?php
+
+use App\Modules\Core\Actions\SetTermStage;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\Stage;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+use Livewire\Livewire;
+
+/*
+| Página de inicio (`/`, core::pages.home): saludo y un bloque para el perfil activo
+| (Actor::activeRole()); el admin ve solo el suyo. Los bloques se
+| prueban con el componente solo, porque la credencial de la banda también nombra el rol.
+*/
+
+beforeEach(function () {
+    $this->campus = Campus::factory()->create(['code' => 'C2']);
+});
+
+it('saluda al usuario y muestra solo el bloque del perfil activo', function () {
+    $user = User::factory()
+        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => departmentKey(10)])
+        ->withRole(Role::Docente, ['campus_id' => $this->campus->id])
+        ->create(['name' => 'Ana López']);
+
+    actingAsRole($user, Role::JefeDepartamento);
+
+    Livewire::test('core::pages.home')
+        ->assertSee('Hola, Ana López')
+        ->assertSeeInOrder(['Jefe de departamento académico', 'Validas los catálogos'])
+        ->assertDontSee('Consultas tu propia carga')
+        ->assertDontSee('Coordinador de carrera')
+        ->assertDontSee('Administración');
+
+    actingAsRole($user, Role::Docente);
+
+    // IN-03 (1.85): con el perfil de docente el Inicio es el tablero del docente (HomePanels de Staffing), no el bloque de siempre.
+    Livewire::test('core::pages.home')
+        ->assertSeeHtml('data-testid="teacher-summary"')
+        ->assertDontSee('Validas los catálogos');
+});
+
+it('al coordinador le muestra solo el bloque de coordinación de carrera', function () {
+    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create());
+
+    Livewire::test('core::pages.home')
+        ->assertSee('Coordinador de carrera')
+        ->assertSee('propones qué materias y cuántos grupos abrir')
+        ->assertDontSee('Jefe de departamento académico')
+        ->assertDontSee('Administración');
+});
+
+it('al admin le muestra el bloque de administración y no uno por cada rol', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    Livewire::test('core::pages.home')
+        ->assertSee('Administración')
+        ->assertSee('Tienes acceso a todo Nexus')
+        ->assertDontSee('Coordinador de carrera')
+        ->assertDontSee('Jefe de departamento académico');
+});
+
+it('a quien no tiene un rol vigente le dice que pida uno', function () {
+    $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create();
+    RoleAssignment::where('user_id', $user->id)->update(['valid_to' => today()->subDay()]);
+
+    $this->actingAs($user);
+
+    Livewire::test('core::pages.home')
+        ->assertSee('Todavía no tienes un rol vigente en Nexus')
+        ->assertDontSee('Coordinador de carrera');
+});
+
+it('IN-01 (D12): el bloque del docente muestra lo suyo: su usuario, su correo institucional y «Cambiar contraseña»', function () {
+    $this->actingAs(User::factory()->withRole(Role::Docente)->create(['username' => 'PEAA800101XX1', 'email' => 'ana.perez@cdjuarez.tecnm.mx']));
+
+    Livewire::test('core::pages.home')
+        ->assertSeeInOrder(['Tu acceso', 'Usuario', 'PEAA800101XX1', 'Correo institucional', 'ana.perez@cdjuarez.tecnm.mx'])
+        ->assertSeeHtml('href="'.route('user-password.edit').'"')
+        ->assertSee('Cambiar contraseña');
+});
+
+it('IN-01 (D12): sin correo institucional lo dice, y el bloque de otro puesto no lleva sus datos de acceso', function () {
+    $user = User::factory()->withRole(Role::Docente)->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create(['username' => 'PEAA800101XX1', 'email' => null]);
+
+    actingAsRole($user, Role::Docente);
+    Livewire::test('core::pages.home')->assertSee('Sin correo institucional');
+
+    actingAsRole($user, Role::JefeDepartamento);
+    Livewire::test('core::pages.home')->assertDontSee('Tu acceso')->assertDontSee('PEAA800101XX1');
+});
+
+it('se muestra dentro del layout de la aplicación', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get('/')
+        ->assertOk()
+        ->assertSee('<title>Inicio · Nexus</title>', false)
+        ->assertSee('Navegación principal')
+        ->assertSee('Cerrar sesión');
+});
+
+it('los bloques de rol son superficies planas, sin tarjeta con sombra', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    Livewire::test('core::pages.home')
+        ->assertSeeHtml('data-testid="role-block"')
+        ->assertDontSeeHtml('shadow-xl');
+});
+
+it('un invitado va al login', function () {
+    $this->get('/')->assertRedirect('/login');
+});
+
+/*
+| Bloque «Calendario» de Inicio (tarea 2.1, maqueta B): las etapas en curso, con los días que quedan, y las dos que
+| siguen, del periodo activo; con una sola modalidad, su ventana propia gana a la general, y con varias se ve la
+| general (M4). El pie dice solo el periodo: la credencial ya no elige campus (#415). Solo lectura; se oculta sin periodo activo o sin
+| etapas con fecha.
+*/
+
+function homeCalendarUser(Campus $campus): User
+{
+    return User::factory()->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => careerKey(20)])->create();
+}
+
+function homeCalendarStage(Term $term, Stage $stage, ?Modality $modality, string $from, string $to): void
+{
+    app(SetTermStage::class)->handle($term, $stage, $modality, $from, $to);
+}
+
+describe('calendario en Inicio', function () {
+    beforeEach(function () {
+        $this->travelTo('2026-11-12 10:00:00');
+        $this->term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'code' => '20271']);
+    });
+
+    it('muestra la etapa en curso con sus días y las dos que siguen, y no más', function () {
+        homeCalendarStage($this->term, Stage::CatalogValidation, null, '2026-11-02', '2026-11-05');
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        homeCalendarStage($this->term, Stage::Scheduling, null, '2026-11-20', '2026-12-04');
+        homeCalendarStage($this->term, Stage::Staffing, null, '2026-11-24', '2026-12-04');
+        homeCalendarStage($this->term, Stage::Rooms, null, '2026-11-30', '2026-12-04');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')
+            ->assertSeeInOrder(['Calendario', 'Ene-Jun 2027', 'Propuesta por carrera', 'En curso', '10–19 nov', 'quedan 7 días', 'Horarios y cupos', 'Próxima', 'empieza en 8 días', 'Asignación docente', 'empieza en 12 días'])
+            ->assertDontSee('Ene-Jun 2027 ·')
+            ->assertDontSee('Validación de catálogos')
+            ->assertDontSee('Salones y acuerdos');
+    });
+
+    it('M4: con una sola modalidad, su ventana propia gana a la general', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        homeCalendarStage($this->term, Stage::Proposal, modalityOf('PRES'), '2026-11-11', '2026-11-30');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')
+            ->assertSee('11–30 nov')
+            ->assertSee('quedan 18 días')
+            ->assertDontSee('10–19 nov');
+    });
+
+    it('lo ve el personal con un rol vigente', function (Role $role, array $scope) {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(User::factory()->withRole($role, ['campus_id' => $this->campus->id, ...$scope])->create());
+
+        Livewire::test('core::pages.home')->assertSee('Propuesta por carrera')->assertSee('quedan 7 días');
+    })->with([
+        'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
+        'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
+    ]);
+
+    it('IN-01 (D12): se oculta al docente: su Inicio es solo lo suyo', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(User::factory()->withRole(Role::Docente)->create());
+
+        Livewire::test('core::pages.home')
+            ->assertSeeHtml('data-testid="teacher-summary"')
+            ->assertDontSee('Calendario')
+            ->assertDontSee('Propuesta por carrera');
+    });
+
+    it('IN-01 (D12): al jefe que también es docente se le oculta solo con el perfil de docente', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        $user = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->withRole(Role::Docente)->create();
+
+        actingAsRole($user, Role::JefeDepartamento);
+        Livewire::test('core::pages.home')->assertSee('Propuesta por carrera');
+
+        actingAsRole($user, Role::Docente);
+        Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
+    });
+
+    it('muestra la etapa de validación de catálogos mientras está en curso (tarea 1.21: en la simulación ya había terminado)', function () {
+        homeCalendarStage($this->term, Stage::CatalogValidation, null, '2026-11-02', '2026-11-30');
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')->assertSeeInOrder(['Validación de catálogos', 'En curso', '2–30 nov', 'quedan 18 días']);
+    });
+
+    it('se oculta sin etapas con fecha', function () {
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')->assertDontSee('Calendario')->assertDontSee('Propuesta por carrera');
+    });
+
+    it('se oculta si ya terminaron todas las etapas', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-10-01', '2026-10-10');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
+    });
+
+    it('enlaza la ficha del periodo a quien puede verla y a nadie más', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(User::factory()->admin()->create());
+        Livewire::test('core::pages.home')->assertSeeHtml('href="'.route('core.terms.show', $this->term).'"')->assertSee('Ver el periodo');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+        Livewire::test('core::pages.home')->assertSee('Propuesta por carrera')->assertDontSee('Ver el periodo');
+    });
+
+    it('explica la línea de hoy en una leyenda', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+        Livewire::test('core::pages.home')->assertSee('Hoy, 12 nov');
+    });
+
+    it('se oculta sin periodo activo', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        $this->term->update(['is_current' => false]);
+
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
+    });
+
+    it('AC-15: se oculta al alumno, cuya portada es el tablero «Resumen» (1.67)', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(User::factory()->withRole(Role::Alumno)->create());
+
+        Livewire::test('core::pages.home')
+            ->assertDontSee('Calendario')
+            ->assertDontSee('Propuesta por carrera');
+    });
+
+    it('se oculta a quien no tiene un rol vigente', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $user = homeCalendarUser($this->campus);
+        RoleAssignment::where('user_id', $user->id)->update(['valid_to' => today()->subDay()]);
+        $this->actingAs($user);
+
+        Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
+    });
+
+    it('M4: con varias modalidades usa el calendario general, sin nombrar modalidad', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        homeCalendarStage($this->term, Stage::Proposal, modalityOf('PRES'), '2026-11-11', '2026-11-30');
+
+        $this->actingAs(User::factory()->admin()->create());
+
+        Livewire::test('core::pages.home')->assertSee('10–19 nov')->assertSee('Ene-Jun 2027')->assertDontSee('Ene-Jun 2027 ·');
+    });
+});

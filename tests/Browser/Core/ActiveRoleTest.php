@@ -1,0 +1,60 @@
+<?php
+
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+
+/*
+| El perfil activo en el navegador: quien tiene dos puestos los ve como renglones de «Actuando como» en
+| la credencial; elegir uno la manda a Inicio y el menú muestra solo lo que ese puesto puede hacer.
+*/
+
+it('una persona con dos puestos cambia de perfil y ve menú e Inicio distintos', function () {
+    $c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
+    // Carga en curso (MN-04): sin ella, nadie más que el admin ve la bandeja ni la propuesta en el menú. Es la de Sistemas,
+    // en borrador: el jefe ve la bandeja por la etapa de su carga (MN-06).
+    $department = Department::factory()->create(['name' => 'Sistemas y Computación']);
+    AcademicLoad::factory()->for($term)->create(['department_id' => $department->id]);
+    $career = Career::factory()->create(['code' => 'ISC', 'name' => 'Ingeniería en Sistemas Computacionales']);
+
+    User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => $department->id, 'campus_id' => $c2->id])
+        ->withRole(Role::Coordinador, ['campus_id' => $c2->id, 'career_id' => $career->id])
+        ->create(['username' => 'doble', 'name' => 'Dora Doble', 'last_role' => Role::JefeDepartamento]);
+
+    // La espera es la primera aserción tras cada navegación: el plugin reintenta cada aserción hasta su
+    // timeout (AwaitableWebpage). waitForEvent() no sirve: Page::waitForLoadState no envía nada a Playwright.
+    $page = visit('/login')
+        ->fill('username', 'doble')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/resumen')
+        ->assertSeeIn('[data-testid="role-block"]', 'Validas los catálogos de tu departamento, asignas docentes y salones a los grupos de sus materias y cierras su carga.')
+        ->assertSeeIn('[data-testid="role-block"]', 'Jefe de departamento académico')
+        ->assertDontSeeIn('[data-testid="role-block"]', 'Coordinador de carrera')
+        ->assertPresent('a[data-label="Bandeja del departamento"]')
+        ->assertMissing('a[data-label="Propuesta de carrera"]')
+        ->click('@credential')
+        ->assertSee('Actuando como')
+        ->assertSee('Coordinador de carrera');
+
+    $page->resize(390, 844)->screenshot(filename: 'active-role-390');
+    $page->resize(1440, 900)->screenshot(filename: 'active-role-1440');
+
+    $page->click('[data-testid="role-switcher"] input[value="coordinador"]')
+        ->assertPathIs('/')
+        ->navigate('/resumen')
+        ->assertSeeIn('[data-testid="role-block"]', 'Analizas el avance de los alumnos de tu carrera en tu modalidad, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre; si tu nombramiento es de un campus, ves toda la propuesta y cambias lo de tu campus.')
+        ->assertPathIs('/resumen')
+        ->assertSeeIn('[data-testid="role-block"]', 'Coordinador de carrera')
+        ->assertDontSeeIn('[data-testid="role-block"]', 'Jefe de departamento académico')
+        ->assertPresent('a[data-label="Propuesta de carrera"]')
+        ->assertMissing('a[data-label="Bandeja del departamento"]')
+        ->assertNoJavaScriptErrors();
+});

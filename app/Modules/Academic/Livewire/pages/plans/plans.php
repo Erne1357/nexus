@@ -1,0 +1,282 @@
+<?php
+
+use App\Modules\Academic\Actions\CreateStudyPlan;
+use App\Modules\Academic\Actions\UpdateStudyPlan;
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Queries\CareerQuery;
+use App\Modules\Academic\Queries\PendingPlacementsQuery;
+use App\Modules\Academic\Queries\StudyPlanQuery;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\Session;
+use Livewire\Component;
+use Livewire\WithPagination;
+use Mary\Traits\Toast;
+
+/**
+ * CRUD de Planes de estudio, con la forma de Materias: tabla con búsqueda y filtros por carrera y
+ * estado; alta y edición en un modal; activar o desactivar desde la tabla. Los planes no se borran.
+ * Es del admin.
+ *
+ * El componente lee con StudyPlanQuery, autoriza con StudyPlanPolicy en mount() y en cada acción
+ * (una petición puede llegar con una página que abrió otra sesión), valida la forma de los datos y
+ * llama a CreateStudyPlan o UpdateStudyPlan, que hacen cumplir las reglas. Cambiar la carrera de un
+ * plan con alumnos lo veta Students: el motivo sale en el campo de la carrera.
+ *
+ * Los campos del formulario se llaman como las columnas, así los errores de las Actions caen en su
+ * campo.
+ *
+ * Quien valida las materias de la migración del SII que esperan semestre (`validatePlacements`: el jefe de Servicios
+ * Escolares y el admin, D19) ve «N por validar» bajo el nombre del plan, que lleva a «Por validar» del plan, y el
+ * filtro «Por validar» con cuántos planes tienen alguna (maqueta `.impeccable/mocks/por-validar/planes.html`; la
+ * insignia va bajo el nombre y no en una columna propia para que la tabla siga cabiendo en su caja a 1440 px); un plan
+ * sin pendientes no muestra nada. Quien entra sin poder editar ve dar de alta, editar y activar deshabilitados con su
+ * motivo. La ruta `academic.placements` («Materias por colocar», en Servicios escolares) es esta misma lista, abierta
+ * con el filtro «Por validar» puesto; solo la abre quien valida. El título (pestaña y ruta de la banda) es el de la
+ * entrada del menú por la que se abrió, así que no va en #[Title], que es fijo.
+ */
+new class extends Component
+{
+    use Toast, WithPagination;
+
+    /** Búsqueda por clave o nombre; se recuerda en la sesión del usuario (DESIGN.md). */
+    #[Session]
+    public string $search = '';
+
+    /** Id de la carrera; '' son todas. */
+    #[Session]
+    public string $careerFilter = '';
+
+    /** '' (todos), 'active' o 'inactive'. */
+    #[Session]
+    public string $status = '';
+
+    /**
+     * Solo los planes con materias por validar (D19); lo ve y lo usa quien las valida. Cada entrada del menú lo recuerda
+     * por su lado (la llave lleva `$entry`), así que el filtro puesto de «Materias por colocar» no se queda puesto en
+     * «Planes de estudio». La sesión se lee antes de mount(), con la llave de «Planes de estudio»: en «Materias por
+     * colocar» no importa, porque mount() lo pone siempre.
+     */
+    #[Session(key: 'academic.plans.pending-only.{entry}')]
+    public bool $pendingOnly = false;
+
+    /** La entrada del menú por la que se abrió la lista: 'plans' o 'placements'. El navegador no la puede cambiar. */
+    #[Locked]
+    public string $entry = 'plans';
+
+    public bool $showModal = false;
+
+    /** El plan que se edita; null es un alta. El navegador no lo puede cambiar. */
+    #[Locked]
+    public ?string $editingId = null;
+
+    public string $career_id = '';
+
+    public string $code = '';
+
+    public string $name = '';
+
+    public string $version = '';
+
+    public string $semesters_count = '';
+
+    public string $total_credits = '';
+
+    /** Fecha (Y-m-d) desde la que rige; '' es sin capturar. */
+    public string $valid_from = '';
+
+    public function mount(): void
+    {
+        $this->authorize('viewAny', StudyPlan::class);
+
+        // «Materias por colocar» (Servicios escolares) abre esta lista con el filtro «Por validar» puesto.
+        if (request()->routeIs('academic.placements')) {
+            $this->authorize('validatePlacements', StudyPlan::class);
+            $this->entry = 'placements';
+            $this->pendingOnly = true;
+        }
+    }
+
+    /**
+     * «Materias por colocar» en su ruta y «Planes de estudio» en la de los catálogos (MN-01).
+     */
+    public function rendering(View $view): void
+    {
+        $view->title($this->entry === 'placements' ? 'Materias por colocar' : 'Planes de estudio');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function with(StudyPlanQuery $plans, CareerQuery $careerQuery, PendingPlacementsQuery $pendings): array
+    {
+        $this->authorize('viewAny', StudyPlan::class);
+        $careers = $careerQuery->options();
+        $canValidate = Gate::allows('validatePlacements', StudyPlan::class);
+
+        if ($this->careerFilter !== '' && ! in_array($this->careerFilter, array_column($careers, 'id'), true)) {
+            $this->careerFilter = '';
+        }
+
+        $this->pendingOnly = $this->pendingOnly && $canValidate;
+
+        return [
+            'plans' => $plans->forTable(
+                $this->search,
+                $this->careerFilter === '' ? null : $this->careerFilter,
+                match ($this->status) {
+                    'active' => true,
+                    'inactive' => false,
+                    default => null,
+                },
+                withPending: $canValidate,
+                pendingOnly: $this->pendingOnly,
+            ),
+            'canCreate' => Gate::allows('create', StudyPlan::class),
+            'pendingPlans' => $canValidate ? count($pendings->countsByPlan()) : null,
+            'careers' => $careers,
+            'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
+            // La versión y los semestres son las columnas descriptivas: se ocultan debajo de 1200 px.
+            'headers' => [
+                ['key' => 'code', 'label' => 'Clave'],
+                ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
+                ['key' => 'career', 'label' => 'Carrera', 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'version', 'label' => 'Versión', 'class' => 'max-[1535px]:hidden'],
+                ['key' => 'semesters_count', 'label' => 'Semestres', 'class' => 'max-[1535px]:hidden'],
+                ['key' => 'total_credits', 'label' => 'Créditos', 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'placements_count', 'label' => 'Materias', 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'is_active', 'label' => 'Estado'],
+            ],
+            // DESIGN.md, "Insignias de estado": la fila de un inactivo pasa a text-neutral.
+            'rowDecoration' => ['text-neutral' => fn (StudyPlan $plan): bool => ! $plan->is_active],
+        ];
+    }
+
+    public function updated(string $property): void
+    {
+        if (in_array($property, ['search', 'careerFilter', 'status', 'pendingOnly'], true)) {
+            $this->resetPage();
+        }
+    }
+
+    /**
+     * El filtro «Por validar»: solo los planes con materias que esperan semestre, o todos otra vez.
+     */
+    public function togglePending(): void
+    {
+        $this->authorize('validatePlacements', StudyPlan::class);
+
+        $this->pendingOnly = ! $this->pendingOnly;
+        $this->resetPage();
+    }
+
+    public function create(): void
+    {
+        $this->authorize('create', StudyPlan::class);
+
+        $this->resetValidation();
+        $this->reset('editingId', 'career_id', 'code', 'name', 'version', 'semesters_count', 'total_credits', 'valid_from');
+        $this->showModal = true;
+    }
+
+    public function edit(string $id, StudyPlanQuery $plans): void
+    {
+        $plan = $plans->findOrFail($id);
+        $this->authorize('update', $plan);
+
+        $this->resetValidation();
+        $this->editingId = $plan->id;
+        $this->career_id = $plan->career_id;
+        $this->code = $plan->code;
+        $this->name = $plan->name;
+        $this->version = (string) $plan->version;
+        $this->semesters_count = (string) $plan->semesters_count;
+        $this->total_credits = (string) $plan->total_credits;
+        $this->valid_from = $plan->valid_from?->format('Y-m-d') ?? '';
+        $this->showModal = true;
+    }
+
+    public function save(CreateStudyPlan $createPlan, UpdateStudyPlan $updatePlan, StudyPlanQuery $plans): void
+    {
+        if ($this->editingId === null) {
+            $this->authorize('create', StudyPlan::class);
+            $plan = $createPlan->handle($this->validatedPlan());
+            $this->success('Plan creado', $this->describe($plan));
+        } else {
+            $plan = $plans->findOrFail($this->editingId);
+            $this->authorize('update', $plan);
+            $plan = $updatePlan->handle($plan, $this->validatedPlan());
+            $this->success('Plan actualizado', $this->describe($plan));
+        }
+
+        $this->showModal = false;
+    }
+
+    public function toggleActive(string $id, StudyPlanQuery $plans, UpdateStudyPlan $updatePlan): void
+    {
+        $plan = $plans->findOrFail($id);
+        $this->authorize('update', $plan);
+
+        try {
+            $plan = $updatePlan->handle($plan, ['is_active' => ! $plan->is_active]);
+        } catch (ValidationException $exception) {
+            $this->error('No se pudo cambiar '.e($plan->code), e(implode(' ', array_merge(...array_values($exception->errors())))));
+
+            return;
+        }
+
+        $this->success($plan->is_active ? 'Plan activado' : 'Plan desactivado', $this->describe($plan));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function validationAttributes(): array
+    {
+        return [
+            'career_id' => 'carrera',
+            'code' => 'clave',
+            'name' => 'nombre',
+            'version' => 'versión',
+            'semesters_count' => 'semestres',
+            'total_credits' => 'créditos',
+            'valid_from' => 'fecha de inicio',
+        ];
+    }
+
+    /**
+     * Los datos validados en forma; el tope de semestres y créditos es el de la columna (smallint).
+     * Vacío es «sin capturar» (null).
+     *
+     * @return array{career_id: string, code: string, name: string, version: string, semesters_count: ?int, total_credits: ?int, valid_from: ?string}
+     */
+    private function validatedPlan(): array
+    {
+        $data = $this->validate([
+            'career_id' => ['required', 'string'],
+            'code' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
+            'version' => ['required', 'string', 'max:255'],
+            'semesters_count' => ['nullable', 'integer', 'min:1', 'max:32767'],
+            'total_credits' => ['nullable', 'integer', 'min:0', 'max:32767'],
+            'valid_from' => ['nullable', 'date_format:Y-m-d'],
+        ]);
+
+        return [
+            ...$data,
+            'semesters_count' => ($data['semesters_count'] ?? '') === '' ? null : (int) $data['semesters_count'],
+            'total_credits' => ($data['total_credits'] ?? '') === '' ? null : (int) $data['total_credits'],
+            'valid_from' => ($data['valid_from'] ?? '') === '' ? null : $data['valid_from'],
+        ];
+    }
+
+    /**
+     * Clave y nombre para el toast, escapados: MaryUI lo pinta con x-html.
+     */
+    private function describe(StudyPlan $plan): string
+    {
+        return e("{$plan->code} · {$plan->name}");
+    }
+};

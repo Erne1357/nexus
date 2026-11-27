@@ -6,16 +6,44 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/css/app.css', 'resources/js/app.js'],
+            input: [
+                'resources/css/app.css',
+                'resources/js/app.js',
+                'resources/js/login.js',
+                // El mapa del campus del Inicio (UbicaTec, ADR-0030): entradas propias para no cargar three.js en las demás páginas.
+                'resources/css/ubicatec.css',
+                'resources/js/ubicatec/main.js',
+            ],
             refresh: true,
+            // Imágenes que Blade usa con Vite::asset() sin importarlas en JS (la liebre).
+            assets: ['resources/images/**'],
+            // Se declaran en la página con la directiva @fonts de los layouts (DESIGN.md, "Typography").
             fonts: [
-                bunny('Instrument Sans', {
-                    weights: [400, 500, 600],
+                bunny('Atkinson Hyperlegible Next', {
+                    weights: [200, 400, 500, 700],
+                    // Se precargan los pesos de toda pantalla; 200 es solo para los inicios por rol.
+                    preload: [{ weight: 400 }, { weight: 500 }, { weight: 700 }],
+                    optimizedFallbacks: false,
+                }),
+                bunny('Atkinson Hyperlegible Mono', {
+                    weights: [400, 600],
+                    preload: false,
+                    optimizedFallbacks: false,
+                }),
+                // Solo la credencial del alumno (tarea 1.27): la tipografía de la plantilla del TecNM.
+                bunny('Montserrat', {
+                    weights: [500, 600],
+                    preload: false,
+                    optimizedFallbacks: false,
                 }),
             ],
         }),
         tailwindcss(),
     ],
+    build: {
+        // El mapa usa top-level await y módulos dinámicos de three.js (ADR-0030).
+        target: 'es2022',
+    },
     server: {
         // Accesible desde fuera del contenedor; el navegador conecta por localhost.
         host: '0.0.0.0',
@@ -25,7 +53,9 @@ export default defineConfig({
             host: 'localhost',
         },
         watch: {
-            ignored: ['**/storage/framework/views/**'],
+            // Los worktrees viven dentro del repo (CONTRIBUTING.md): vigilarlos hace crecer el servidor de Vite a
+            // varios GB y recarga la página principal con los cambios de otras ramas.
+            ignored: ['**/storage/framework/views/**', '**/.worktrees/**'],
         },
     },
 });

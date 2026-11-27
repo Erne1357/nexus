@@ -1,0 +1,229 @@
+<?php
+
+use App\Modules\Academic\Actions\CreateCareer;
+use App\Modules\Academic\Actions\DeleteCareer;
+use App\Modules\Academic\Actions\SetCareerOffering;
+use App\Modules\Academic\Actions\UpdateCareer;
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Queries\CareerQuery;
+use App\Modules\Academic\Queries\DepartmentQuery;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\ReturnsToValidation;
+use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\Session;
+use Livewire\Attributes\Title;
+use Livewire\Component;
+use Livewire\WithPagination;
+use Mary\Traits\Toast;
+
+/**
+ * CRUD de Carreras: tabla con búsqueda y filtros por departamento y estado, alta y edición en un
+ * modal, activar o desactivar, ofrecer o dejar de ofrecer en cada campus y borrar (solo sin
+ * planes). Es del admin; copia la forma de Departamentos.
+ *
+ * El componente lee con CareerQuery, autoriza con CareerPolicy en mount() y en cada acción (una
+ * petición puede llegar con una página que abrió otra sesión), valida la forma de los datos y llama
+ * a CreateCareer, UpdateCareer, SetCareerOffering o DeleteCareer, que hacen cumplir las reglas. La
+ * credencial ya no elige campus (#415): la columna «Se ofrece en» muestra la oferta de todos los campus del
+ * usuario a la vez, con un botón por campus que ofrece o deja de ofrecer; el campus llega como código y se busca
+ * entre los de Actor::campuses(), nunca de un campo del formulario.
+ */
+new #[Title('Carreras')] class extends Component
+{
+    use ReturnsToValidation, Toast, WithPagination;
+
+    /** Búsqueda por clave o nombre; se recuerda en la sesión del usuario (DESIGN.md). */
+    #[Session]
+    public string $search = '';
+
+    /** '' (todos), 'active' o 'inactive'; se recuerda en la sesión del usuario. */
+    #[Session]
+    public string $status = '';
+
+    /** Id del departamento del filtro, '' para todos; se recuerda en la sesión del usuario. */
+    #[Session]
+    public string $department = '';
+
+    public bool $showModal = false;
+
+    /** La carrera que se edita; null es un alta. El navegador no lo puede cambiar. */
+    #[Locked]
+    public ?string $editingId = null;
+
+    public string $code = '';
+
+    public string $name = '';
+
+    public string $department_id = '';
+
+    public function mount(): void
+    {
+        $this->authorize('viewAny', Career::class);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function with(CareerQuery $careers, DepartmentQuery $departmentQuery, Actor $context): array
+    {
+        $campuses = $context->campuses();
+        $departments = $departmentQuery->options();
+        $filter = in_array($this->department, array_column($departments, 'id'), true) ? $this->department : null;
+
+        return [
+            'careers' => $careers->forTable($campuses, $this->search, $filter, match ($this->status) {
+                'active' => true,
+                'inactive' => false,
+                default => null,
+            }),
+            'campuses' => $campuses,
+            'headers' => [
+                ['key' => 'code', 'label' => 'Clave'],
+                ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
+                ['key' => 'department', 'label' => 'Departamento', 'sortable' => false, 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'study_plans_count', 'label' => 'Planes', 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'offering', 'label' => 'Se ofrece en', 'sortable' => false, 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'is_active', 'label' => 'Estado'],
+            ],
+            // DESIGN.md, "Insignias de estado": la fila de un inactivo pasa a text-neutral.
+            'rowDecoration' => ['text-neutral' => fn (Career $career): bool => ! $career->is_active],
+            'statuses' => [['id' => 'active', 'name' => 'Activas'], ['id' => 'inactive', 'name' => 'Inactivas']],
+            'departmentOptions' => $departments,
+        ];
+    }
+
+    public function updated(string $property): void
+    {
+        if (in_array($property, ['search', 'status', 'department'], true)) {
+            $this->resetPage();
+        }
+    }
+
+    public function create(): void
+    {
+        $this->authorize('create', Career::class);
+
+        $this->resetValidation();
+        $this->reset('editingId', 'code', 'name', 'department_id');
+        $this->showModal = true;
+    }
+
+    public function edit(string $id, CareerQuery $careers): void
+    {
+        $career = $careers->findOrFail($id);
+        $this->authorize('update', $career);
+
+        $this->resetValidation();
+        $this->editingId = $career->id;
+        $this->code = $career->code;
+        $this->name = $career->name;
+        $this->department_id = $career->department_id;
+        $this->showModal = true;
+    }
+
+    public function save(CreateCareer $createCareer, UpdateCareer $updateCareer, CareerQuery $careers): void
+    {
+        if ($this->editingId === null) {
+            $this->authorize('create', Career::class);
+            $career = $createCareer->handle($this->validatedCareer());
+            $this->success('Carrera creada', $this->describe($career));
+        } else {
+            $career = $careers->findOrFail($this->editingId);
+            $this->authorize('update', $career);
+            $career = $updateCareer->handle($career, $this->validatedCareer());
+            $this->success('Carrera actualizada', $this->describe($career));
+        }
+
+        $this->showModal = false;
+    }
+
+    public function toggleActive(string $id, CareerQuery $careers, UpdateCareer $updateCareer): void
+    {
+        $career = $careers->findOrFail($id);
+        $this->authorize('update', $career);
+
+        $career = $updateCareer->handle($career, ['is_active' => ! $career->is_active]);
+
+        $this->success($career->is_active ? 'Carrera activada' : 'Carrera desactivada', $this->describe($career));
+    }
+
+    /**
+     * Ofrece la carrera en el campus de ese código o deja de ofrecerla, según lo que haga hoy. El campus debe estar
+     * entre los del usuario (Actor::campuses()); uno ajeno, inactivo o inexistente es un 403.
+     */
+    public function toggleOffering(string $id, string $campusCode, CareerQuery $careers, Actor $context, SetCareerOffering $setCareerOffering): void
+    {
+        $career = $careers->findOrFail($id);
+        $this->authorize('update', $career);
+
+        $campus = $context->campuses()->firstWhere('code', $campusCode) ?? abort(403, 'No trabajas en ese campus.');
+
+        $existing = $career->offerings()->where('campus_id', $campus->id)->pluck('is_active');
+        $offeredNow = $existing->contains(true);
+        $existed = $existing->isNotEmpty();
+        $offering = $setCareerOffering->handle($career, $campus, ! $offeredNow);
+        $description = e("{$career->code} · {$campus->code}");
+
+        if ($offering === null) {
+            $this->info('Sin cambios', e("{$career->code} no se ofrece en {$campus->code}."));
+        } elseif ($offeredNow) {
+            $this->success('Carrera fuera de la oferta', $description);
+        } elseif (! $offering->is_active && $existed) {
+            $this->info('Sin cambios', e("Sin cambios: {$career->code} está inactiva y su oferta en {$campus->code} sigue inactiva."));
+        } elseif (! $offering->is_active) {
+            $this->warning('Oferta registrada, inactiva', e("{$career->code} está inactiva en {$campus->code}: la oferta cuenta hasta que se active y se vuelva a ofrecer."));
+        } else {
+            $this->success('Carrera ofrecida', $description);
+        }
+    }
+
+    public function delete(string $id, CareerQuery $careers, DeleteCareer $deleteCareer): void
+    {
+        $career = $careers->findOrFail($id);
+        $this->authorize('delete', $career);
+
+        try {
+            $deleteCareer->handle($career);
+        } catch (ValidationException $exception) {
+            $this->error('No se pudo borrar '.e($career->code), e(implode(' ', $exception->errors()['career'] ?? [])));
+
+            return;
+        }
+
+        $this->success('Carrera borrada', $this->describe($career));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function validationAttributes(): array
+    {
+        return ['code' => 'clave', 'name' => 'nombre', 'department_id' => 'departamento'];
+    }
+
+    /**
+     * Clave, nombre y departamento validados en forma.
+     *
+     * @return array{code: string, name: string, department_id: string}
+     */
+    private function validatedCareer(): array
+    {
+        $data = $this->validate([
+            'code' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
+            'department_id' => ['required', 'string'],
+        ]);
+
+        /** @var array{code: string, name: string, department_id: string} */
+        return $data;
+    }
+
+    /**
+     * Clave y nombre para el toast, escapados: MaryUI lo pinta con x-html.
+     */
+    private function describe(Career $career): string
+    {
+        return e("{$career->code} · {$career->name}");
+    }
+};

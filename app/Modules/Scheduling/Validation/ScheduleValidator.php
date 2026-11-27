@@ -1,0 +1,321 @@
+<?php
+
+namespace App\Modules\Scheduling\Validation;
+
+use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Term;
+use App\Modules\Facilities\Models\Room;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Queries\ScheduleStateQuery;
+use App\Modules\Scheduling\Rules\Constraints\AdministrativeHours;
+use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
+use App\Modules\Scheduling\Rules\Constraints\Constraint;
+use App\Modules\Scheduling\Rules\Constraints\LabRoom;
+use App\Modules\Scheduling\Rules\Constraints\ModalityWindow;
+use App\Modules\Scheduling\Rules\Constraints\OfferableGroup;
+use App\Modules\Scheduling\Rules\Constraints\QuotasWithinCapacity;
+use App\Modules\Scheduling\Rules\Constraints\RoomBlocked;
+use App\Modules\Scheduling\Rules\Constraints\RoomCapacity;
+use App\Modules\Scheduling\Rules\Constraints\RoomLoan;
+use App\Modules\Scheduling\Rules\Constraints\RoomOverlap;
+use App\Modules\Scheduling\Rules\Constraints\TeacherAvailability;
+use App\Modules\Scheduling\Rules\Constraints\TeacherHours;
+use App\Modules\Scheduling\Rules\Constraints\TeacherOverlap;
+use App\Modules\Scheduling\Rules\Constraints\TypicalStudentSchedule;
+use App\Modules\Scheduling\Rules\Constraints\WeeklyHours;
+use App\Modules\Scheduling\Rules\TeacherHourLimit;
+use Illuminate\Contracts\Container\Container;
+
+/**
+ * El orquestador del validador de restricciones (tarea 3.2): junta las reglas de `Rules/Constraints` y valida un
+ * grupo, un docente, un salón o toda una carga, o pregunta sin escribir qué pasaría con una sesión candidata (el
+ * editor) o con otro docente (el ranking). Lo usan el editor de horarios (3.5), la asignación (3.8, 3.9), el job que
+ * recalcula `schedule_conflicts` y el tablero de choques.
+ *
+ * La foto es de un periodo y una modalidad, con los grupos de todos sus campus (M1): la carga presencial de un
+ * departamento se valida una vez, con C1 y C2 juntos. Cada regla lee el perfil de la modalidad del grupo.
+ *
+ * Guarda la foto de cada periodo y modalidad que ya leyó mientras viva la instancia: varias preguntas seguidas (una por
+ * celda del editor, una por docente candidato) leen la base una sola vez. No es singleton (Octane): cada petición o
+ * job resuelve la suya; después de escribir, forget() la olvida.
+ */
+final class ScheduleValidator
+{
+    /**
+     * Las reglas que corre, por id.
+     *
+     * @var list<class-string<Constraint>>
+     */
+    public const array CONSTRAINTS = [
+        TeacherOverlap::class,
+        RoomOverlap::class,
+        TypicalStudentSchedule::class,
+        ModalityWindow::class,
+        RoomCapacity::class,
+        LabRoom::class,
+        QuotasWithinCapacity::class,
+        TeacherHours::class,
+        AdministrativeHours::class,
+        TeacherAvailability::class,
+        RoomLoan::class,
+        RoomBlocked::class,
+        WeeklyHours::class,
+        OfferableGroup::class,
+        CampusTravel::class,
+    ];
+
+    /**
+     * Lo que checkTeacher() responde: choque (HC-01), horas (HC-08) y disponibilidad (HC-09) del docente, y el aviso de
+     * traslado justo entre campus (SC-09).
+     */
+    public const array TEACHER_RULES = ['HC-01', 'HC-08', 'HC-09', 'HC-22', 'SC-09'];
+
+    /** @var array<string, ScheduleState> */
+    private array $states = [];
+
+    /** @var list<Constraint>|null */
+    private ?array $constraints = null;
+
+    public function __construct(
+        private readonly ScheduleStateQuery $query,
+        private readonly Container $container,
+    ) {}
+
+    /**
+     * @return list<Constraint>
+     */
+    public function constraints(): array
+    {
+        return $this->constraints ??= array_map(fn (string $constraint): Constraint => $this->container->make($constraint), self::CONSTRAINTS);
+    }
+
+    /**
+     * El corazón puro: las reglas sobre una foto y un alcance; todas, o solo las de los ids indicados.
+     *
+     * @param  list<string>|null  $rules
+     */
+    public function validate(ScheduleState $state, ValidationScope $scope, ?array $rules = null): ValidationResult
+    {
+        return new ValidationResult((function () use ($state, $scope, $rules): iterable {
+            foreach ($this->constraints() as $constraint) {
+                if ($rules === null || in_array($constraint->rule(), $rules, true)) {
+                    yield from $constraint->check($state, $scope);
+                }
+            }
+        })());
+    }
+
+    /**
+     * Las violaciones del grupo (las que lo tienen como grupo afectado; el otro grupo de un empalme tiene las suyas).
+     */
+    public function validateGroup(Group $group): ValidationResult
+    {
+        return self::of($group->id, $this->validate($this->stateFor($group->term_id, $group->modality_id), ValidationScope::groups($group->id)));
+    }
+
+    /**
+     * Todo lo del docente en el periodo, en cualquier campus.
+     */
+    public function validateTeacher(Teacher $teacher, Term $term): ValidationResult
+    {
+        return $this->validate($this->teacherState($teacher, $term), ValidationScope::teacher($teacher->id));
+    }
+
+    /**
+     * La cuenta de HC-08 del docente en el periodo, con sus grupos de todos los campus y modalidades y sus horas
+     * externas (TeacherHourLimit); null si el docente está borrado. La usa la orden de selección para autorizar al
+     * cerrar justo las horas que HC-08 le cuenta (SEL-12).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function teacherTermHours(Teacher $teacher, Term $term): ?array
+    {
+        return TeacherHourLimit::of($this->teacherState($teacher, $term), $teacher->id);
+    }
+
+    /**
+     * El aviso de HC-08 del docente en el periodo, sin su nombre («Pasa su banda de horas frente a grupo (22 h, de 20 a
+     * 24): lleva 26 h. Requiere oficio de conformidad del docente (pendiente).»), o null si no pasa su banda. La
+     * asignación lo muestra al asignar con horas de más (tarea 1.50).
+     */
+    public function teacherHoursNotice(Teacher $teacher, Term $term): ?string
+    {
+        $hours = $this->teacherTermHours($teacher, $term);
+
+        return $hours === null ? null : TeacherHourLimit::notice($hours);
+    }
+
+    /**
+     * La foto del periodo sin modalidad (los grupos con docente de todo el periodo) con el docente, aunque no tenga
+     * grupos.
+     */
+    private function teacherState(Teacher $teacher, Term $term): ScheduleState
+    {
+        $state = $this->stateFor($term->id, null);
+
+        return $state->teacher($teacher->id) === null ? $state->withTeachers($this->query->teachers($term, [$teacher->id])) : $state;
+    }
+
+    /**
+     * Todo lo del salón en el periodo. La foto de cualquier modalidad trae todos los grupos con sesión en un salón, así
+     * que basta la de la modalidad de uno de los grupos que lo usan; sin ninguno, no hay nada que revisar.
+     */
+    public function validateRoom(Room $room, Term $term): ValidationResult
+    {
+        $modalityId = GroupSession::query()->where('term_id', $term->id)->where('room_id', $room->id)->orderBy('modality_id')->value('modality_id');
+
+        return $modalityId === null ? new ValidationResult([]) : $this->validate($this->stateFor($term->id, $modalityId), ValidationScope::room($room->id));
+    }
+
+    /**
+     * La carga de una modalidad completa, con los grupos de todos sus campus (M1), o la de un departamento en ella.
+     */
+    public function validateLoad(Term $term, Modality $modality, ?Department $department = null): ValidationResult
+    {
+        $state = $this->stateFor($term->id, $modality->id);
+
+        return $this->validate($state, ValidationScope::load($state, $modality->id, $department?->id));
+    }
+
+    /**
+     * Las violaciones del grupo si la sesión candidata quedara así, sin escribir nada: lo que el editor pinta en vivo.
+     */
+    public function checkSession(Group $group, SessionCandidate $candidate): ValidationResult
+    {
+        $state = $this->stateFor($group->term_id, $group->modality_id);
+
+        return self::of($group->id, $this->validate($state->withSession($group->id, $candidate), ValidationScope::groups($group->id)));
+    }
+
+    /**
+     * checkSession() para varias candidatas del mismo grupo, con la misma foto (una celda del editor cada una).
+     *
+     * @param  array<array-key, SessionCandidate>  $candidates
+     * @return array<array-key, ValidationResult>
+     */
+    public function checkSessions(Group $group, array $candidates): array
+    {
+        return array_map(fn (SessionCandidate $candidate): ValidationResult => $this->checkSession($group, $candidate), $candidates);
+    }
+
+    /**
+     * Las violaciones del grupo si sus sesiones fueran exactamente estas, sin escribir nada: la propuesta completa de
+     * una vez (los choques entre las candidatas, los totales de horas y las sesiones que ya no estarían).
+     *
+     * @param  list<SessionCandidate>  $candidates
+     */
+    public function checkGroupSessions(Group $group, array $candidates): ValidationResult
+    {
+        $state = $this->stateFor($group->term_id, $group->modality_id);
+
+        return self::of($group->id, $this->validate($state->withSessions($group->id, $candidates), ValidationScope::groups($group->id)));
+    }
+
+    /**
+     * Qué pasaría si el grupo fuera de este docente, sin escribir: choque (HC-01), horas (HC-08) y disponibilidad
+     * (HC-09). No se cuenta a sí mismo: el grupo deja de ser de su docente actual, así que reasignarlo al mismo no da
+     * choque ni falta de horas por sus propias sesiones.
+     */
+    public function checkTeacher(Group $group, Teacher $teacher): ValidationResult
+    {
+        return $this->checkTeachers($group, [$teacher])[$teacher->id];
+    }
+
+    /**
+     * checkTeacher() para varios docentes candidatos con una sola lectura de la base.
+     *
+     * @param  iterable<Teacher>  $teachers
+     * @return array<string, ValidationResult> por id de docente
+     */
+    public function checkTeachers(Group $group, iterable $teachers): array
+    {
+        [$state, $ids] = $this->withCandidates($group, $teachers);
+
+        $results = [];
+
+        foreach ($ids as $id) {
+            $result = $this->validate($state->withTeacher($group->id, $id), new ValidationScope([$group->id], [$id]), self::TEACHER_RULES);
+
+            $results[$id] = new ValidationResult($result->forGroup($group->id));
+        }
+
+        return $results;
+    }
+
+    /**
+     * Las horas de cada candidato si el grupo fuera suyo, con la misma cuenta de HC-08 (TeacherHourLimit): `before` sin
+     * este grupo y `after` con él, para que el ranking muestre «quedan 12 → 7» a todos, no solo a quien se pasa. Un
+     * candidato borrado no trae horas (null).
+     *
+     * @param  iterable<Teacher>  $teachers
+     * @return array<string, array{before: array<string, mixed>, after: array<string, mixed>}|null>
+     */
+    public function teacherHours(Group $group, iterable $teachers): array
+    {
+        [$state, $ids] = $this->withCandidates($group, $teachers);
+        $hours = [];
+
+        foreach ($ids as $id) {
+            $before = TeacherHourLimit::of($state, $id, $group->id);
+            $after = TeacherHourLimit::of($state->withTeacher($group->id, $id), $id);
+            $hours[$id] = $before === null || $after === null ? null : ['before' => $before, 'after' => $after];
+        }
+
+        return $hours;
+    }
+
+    /**
+     * La foto del grupo con los docentes candidatos que no traía, leídos en una sola consulta, y los ids en orden.
+     *
+     * @param  iterable<Teacher>  $teachers
+     * @return array{0: ScheduleState, 1: list<string>}
+     */
+    private function withCandidates(Group $group, iterable $teachers): array
+    {
+        $state = $this->stateFor($group->term_id, $group->modality_id);
+        $ids = [];
+
+        foreach ($teachers as $teacher) {
+            $ids[] = $teacher->id;
+        }
+
+        $missing = array_values(array_filter($ids, fn (string $id): bool => $state->teacher($id) === null));
+
+        if ($missing !== []) {
+            $state = $state->withTeachers($this->query->teachers(Term::query()->findOrFail($group->term_id), $missing));
+            $this->states[self::key($group->term_id, $group->modality_id)] = $state;
+        }
+
+        return [$state, $ids];
+    }
+
+    /**
+     * La foto del periodo vista desde una modalidad (sin modalidad: los grupos con docente de todo el periodo), leída
+     * una sola vez por instancia.
+     */
+    public function stateFor(string $termId, ?string $modalityId): ScheduleState
+    {
+        return $this->states[self::key($termId, $modalityId)] ??= $this->query->forModality(Term::query()->findOrFail($termId), $modalityId);
+    }
+
+    /**
+     * Olvida las fotos leídas: después de escribir, la siguiente pregunta vuelve a leer la base.
+     */
+    public function forget(): void
+    {
+        $this->states = [];
+    }
+
+    private static function of(string $groupId, ValidationResult $result): ValidationResult
+    {
+        return new ValidationResult($result->forGroup($groupId));
+    }
+
+    private static function key(string $termId, ?string $modalityId): string
+    {
+        return $termId.'|'.($modalityId ?? '*');
+    }
+}

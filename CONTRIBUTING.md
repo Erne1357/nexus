@@ -1,0 +1,179 @@
+# Contribuir a Nexus
+
+Reglas de trabajo del equipo. Lo que no esté aquí se decide en el issue y, si es permanente, se agrega aquí por PR.
+
+## Ramas
+
+| Rama | Uso | Protección |
+|---|---|---|
+| `main` | Producción. Solo recibe PRs desde `develop` cuando la integración de una fase está probada en el servidor de pruebas. Cada mezcla lleva un tag semántico (`v1.0.0` = R1). | PR obligatorio, conversaciones resueltas, CI verde, sin push directo ni para administradores |
+| `develop` | Integración. Recibe un PR por riel, uno a la vez, con merge commit (ver «Rama por riel»). | PR obligatorio, conversaciones resueltas, CI verde, sin push directo |
+| `riel/<riel>` | Rama padre de una línea de trabajo, creada desde `develop`. Recibe por PR (squash) todas las tareas del riel y se reusa en cada vuelta. | — |
+| `feature/<issue>-<slug>` | Una por tarea del plan, creada desde la rama padre de su riel. Vive pocos días. | — |
+| `fix/<issue>-<slug>` | Correcciones del piloto o de producción. Salen de la rama padre del riel que atiende la incidencia (o de `main` si es urgente en producción) y regresan por esa rama padre, nunca directo a `develop`. | — |
+
+Ramas cortas: integra a la rama de tu riel al menos cada dos días. Usa un worktree de git por rama para no mezclar cambios entre tareas.
+
+**Worktrees con Docker.** Docker monta solo la carpeta principal del repo en `/app`, así que los worktrees van dentro del repo, en `.worktrees/<rama>` (ignorado por git). Cada uno lleva su propio `vendor` y su propio `.env`, y todo comando se corre con `-w`. Git se usa desde la máquina local; el contenedor no lo tiene.
+
+```bash
+git worktree add -b feature/<issue>-<slug> .worktrees/feature-<issue>-<slug> origin/riel/<riel>
+cp .env .worktrees/feature-<issue>-<slug>/.env
+docker compose exec -w /app/.worktrees/feature-<issue>-<slug> app composer install
+docker compose exec -w /app/.worktrees/feature-<issue>-<slug> vite npm install
+docker compose exec -w /app/.worktrees/feature-<issue>-<slug> app php artisan test
+```
+
+Después de traer `develop` a la carpeta principal, recarga los workers de Octane con `docker compose exec app php artisan octane:reload` (y corre `migrate` si llegaron migraciones): guardan el código en memoria y, sin recargarlos, el navegador sigue mostrando la versión anterior.
+
+Nunca corras `docker compose up` desde un worktree: comparte el nombre de proyecto con el repo principal y lo pisaría. Los contenedores `app` y `queue` sirven siempre el código de la carpeta principal. El `.env` copiado comparte base de datos, Valkey y cola con el repo principal, así que no corras `migrate` de una rama sin mezclar contra la base de desarrollo.
+
+**Ver un worktree en el navegador.** `.github/scripts/worktree-preview.sh` levanta un contenedor aparte (misma imagen, volumen y red que `app`) que sirve el worktree en otro puerto con su propia base, su cookie de sesión, sus prefijos de Valkey y la cola en `sync`, así que no toca http://localhost ni la base `nexus`. Cada persona usa su puerto y su base (por ejemplo `8091` con `nexus_review_b` y `8092` con `nexus_review_c`):
+
+```bash
+.github/scripts/worktree-preview.sh build feature-<issue>-<slug>                    # assets compilados del worktree (watch para iterar)
+.github/scripts/worktree-preview.sh up    feature-<issue>-<slug> 8092 nexus_review_c
+.github/scripts/worktree-preview.sh seed  feature-<issue>-<slug> 8092 nexus_review_c   # DemoSeeder y 20271 abierto en C2; todos con `password`
+docker exec -e BASE=http://127.0.0.1:8000 nexus-preview-8092 node .github/scripts/review-screens.mjs inicio=/
+.github/scripts/worktree-preview.sh down  feature-<issue>-<slug> 8092 --drop nexus_review_c
+```
+
+Con otro worktree en el mismo puerto basta `down` y `up` con el nuevo directorio: la base se conserva. Si la rama trae migraciones, corre `docker exec nexus-preview-<puerto> php artisan migrate` (o `seed` de nuevo).
+
+**Pruebas en paralelo.** `RefreshDatabase` migra y revierte sobre una sola base, así que dos worktrees corriendo pruebas a la vez sobre `nexus_test` se pisan. Dale a cada worktree su propia base de pruebas y selecciónala con `DB_DATABASE` (`phpunit.xml` lo permite porque no lo fuerza):
+
+```bash
+docker compose exec -T postgres createdb -U nexus nexus_test_<x>
+docker compose exec -T -e DB_DATABASE=nexus_test_<x> -w /app/.worktrees/feature-<issue>-<slug> app php artisan test
+docker compose exec -T postgres dropdb -U nexus nexus_test_<x>   # al cerrar el worktree
+```
+
+La base también separa los discos falsos: `tests/TestCase.php` guarda los de `Storage::fake()` y las copias temporales de Livewire en `storage/framework/testing/disks/<disco>_test_<base>`. Así, dos corridas a la vez en el mismo worktree, cada una con su base, no se borran los archivos.
+
+Con varias bases de pruebas corriendo a la vez, cada `RefreshDatabase` borra y migra unas 70 tablas, y el límite de bloqueos por defecto de PostgreSQL (64) se agota: salen fallas sueltas «out of shared memory… max_locks_per_transaction» que pasan al repetirlas. El `compose.override.yaml` de desarrollo arranca PostgreSQL con `max_locks_per_transaction=256` (#430); si tu volumen ya existía, aplica el cambio con `docker compose up -d postgres` cuando nadie esté corriendo pruebas. Al terminar, borra también las copias `nexus_test_<x>_test_1` a `_4` que deja `--parallel`.
+
+**Volumen de Postgres que ya existe.** El script de `docker/postgres/` solo corre cuando el volumen está vacío. Si ya levantaste el stack antes de la tarea 0.3, crea la base a mano una vez: `docker compose exec -T postgres createdb -U nexus nexus_test`.
+
+## Commits
+
+Formato convencional en inglés, con el módulo como alcance:
+
+```
+feat(scheduling): add constraint validator for HC-01..HC-04
+fix(imports): keep natural key on re-apply
+test(staffing): cover ranking ties
+docs(plan): mark 3.2 done in phase 3
+chore(ci): cache composer
+```
+
+Tipos: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`. Un commit por cambio coherente; se permite squash al mezclar.
+
+## Issues
+
+- Todo trabajo nace de un issue con la plantilla correspondiente (tarea, bug, épica). El issue referencia la tarea del plan (`Fase 3 · 3.2`) y lleva etiquetas `type:*`, `module:*`, `release:*` y `priority:*`, y el milestone de su fase.
+- Los issues de tarea salen de la tabla *Tareas* del archivo de la fase, con `.github/scripts/plan-issues.py` (Python 3 y `gh`, desde la raíz del repo). El script crea las etiquetas y milestones que falten, un issue por tarea hasta la fase de `--tasks-through` (4 por defecto, las de R1) y una épica por cada fase posterior, y salta los títulos que ya existen. Corre primero `--dry`, que no escribe nada, y después `--apply`. Al detallar una fase de R2, sube `--tasks-through` a esa fase.
+
+  ```bash
+  python3 -I .github/scripts/plan-issues.py --dry docs/plan/fase-*.md
+  python3 -I .github/scripts/plan-issues.py --apply --tasks-through 5 docs/plan/fase-5-demanda.md
+  ```
+
+- Si descubres trabajo no planeado, abre un issue; no lo metas en el PR actual.
+- Las incidencias del piloto llevan la etiqueta `piloto` y se atienden antes que cualquier otra cosa.
+
+## Pull requests
+
+1. Un PR por tarea del plan. Si la tarea es grande, divídela en PRs que se puedan mezclar en orden.
+2. Título con el mismo formato que los commits. Descripción con la plantilla: qué, por qué, cómo probarlo, capturas si hay UI, checklist.
+3. `Closes #<issue>` en la descripción.
+4. CI verde (lint, unit, feature, browser).
+5. Revisor cruzado obligatorio (A revisa a B, B a C, C a A). Respuesta en menos de 24 horas. El autor mezcla.
+6. Menos de 400 líneas netas cuando sea posible; si no, explica por qué.
+7. Corre `/code-review` antes de pedir revisión y atiende lo que encuentre.
+8. Si el PR cambia el modelo de datos, incluye el cambio en `docs/dominio/modelo-de-datos.md`. Si agrega una dependencia, incluye la nota en `docs/decisiones/`.
+
+### PRs encadenados
+
+Una tarea que no cabe en 400 líneas se parte en una cadena: el primer PR sale de `develop` y cada uno de los siguientes tiene como base la rama del anterior (por ejemplo, #94 a #98 de la tarea 1.1). El CI corre en todos. Solo el último lleva `Closes #<issue>`; los demás dicen `Parte de #<issue>`.
+
+- Mientras una rama no se ha subido, se puede rebasar sobre su base. Una vez subida, los cambios de la base (por ejemplo, correcciones de la revisión) entran con `git merge <base>`, nunca con rebase y `push --force`.
+- `merge` de `origin/<base>` y no de la rama local, para no traer algo que no se ha subido.
+
+**Mezclar la cadena.** `develop` exige que la rama esté al día y con CI verde, así que se mezcla un PR a la vez, del primero al último, con squash. El squash deja en `develop` un commit nuevo con el contenido de la rama de base; si después se mezcla `develop` en el siguiente PR sin más, git ve el mismo cambio dos veces y da conflictos falsos en todo lo que ese PR modificó encima. El primero se pone al día con `git merge origin/develop`, como cualquier PR. Para cada uno de los siguientes, con `<n-base>` el número del PR anterior:
+
+```bash
+git fetch origin
+squash=$(gh pr view <n-base> --json mergeCommit --jq .mergeCommit.oid)
+git diff --quiet "$squash" origin/<rama-base> && echo ok   # el squash tiene el mismo contenido que la base
+git merge origin/<rama-base>          # lo último de la base, si trae algo
+git merge -s ours "$squash"           # el squash ya está en la rama: solo se registra como mezclado
+git merge origin/develop              # lo que haya entrado a develop después, de otros PRs
+gh api -X PATCH repos/Erne1357/nexus/pulls/<n> -f base=develop
+git push
+```
+
+- Si la comprobación del `git diff` no imprime `ok`, el `-s ours` no es seguro: detente y revisa qué le falta a la rama.
+- `-s ours` solo va contra el commit del squash, nunca contra `origin/develop`. Si a `develop` entró otro PR, `-s ours` sobre `develop` haría que el squash de este PR revirtiera ese otro.
+- Un conflicto real en el último `merge` se resuelve por bloque, conservando los dos lados. No tomes el archivo completo de un lado: borrarías lo que trajo el otro.
+- `gh pr edit --base` falla en este repo por la baja de Projects clásico; por eso la base se cambia con `gh api`.
+- Antes del squash, compara el diff del PR con el que tenía: deben ser los mismos archivos y líneas.
+- `Closes #<issue>` no cierra el issue al mezclar a `develop`, solo a `main`: ciérralo a mano y mueve la tarjeta a **Hecho**.
+
+**Rama por riel** (decisión del usuario, 10 de noviembre de 2026). Cada riel trabaja sobre `riel/<riel>`, creada desde `develop`. Los PR de sus tareas apuntan a esa rama y entran con squash, con CI verde y revisión cruzada; las cadenas dentro del riel usan el `-s ours` de arriba. A `develop` va un PR por riel, uno a la vez: se trae `develop`, corre el CI y se mezcla con merge commit, no squash. Así `develop` guarda un commit por PR y la rama del riel queda al día para la siguiente vuelta. La tarea se marca en `docs/plan/fase-N.md` con los números de sus PR.
+
+## Definición de hecho
+
+Una tarea está hecha cuando:
+
+- [ ] Tiene pruebas en los niveles que aplican (unit, feature, browser) y todas pasan en CI.
+- [ ] Cada regla de negocio que toca tiene su prueba nombrada con el id de la regla.
+- [ ] Cada pantalla nueva tiene prueba negativa de alcance (otro rol u otro campus) y cumple el "Checklist de seguridad".
+- [ ] Las escrituras pasan por Actions con bitácora.
+- [ ] Pint sin cambios.
+- [ ] Documentación actualizada: archivo de la fase (tarea marcada con el PR), modelo de datos o decisiones si aplica.
+- [ ] Revisado por otra persona y mezclado en `develop`.
+
+## Revisión de código
+
+Qué buscar primero: reglas de negocio mal interpretadas, alcance por rol, transacciones y bitácora, pruebas que no prueban lo que dicen, estado compartido bajo Octane, consultas N+1 en listados. Después: nombres, duplicación, consistencia con el módulo de referencia. No se aprueba "por confianza": si no se entiende, se pregunta en el PR.
+
+## Checklist de seguridad
+
+La tarea 4.8 revisó todas las pantallas el 10 de noviembre de 2026. No encontró ninguna sin `auth`, ni una lectura por id del cliente que se salte el alcance, ni una descarga sin permiso. Toda pantalla nueva y todo PR que toque autorización cumplen esto:
+
+- **Ruta:** dentro del grupo `auth` de su módulo. Una ruta pública es una decisión escrita en `docs/dominio/reglas-de-negocio.md` y lleva `throttle`. Hoy son públicos el acceso (`/login`) y la consulta publicada de la tarea 4.4.
+- **Autorización en el servidor, no en la vista:**
+  - `mount` autoriza (`$this->authorize(...)` o `abort_unless($context->allowsAny(...), 403)`);
+  - **cada método público** que escribe, o que lee por un id que llega del cliente, vuelve a autorizar. Directo o con un helper que lo haga, como `groupOrFail` o `decidable`;
+  - un botón deshabilitado no protege nada.
+- **Lo que viaja al cliente:** toda propiedad pública de un componente Livewire se manda al navegador, y todo método público se puede llamar desde ahí. No guardes en una propiedad pública lo que el usuario no debe ver, y no pongas en un método público lógica que no sea una acción. `with()` se puede llamar desde el cliente y devolvería todo lo que arma; `Core\Livewire\BlockViewDataCalls` lo bloquea en todo componente.
+- **Ids del cliente** (`#[Url]`, parámetros, `selected[]`): se buscan con `KeyLookup` o con una Query que recibe al `Actor` y aplica `constrain()`, nunca con `find()` del modelo (lo revisa `tests/Arch/ModulesTest.php`). Un id ajeno da 403 o 404 sin decir si existe.
+- **Prueba negativa de alcance** en el archivo de la pantalla:
+  - un invitado va al login;
+  - otro rol recibe 403;
+  - otro campus o departamento no ve ni edita;
+  - y, para los métodos que escriben, la llamada directa da 403.
+- **Descargas y archivos:** autorizar con `Gate` antes de buscar el archivo, servirlo desde un disco privado y no decir si existe a quien no puede verlo (`DownloadBatchErrors`). Los exportes del SII viven en `storage/app/imports/` y nunca se sirven tal cual.
+- **Lo personal cruza campus a propósito:** la oferta y «Mi carga» del docente muestran sus grupos en todos los campus (supuesto por confirmar en reglas-de-negocio.md). No es una fuga; no lo «corrijas» sin decidirlo.
+- **Cabeceras:** `Core\Http\Middleware\SetSecurityHeaders` las pone en toda respuesta: `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` y una CSP con `frame-ancestors`, `base-uri`, `form-action` y `object-src`. No limita scripts, porque Livewire y Alpine los necesitan. HSTS lo pone Caddy. Una pantalla no se embebe en iframes.
+- **Acceso:**
+  - cinco intentos por minuto por usuario e IP, y un tope por IP sola (`fortify.ip_attempts_per_minute`, 60 por omisión, supuesto por confirmar), en `FortifyServiceProvider`. El tope cuenta todo intento, también los que entran: antes de abrir el acceso a muchos usuarios detrás de una misma IP (los alumnos, R3) súbelo con `LOGIN_IP_ATTEMPTS_PER_MINUTE`;
+  - la cookie de sesión es `SameSite=Lax` y sin cifrar: `Strict` rompería los enlaces que llegan de fuera;
+  - sin registro público ni recuperación de contraseña por correo; el admin la restablece;
+  - en producción, `compose.prod.yaml` fuerza `APP_DEBUG=false` y cookies seguras.
+- **Recálculos a demanda:** un botón que encola trabajo pesado (por ejemplo «Calcular» en «Carga por docente») usa un job único (`ShouldBeUniqueUntilProcessing`), para que repetir el clic no apile trabajos.
+- **Revisión:** antes de abrir el PR, `/security-review` sobre la rama cuando el cambio toca rutas, policies, descargas o datos personales.
+
+## Pruebas
+
+Ver `docs/arquitectura/testing.md`. Resumen: TDD, PostgreSQL de pruebas, cobertura mínima 80 % por módulo, prohibido saltar pruebas para pasar CI, pruebas inestables se arreglan o se borran.
+
+## Datos
+
+Los archivos exportados del SII contienen datos personales. Van en `storage/app/imports/` (ignorado por git). Los fixtures de pruebas se anonimizan (nombres y números de control ficticios). Nunca se pega un kardex real en un issue, PR o chat con la IA.
+
+## Releases
+
+1. Al terminar la integración de una fase en el servidor de pruebas, se abre PR `develop` → `main` con el resumen de la fase.
+2. Al mezclar, tag `vX.Y.Z` y despliegue con la imagen `prod` (`APP_IMAGE_TAG` = tag).
+3. Se actualiza `PLAN.md` con la fecha y el tag.

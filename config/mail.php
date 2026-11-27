@@ -70,6 +70,12 @@ return [
             'path' => env('MAIL_SENDMAIL_PATH', '/usr/sbin/sendmail -bs -i'),
         ],
 
+        // Microsoft 365 por Microsoft Graph con permisos delegados (tarea 1.29, ADR-0032): manda como la cuenta que el
+        // admin conecta en Configuración → Correos y colas; la app de Azure está en config/services.php.
+        'microsoft-graph' => [
+            'transport' => 'microsoft-graph',
+        ],
+
         'log' => [
             'transport' => 'log',
             'channel' => env('MAIL_LOG_CHANNEL'),

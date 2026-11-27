@@ -1,0 +1,57 @@
+{{-- Marco común de los PDF de lo publicado (ADR-0021): carta, DejaVu Sans, los colores de DESIGN.md escritos aquí porque
+     DomPDF no carga app.css. Encabezado con el escudo del ITCJ (data URI, ADR-0021) y la institución a la izquierda y, a la derecha, la modalidad (o el campus del
+     filtro) y el periodo y debajo «Actualizado el …» con la fecha y la hora de la versión vigente (tarea 8.5); pie con la
+     leyenda oficial y el número de página. `.change` es la marca discreta de un grupo que cambió en la última
+     publicación (en `info`; el nuevo en `success` y el cancelado en `error`), sin versión ni cupos. --}}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>{{ $title }}</title>
+    <style>
+        @page { margin: 68px 34px 44px; }
+        body { font-family: 'DejaVu Sans', sans-serif; font-size: 8.5pt; color: #092d48; }
+        header { position: fixed; top: -52px; left: 0; right: 0; height: 40px; border-bottom: 2px solid #c2201e; }
+        header .org { font-size: 7.5pt; color: #666567; }
+        header .brand { font-size: 10pt; font-weight: bold; }
+        footer { position: fixed; bottom: -30px; left: 0; right: 0; height: 18px; font-size: 7pt; color: #666567; }
+        footer .page:after { content: "Página " counter(page); }
+        h1 { font-size: 15pt; margin: 0 0 2px; }
+        .meta { color: #666567; font-size: 8.5pt; margin-bottom: 10px; }
+        .meta b { color: #092d48; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f6f3f2; color: #666567; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.06em; text-align: left; padding: 5px 6px; border-bottom: 1px solid #e3e0de; }
+        td { vertical-align: top; padding: 4px 6px; border-bottom: 1px solid #e3e0de; }
+        table.subject { margin-bottom: 8px; }
+        table.subject tr { page-break-inside: avoid; }
+        .band { background: #f6f3f2; padding: 5px 6px; }
+        .mono { font-family: 'DejaVu Sans Mono', monospace; }
+        .dim { color: #666567; }
+        .tag { font-size: 6.5pt; color: #2b5c8a; text-transform: uppercase; letter-spacing: 0.04em; }
+        .change { font-family: 'DejaVu Sans', sans-serif; font-weight: bold; color: #2b5c8a; }
+        .change-added { color: #1f6f4f; }
+        .change-cancelled { color: #b42318; }
+        .gone { text-decoration: line-through; color: #666567; }
+    </style>
+</head>
+<body>
+    <header>
+        <table><tr>
+            <td style="border: 0; padding: 0 6px 2px 0; width: 32px; vertical-align: bottom;"><img src="{{ $crest ?? \App\Modules\AcademicLoad\Exports\PublishedPdf::crest() }}" alt="Escudo del ITCJ" style="height: 34px; width: auto;"></td>
+            <td style="border: 0; padding: 0 0 2px;"><span class="brand">Nexus · Horarios · Carga académica</span><br><span class="org">Instituto Tecnológico de Ciudad Juárez</span></td>
+            <td style="border: 0; padding: 0 0 2px; text-align: right; vertical-align: bottom;" class="org">{{ $campus?->name ?? $modality->name }} · {{ $term->name }}@if ($updated)<br>Actualizado el {{ $updated }}@endif</td>
+        </tr></table>
+    </header>
+    <footer>
+        <table><tr>
+            <td style="border: 0; padding: 0;">Horarios oficiales del Instituto Tecnológico de Ciudad Juárez</td>
+            <td style="border: 0; padding: 0; text-align: right;" class="page"></td>
+        </tr></table>
+    </footer>
+    <main>
+        <h1>{{ $title }}</h1>
+        <div class="meta">{{ $subtitle }}</div>
+        @yield('content')
+    </main>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<?php
+
+namespace App\Modules\Academic\Queries;
+
+use App\Modules\Academic\Contracts\ActiveStudyPlans;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Queries\TextSearch;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Str;
+
+/**
+ * Lecturas de materias para las pantallas.
+ *
+ * La lista del jefe de departamento solo trae materias de retículas activas (SEL-19; tipo de espacio SEL-17, carga del docente PL-02).
+ */
+final class SubjectQuery
+{
+    public function __construct(private readonly ActiveStudyPlans $activePlans) {}
+
+    /** El valor del filtro de tipo para las materias sin tipo capturado. */
+    public const string WITHOUT_KIND = 'none';
+
+    /** El valor del filtro de tipo de espacio para las materias sin marcar (`required_space` nulo). */
+    public const string WITHOUT_SPACE = 'none';
+
+    /**
+     * La tabla del CRUD de Materias, por clave y sin las borradas, con su departamento (aunque esté
+     * borrado) y en cuántos planes está (`study_plans_count`: planes sin borrar que la tienen en su
+     * retícula, activos o no). Busca `$search` en la clave o el nombre con TextSearch;
+     * `$departmentId` filtra por departamento (un id que no es uuid no trae nada), `$kind` por un
+     * valor de SubjectKind o WITHOUT_KIND, y `$active` por estado; `null` no filtra. Quién la ve lo
+     * decide SubjectPolicy en el componente. `$space` filtra por un valor de RequiredSpace o WITHOUT_SPACE, y
+     * `$onlyDepartments`, si no es null, deja solo las de esos departamentos (quien cambia el tipo de espacio sin ver
+     * el catálogo completo, SEL-17). Con `$onlyActivePlans` deja solo las materias que están en la retícula de al menos un
+     * plan activo, con un alumno activo (SEL-19, la lista del jefe de departamento): una sola consulta, con el contrato
+     * ActiveStudyPlans que Students llena; sin él no se restringe.
+     *
+     * @param  list<string>|null  $onlyDepartments
+     * @return LengthAwarePaginator<int, Subject>
+     */
+    public function forTable(string $search = '', ?string $departmentId = null, ?string $kind = null, ?bool $active = null, int $perPage = 20, ?string $space = null, ?array $onlyDepartments = null, bool $onlyActivePlans = false): LengthAwarePaginator
+    {
+        return Subject::query()
+            ->with(['department' => fn ($query) => $query->withTrashed()->select(['id', 'code', 'name'])])
+            ->withCount('studyPlans')
+            ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
+            ->when($departmentId !== null, fn (Builder $query) => $query->whereIn('department_id', Str::isUuid($departmentId) ? [$departmentId] : []))
+            ->when($kind === self::WITHOUT_KIND, fn (Builder $query) => $query->whereNull('kind'))
+            ->when($kind !== null && $kind !== self::WITHOUT_KIND, fn (Builder $query) => $query->where('kind', $kind))
+            ->when($space === self::WITHOUT_SPACE, fn (Builder $query) => $query->whereNull('required_space'))
+            ->when($space !== null && $space !== self::WITHOUT_SPACE, fn (Builder $query) => $query->where('required_space', $space))
+            ->when($onlyDepartments !== null, fn (Builder $query) => $query->whereIn('department_id', $onlyDepartments))
+            ->when($onlyActivePlans, fn (Builder $query) => $this->inActivePlans($query))
+            ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
+            ->orderBy('code')
+            ->paginate($perPage);
+    }
+
+    /**
+     * La materia que se va a editar, activar o desactivar, sin las borradas.
+     *
+     * @throws ModelNotFoundException<Subject>
+     */
+    public function findOrFail(string $id): Subject
+    {
+        return KeyLookup::findOrFail(Subject::query(), $id);
+    }
+
+    /**
+     * La materia de la lista del jefe de departamento (SEL-19): como findOrFail, pero con `$onlyActivePlans` una materia que
+     * no está en una retícula activa no se encuentra (404), igual que no sale en su tabla.
+     *
+     * @throws ModelNotFoundException<Subject>
+     */
+    public function findInListOrFail(string $id, bool $onlyActivePlans): Subject
+    {
+        return KeyLookup::findOrFail(
+            Subject::query()->when($onlyActivePlans, fn (Builder $query) => $this->inActivePlans($query)),
+            $id,
+        );
+    }
+
+    /**
+     * @param  Builder<Subject>  $query
+     */
+    private function inActivePlans(Builder $query): void
+    {
+        $planIds = $this->activePlans->ids();
+
+        if ($planIds !== null) {
+            $query->whereHas('studyPlans', fn (Builder $plans) => $plans->whereIn('study_plans.id', $planIds));
+        }
+    }
+}

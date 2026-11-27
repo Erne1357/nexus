@@ -1,0 +1,194 @@
+<?php
+
+namespace App\Modules\Core\Queries;
+
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\CorePermission;
+use App\Modules\Core\Events\TermOpeningPreviewing;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
+use App\Modules\Core\Models\TermStage;
+use App\Modules\Core\Rules\TermRules;
+use Carbon\CarbonInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Lecturas de periodos para las pantallas.
+ */
+final class TermQuery
+{
+    /** El año desde el que el selector ofrece periodos (TP-02, confirmado el 22 de noviembre de 2026). */
+    public const int SELECTABLE_SINCE_YEAR = 2020;
+
+    /**
+     * Los periodos que ofrece el selector de la credencial: los recientes (desde SELECTABLE_SINCE_YEAR) y el actual
+     * aunque sea anterior, del más reciente al más antiguo. Los viejos existen y se siguen usando por código.
+     *
+     * @return Collection<int, Term>
+     */
+    public function selectable(): Collection
+    {
+        return Term::query()
+            ->where(fn (Builder $query) => $query
+                ->where('code', '>=', self::SELECTABLE_SINCE_YEAR.'1')
+                ->orWhere('is_current', true))
+            ->orderByDesc('starts_on')
+            ->get();
+    }
+
+    /**
+     * El periodo en curso el día `$day` (TP-03, confirmado el 23 de noviembre de 2026): el regular (Ene-Jun o Ago-Dic,
+     * `TermRules::REGULAR_SUFFIXES`) cuyas fechas contienen el día; si hay dos, el de código mayor. Entre semestres y en
+     * verano, el regular que terminó más recientemente antes del día; si tampoco hay, null. Verano nunca es el de
+     * omisión.
+     */
+    public function inProgress(CarbonInterface $day): ?Term
+    {
+        // Entre los regulares que ya empezaron, primero el que todavía no termina; si ninguno, el de código mayor, que es
+        // el que terminó más recientemente (los códigos del SII siguen el orden cronológico). Una sola consulta.
+        return Term::query()
+            ->whereIn(DB::raw('right(code, 1)'), TermRules::REGULAR_SUFFIXES)
+            ->whereDate('starts_on', '<=', $day)
+            ->orderByRaw('ends_on >= ? desc', [$day->toDateString()])
+            ->orderByDesc('code')
+            ->first();
+    }
+
+    /**
+     * El último periodo que ya terminó antes del día `$day` (1.85): el de mayor `ends_on` menor que `$day`, de cualquier
+     * tipo; null si ninguno ha terminado. Sirve al «terminó el …» de entre semestres.
+     */
+    public function lastEnded(CarbonInterface $day): ?Term
+    {
+        return Term::query()
+            ->whereDate('ends_on', '<', $day)
+            ->orderByDesc('ends_on')
+            ->first();
+    }
+
+    /**
+     * El código más reciente que existe (el mayor, que sigue el orden cronológico del SII); null si no hay periodos.
+     */
+    public function latestCode(): ?string
+    {
+        return Term::query()->max('code');
+    }
+
+    /**
+     * En qué modalidades se abrió el periodo (M4), por clave, con la modalidad (también una desactivada o borrada
+     * después) y quién lo abrió, para la ficha del periodo.
+     *
+     * @return Collection<int, TermOpening>
+     */
+    public function openings(Term $term): Collection
+    {
+        return $term->openings()
+            ->with(['modality' => fn (BelongsTo $query) => $query->withTrashed(), 'opener'])
+            ->join('modalities', 'modalities.id', '=', 'term_openings.modality_id')
+            ->orderBy('modalities.code')
+            ->select('term_openings.*')
+            ->get();
+    }
+
+    /**
+     * Los renglones de la sección «Modalidades» de la ficha, por clave: cada modalidad activa (`opening` es null si el
+     * periodo no se ha abierto en ella) y, solo lectura (`actionable` falso), las modalidades donde se abrió y que ya
+     * están inactivas o borradas.
+     *
+     * @param  Collection<int, Modality>  $active
+     * @return Collection<int, array{modality: Modality, opening: ?TermOpening, actionable: bool}>
+     */
+    public function modalityRows(Term $term, Collection $active): Collection
+    {
+        $openings = $this->openings($term)->keyBy('modality_id');
+
+        return $active
+            ->map(fn (Modality $modality): array => ['modality' => $modality, 'opening' => $openings->get($modality->id), 'actionable' => true])
+            ->concat(
+                $openings
+                    ->reject(fn (TermOpening $opening): bool => $active->contains('id', $opening->modality_id))
+                    ->map(fn (TermOpening $opening): array => ['modality' => $opening->modality, 'opening' => $opening, 'actionable' => false])
+            )
+            ->sortBy(fn (array $row): string => $row['modality']->code)
+            ->values();
+    }
+
+    /**
+     * Lo que pasa si se abre el periodo en la modalidad, para el panel «Abrir el periodo» (tarea 14, U4 opción A), sin
+     * escribir nada:
+     *
+     * - `items`: lo que se crea, que dicen los módulos de la derecha con TermOpeningPreviewing (hoy, AcademicLoad: las
+     *   cargas en borrador, con el número que falta si ya estaba abierto);
+     * - `campuses`: los campus donde se dan sus grupos (MS4, CampusQuery::of), «C1 · Campus I»: con salones, los activos;
+     *   sin salones o con el perfil inválido, ninguno;
+     * - `profile`: el perfil de flujo de la modalidad en una línea, o null si el guardado no es válido;
+     * - `ownWindows`: cuántas ventanas propias tiene la modalidad en el calendario del periodo (0: usa el general);
+     * - `completing`: si el periodo ya estaba abierto en la modalidad.
+     *
+     * @return array{items: list<array{count: int, text: string, chips: list<string>}>, campuses: list<string>, profile: ?string, ownWindows: int, completing: bool}
+     */
+    public function openingPreview(Term $term, Modality $modality): array
+    {
+        $event = new TermOpeningPreviewing($term, $modality);
+        event($event);
+
+        $profile = $modality->valid_profile?->summary();
+
+        return [
+            'items' => $event->items(),
+            'campuses' => app(CampusQuery::class)->of($modality)
+                ->map(fn (Campus $campus): string => "{$campus->code} · {$campus->name}")
+                ->all(),
+            'profile' => $profile,
+            'ownWindows' => TermStage::query()->where('term_id', $term->getKey())->where('modality_id', $modality->getKey())->count(),
+            'completing' => $term->openings()->where('modality_id', $modality->getKey())->exists(),
+        ];
+    }
+
+    /**
+     * Los periodos que se abrieron en una modalidad, del más reciente al más antiguo.
+     *
+     * @return Collection<int, Term>
+     */
+    public function openedIn(Modality $modality): Collection
+    {
+        return Term::query()
+            ->whereIn('id', TermOpening::query()->where('modality_id', $modality->getKey())->select('term_id'))
+            ->orderByDesc('starts_on')
+            ->get();
+    }
+
+    /**
+     * La tabla del catálogo de periodos, del más reciente al más antiguo. Solo la ve quien TermPolicy
+     * deja (admin y subdirección); a cualquier otro le llega vacía. Busca `$search` en el código o el
+     * nombre con TextSearch.
+     *
+     * @return LengthAwarePaginator<int, Term>
+     */
+    public function forTable(Actor $context, string $search = '', int $perPage = 15): LengthAwarePaginator
+    {
+        return Term::query()
+            ->with(['openings.modality' => fn (BelongsTo $query) => $query->withTrashed()])
+            ->unless($context->allowsAny(CorePermission::TermView), fn (Builder $query) => $query->whereRaw('false'))
+            ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
+            ->orderByDesc('starts_on')
+            ->paginate($perPage);
+    }
+
+    /**
+     * El periodo elegido en la credencial.
+     *
+     * @throws ModelNotFoundException<Term>
+     */
+    public function findOrFail(string $id): Term
+    {
+        return KeyLookup::findOrFail(Term::query(), $id);
+    }
+}

@@ -1,0 +1,123 @@
+<?php
+
+namespace App\Modules\Scheduling\Queries;
+
+use App\Modules\Core\Models\ModalityProfile;
+
+/**
+ * Lo que le falta a la carga de un departamento para cerrarse o publicarse (HC-15), contado por grupo activo con la
+ * regla de GroupClosingFlags (tally()). `justified` no bloquea: son los grupos sin docente o sin salón que pasan con
+ * justificación. `groups` son los grupos distintos que bloquean: uno sin docente ni salón cuenta en dos cifras y ahí
+ * una vez. `byCampus` son las mismas cifras por el campus de cada grupo (su id; '' sin campus, MS4): el reparto de
+ * «Para cerrar» y su filtro de campus (maqueta U2, opción A); la carga se cierra entera (M1).
+ *
+ * `hourNotices` no bloquea: son los avisos de HC-08 de los docentes de la carga que pasan su banda de horas frente a
+ * grupo (tarea 1.50: HC-08 dejó de impedir el cierre y queda visible en «Para cerrar»), uno por docente, con su mensaje.
+ */
+final readonly class ClosingBlockers
+{
+    /**
+     * @param  array<string, array{conflicted: int, unscheduled: int, withoutTeacher: int, withoutRoom: int, inactiveTeacher: int, justified: int, groups: int}>  $byCampus
+     * @param  list<array{teacher_id: string, message: string}>  $hourNotices
+     */
+    public function __construct(
+        public int $conflicted = 0,
+        public int $unscheduled = 0,
+        public int $withoutTeacher = 0,
+        public int $withoutRoom = 0,
+        public int $inactiveTeacher = 0,
+        public int $justified = 0,
+        public int $groups = 0,
+        public array $byCampus = [],
+        public array $hourNotices = [],
+    ) {}
+
+    /**
+     * Las cifras de unos grupos con la regla por grupo de GroupClosingFlags. `$conflicted` son los ids con choque duro
+     * según el validador (el veto y la pantalla); sin ellos, cuenta los vigentes de `schedule_conflicts` (el tablero).
+     *
+     * @param  iterable<GroupClosingFlags>  $groups
+     * @param  list<string>|null  $conflicted
+     */
+    public static function tally(iterable $groups, ModalityProfile $profile, ?array $conflicted = null): self
+    {
+        $hard = $conflicted === null ? null : array_flip($conflicted);
+        $zero = ['conflicted' => 0, 'unscheduled' => 0, 'withoutTeacher' => 0, 'withoutRoom' => 0, 'inactiveTeacher' => 0, 'justified' => 0, 'groups' => 0];
+        $counts = $zero;
+        $byCampus = [];
+
+        foreach ($groups as $group) {
+            $isConflicted = $hard === null ? $group->storedHardConflict : isset($hard[$group->id]);
+            $flags = [
+                'conflicted' => (int) $isConflicted,
+                'unscheduled' => (int) $group->unscheduled($profile),
+                'withoutTeacher' => (int) $group->withoutTeacher(),
+                'withoutRoom' => (int) $group->withoutRoom($profile),
+                'inactiveTeacher' => (int) $group->inactiveTeacher,
+                'justified' => (int) $group->passesJustified($profile),
+                'groups' => (int) $group->blocks($profile, $isConflicted),
+            ];
+            $campus = (string) $group->campusId;
+            $byCampus[$campus] ??= $zero;
+
+            foreach ($flags as $key => $flag) {
+                $counts[$key] += $flag;
+                $byCampus[$campus][$key] += $flag;
+            }
+        }
+
+        ksort($byCampus);
+
+        return new self(...$counts, byCampus: $byCampus);
+    }
+
+    /**
+     * Las mismas cifras con los avisos de HC-08 de la carga.
+     *
+     * @param  list<array{teacher_id: string, message: string}>  $hourNotices
+     */
+    public function withHourNotices(array $hourNotices): self
+    {
+        return new self($this->conflicted, $this->unscheduled, $this->withoutTeacher, $this->withoutRoom, $this->inactiveTeacher,
+            $this->justified, $this->groups, $this->byCampus, $hourNotices);
+    }
+
+    /**
+     * Las cifras de los grupos de un campus (su id); un campus sin grupos en la carga, todo en cero. Los avisos de HC-08
+     * son de los docentes de toda la carga y se quedan.
+     */
+    public function forCampus(string $campusId): self
+    {
+        return new self(...($this->byCampus[$campusId] ?? []), hourNotices: $this->hourNotices);
+    }
+
+    public function isClear(): bool
+    {
+        return $this->reasons() === [];
+    }
+
+    /**
+     * Un motivo por cada cosa que falta, en el orden en que se corrige.
+     *
+     * @return list<string>
+     */
+    public function reasons(): array
+    {
+        return array_values(array_filter([
+            self::reason($this->conflicted, 'grupo tiene choques duros: corrígelo en el editor de horarios.', 'grupos tienen choques duros: corrígelos en el editor de horarios.'),
+            self::reason($this->unscheduled, 'grupo no tiene horario.', 'grupos no tienen horario.'),
+            self::reason($this->withoutTeacher, 'grupo no tiene docente ni justificación.', 'grupos no tienen docente ni justificación.'),
+            self::reason($this->withoutRoom, 'grupo tiene sesiones presenciales sin salón ni justificación.', 'grupos tienen sesiones presenciales sin salón ni justificación.'),
+            self::reason($this->inactiveTeacher, 'grupo tiene un docente dado de baja: asígnale otro.', 'grupos tienen un docente dado de baja: asígnales otro.'),
+        ]));
+    }
+
+    private static function reason(int $count, string $one, string $many): ?string
+    {
+        return match (true) {
+            $count === 0 => null,
+            $count === 1 => "HC-15: 1 {$one}",
+            default => "HC-15: {$count} {$many}",
+        };
+    }
+}

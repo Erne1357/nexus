@@ -1,0 +1,155 @@
+{{--
+    Validación de catálogos (DESIGN.md, "Patrones de pantalla previstos": variante C, tablero de tarjetas, decidida
+    por el usuario el 2 de noviembre de 2026). Encabezado y, en su renglón, periodo y departamento (las revisiones no son
+    de un campus, decisión 6); los errores
+    de las Actions (vetos, revisión validada); y el tablero (catalog-validation::review.board) o, con `?catalogo=`,
+    la lista de un catálogo (catalog-validation::review.list) con su drawer, ambos bajo una fila de pestañas (Tablero y un
+    catálogo por pestaña, con su estado; decidido por el usuario el 2 de noviembre de 2026 con datos masivos). Solo hay
+    pestaña y tarjeta de los catálogos con revisión en el periodo (no siempre se validan todos), cada pestaña con «N/M»
+    revisados mientras no está validada (CV7). El modal de confirmación de Validar y Reabrir es de la página: un modal
+    dentro de una tarjeta quedaría encerrado en ella. La cabecera le habla a quien valida o, a quien solo mira
+    (Subdirección, el admin; `$viewOnly`), a él (tarea 1.21). Los textos nombran el departamento, no su clave.
+    `$departments` y `$department` son ReviewOwner: un departamento o Servicios Escolares, que valida las materias, los
+    planes y las carreras de todo el Tec (CV15).
+--}}
+<div>
+    <x-header title="Validación de catálogos" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-4!" use-h1 separator progress-indicator>
+        <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
+            @if ($viewOnly)
+                Consulta cómo va la revisión de los catálogos de cada departamento y resuelve sus observaciones. Cada jefe de departamento corrige y valida sus docentes y salones; Servicios Escolares, las materias, los planes y las carreras de todo el Tec.
+            @elseif ($department?->isSchoolServices())
+                Revisa cada registro de las materias, los planes de estudio y las carreras de todo el Tec. Con todos revisados, valida el catálogo; mientras no esté validado, la carga académica de ningún departamento puede salir de borrador.
+            @else
+                Revisa cada registro de los catálogos del departamento. Con todos revisados, valida el catálogo; con los catálogos validados, la carga académica puede salir de borrador.
+            @endif
+        </x-slot:subtitle>
+    </x-header>
+
+    @if ($current === null || $departments->count() > 1)
+    <div class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm" data-testid="review-context">
+        @if ($term && $current === null)
+            <p><span class="text-neutral">Periodo</span> <span class="font-semibold">{{ $term->name }}</span> <span class="font-mono">{{ $term->code }}</span></p>
+        @endif
+        @if ($departments->count() > 1)
+            <div class="w-full md:w-72">
+                <x-select
+                    wire:model.live="department"
+                    aria-label="Departamento"
+                    :options="$departments->map(fn ($option) => ['id' => $option->id, 'name' => $option->label()])->all()"
+                    placeholder="Elige un departamento"
+                    placeholder-value=""
+                />
+            </div>
+        @elseif ($department)
+            <p><span class="text-neutral">Depto.</span> <span class="font-semibold">{{ $department->name }}</span>@if ($department->isSchoolServices()) <span class="text-neutral">· todo el Tec</span>@endif</p>
+        @endif
+    </div>
+    @endif
+
+    @foreach (['status', 'record', 'records'] as $key)
+        @error($key)
+            <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft mb-4 text-sm" :title="$message" data-testid="review-error" />
+        @enderror
+    @endforeach
+
+    @if ($inboxLinks !== [])
+        <x-alert icon="o-arrow-right-circle" class="alert-info alert-soft mb-4 text-sm" data-testid="review-inbox-suggestion">
+            <span>
+                Con tus catálogos validados, el siguiente paso es validar la propuesta de carrera en la Bandeja del departamento. Aplica aunque algunos grupos ya tengan docente por elección previa: aceptar la propuesta no los cambia.
+            </span>
+            <x-slot:actions>
+                @foreach ($inboxLinks as $link)
+                    <x-button :label="count($inboxLinks) > 1 ? 'Ir a la Bandeja · '.$link['modality'] : 'Ir a la Bandeja'" :link="$link['url']" class="btn-primary btn-sm" data-testid="review-inbox-link" />
+                @endforeach
+            </x-slot:actions>
+        </x-alert>
+    @endif
+
+    @if ($empty !== null)
+        <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="review-empty">
+            <x-icon name="o-clipboard-document-check" class="mx-auto mb-2 h-8 w-8 text-neutral" aria-hidden="true" />
+            <p class="font-semibold">
+                @switch ($empty)
+                    @case ('department') Elige un departamento para ver su validación. @break
+                    @case ('term') No hay un periodo activo. @break
+                    @default Este periodo no tiene revisiones de catálogo. @break
+                @endswitch
+            </p>
+        </div>
+    @else
+        <div role="tablist" aria-label="Catálogos" class="tabs tabs-border mb-4 flex-nowrap overflow-x-auto" data-testid="review-tabs">
+            <a role="tab" href="{{ route('catalog-validation.review', ['department' => $department->id]) }}" wire:click.prevent="$set('catalog', '')" aria-selected="{{ $current === null ? 'true' : 'false' }}" data-testid="tab-board" @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $current === null])>
+                <x-icon name="o-squares-2x2" class="h-4 w-4" aria-hidden="true" />Tablero
+            </a>
+            @foreach ($tabs as $tab)
+                @php($tabCatalog = $tab['catalog'])
+                @php([$tabIcon, $tabTone] = match ($tab['status']) {
+                    \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated => ['o-check-circle', 'text-success'],
+                    \App\Modules\CatalogValidation\Enums\ReviewStatus::InReview => ['o-clock', 'text-info'],
+                    default => ['o-minus-circle', 'text-warning'],
+                })
+                <a wire:key="tab-{{ $tabCatalog->value }}" role="tab" href="{{ route('catalog-validation.review', ['department' => $department->id, 'catalogo' => $tabCatalog->value]) }}" wire:click.prevent="$set('catalog', '{{ $tabCatalog->value }}')" aria-selected="{{ $current !== null && $current['review']->catalog === $tabCatalog ? 'true' : 'false' }}" data-testid="tab-{{ $tabCatalog->value }}" @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $current !== null && $current['review']->catalog === $tabCatalog])>
+                    {{ $tabCatalog->label() }}
+                    @if ($tab['status'] !== \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated)
+                        <span class="font-mono text-xs font-normal text-neutral tabular-nums" data-testid="tab-reviewed-{{ $tabCatalog->value }}">{{ $tab['reviewed']['reviewed'] }}/{{ $tab['reviewed']['total'] }}<span class="sr-only"> revisados</span></span>
+                    @endif
+                    <x-icon :name="$tabIcon" :class="'h-4 w-4 '.$tabTone" aria-hidden="true" />
+                    <span class="sr-only">{{ $tab['status']->label() }}</span>
+                </a>
+            @endforeach
+        </div>
+
+        @if ($current === null)
+            @include('catalog-validation::review.board')
+        @else
+            @include('catalog-validation::review.list')
+        @endif
+    @endif
+
+    <x-modal wire:model="showEmpty" :title="$emptyConfirming->count() === 1 ? 'Validar el catálogo sin registros' : 'Validar los catálogos sin registros'" box-class="max-w-lg" separator data-testid="empty-modal">
+        @if ($emptyConfirming->isNotEmpty())
+            <div class="space-y-3 text-sm">
+                <p>Vas a validar <strong>{{ $emptyConfirming->map(fn ($review) => $review->catalog->label())->join(', ', ' y ') }}</strong> de {{ $department?->name }}: {{ $emptyConfirming->count() === 1 ? 'no tiene' : 'no tienen' }} registros activos que revisar.</p>
+                <p class="text-neutral">Queda como con «Validar catálogo»: quién y cuándo validó. Si después se da de alta un registro, reabre el catálogo para revisarlo.</p>
+            </div>
+        @endif
+
+        <x-slot:actions>
+            <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+                <x-button label="Cancelar" class="max-sm:h-11" wire:click="cancelEmpty" />
+                <x-button :label="$emptyConfirming->count() === 1 ? 'Validarlo' : 'Validarlos'" icon="o-check" class="btn-primary max-sm:h-11" wire:click="validateEmpty" spinner="validateEmpty" data-testid="confirm-empty" />
+            </div>
+        </x-slot:actions>
+    </x-modal>
+
+    <x-modal wire:model="showConfirm" :title="$confirming && $confirmAction === 'reopen' ? 'Reabrir la revisión' : 'Validar la revisión'" box-class="max-w-lg" separator>
+        @if ($confirming)
+            @php($confirmReview = $confirming['review'])
+            <div class="space-y-3 text-sm" data-testid="confirm-body">
+                @if ($confirmAction === 'reopen')
+                    <p>Vas a reabrir <strong>{{ $confirmReview->heading }}</strong>: queda en revisión, sin quién ni cuándo se validó, y podrás corregir y observar de nuevo.</p>
+                    <p class="text-neutral">{{ $confirmReview->department_id === null ? 'Hasta que la valides otra vez, la carga académica de ningún departamento podrá salir de borrador.' : 'Hasta que la valides otra vez, la carga académica del departamento no podrá salir de borrador.' }}</p>
+                @else
+                    @php($active = $confirming['summary']['active'])
+                    @php($flags = $confirming['summary']['open_flags'])
+                    <p>Vas a validar <strong>{{ $confirmReview->heading }}</strong>: <span class="font-mono">{{ $active }}</span> {{ $active === 1 ? 'registro activo' : 'registros activos' }} y <span class="font-mono">{{ $confirming['summary']['inactive'] }}</span> {{ $confirming['summary']['inactive'] === 1 ? 'inactivo' : 'inactivos' }}.</p>
+                    @if ($flags > 0)
+                        <p>{{ $flags === 1 ? 'Queda' : 'Quedan' }} <span class="font-mono">{{ $flags }}</span> {{ $flags === 1 ? 'observación abierta; no impide validar.' : 'observaciones abiertas; no impiden validar.' }}</p>
+                    @endif
+                    @if ($missingInvitations['email'] > 0)
+                        <p data-testid="without-institutional-email"><span class="font-mono">{{ $missingInvitations['email'] }}</span> {{ $missingInvitations['email'] === 1 ? 'docente activo sin correo institucional no recibirá su acceso.' : 'docentes activos sin correo institucional no recibirán su acceso.' }} Captúralo en su fila de la lista, también después de validar; al guardarlo le llega la invitación.</p>
+                    @endif
+                    @if ($missingInvitations['user'] > 0)
+                        <p data-testid="without-user"><span class="font-mono">{{ $missingInvitations['user'] }}</span> {{ $missingInvitations['user'] === 1 ? 'docente activo no recibirá su invitación porque no tiene un usuario activo o tiene otro puesto' : 'docentes activos no recibirán su invitación porque no tienen un usuario activo o tienen otro puesto' }}: les da acceso el administrador.</p>
+                    @endif
+                    <p class="text-neutral">Se guarda la foto de los registros activos: el próximo periodo se cuentan las altas y las bajas contra ella.</p>
+                @endif
+            </div>
+        @endif
+
+        <x-slot:actions>
+            <x-button label="Cancelar" wire:click="cancelConfirm" />
+            <x-button :label="$confirmAction === 'reopen' ? 'Reabrir' : 'Validar'" :icon="$confirmAction === 'reopen' ? 'o-arrow-uturn-left' : 'o-check'" class="btn-primary" wire:click="confirmed" spinner="confirmed" data-testid="confirm-accept" />
+        </x-slot:actions>
+    </x-modal>
+</div>

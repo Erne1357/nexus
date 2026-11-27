@@ -1,0 +1,246 @@
+{{--
+    Anatomía de una pantalla de catálogo de un campus (DESIGN.md, "Layout"): encabezado y, en su renglón, la
+    barra de herramientas común (x-core::catalog-toolbar: búsqueda, filtros de edificio, tipo, dueño y estado, y
+    una sola acción principal); tabla en una superficie blanca con filete, la clave y la capacidad en Mono, el
+    estado con su insignia y «Editar» visible con lo demás en el menú «Acciones» (entre ellas «Bloqueos…», que
+    abre el panel lateral). Entre 768 y 1023 px se ocultan el edificio, el tipo y el dueño; debajo de 768 px,
+    renglones apilados (clave, nombre y estado; luego el detalle; luego las acciones), que no repiten los
+    data-testid de la tabla. Muestra los salones de todos los campus del usuario que usan salones: con más de un
+    campus, una columna «Campus» y el campus como filtro dentro del de edificio (un grupo por campus y «Todo C2»; `?campus=` lo fija); el campus de un alta es el
+    del edificio, que el formulario agrupa por campus.
+--}}
+<div>
+    <x-core::back-link :validation="$this->validationReturnUrl()" class="mb-4" />
+    <x-header title="Salones" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
+        <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
+            Los salones de tus campus con su tipo, capacidad y departamento dueño. Un salón no se borra: se desactiva. Sus bloqueos (mantenimiento, reservas) se administran desde «Acciones».
+        </x-slot:subtitle>
+    </x-header>
+
+    <x-core::catalog-toolbar narrow>
+        <x-slot:search>
+            <x-input
+                wire:model.live.debounce.300ms="search"
+                placeholder="Clave o nombre"
+                aria-label="Buscar salones"
+                icon="o-magnifying-glass"
+                clearable
+            />
+        </x-slot:search>
+
+        @if ($buildingGroups === [])
+            <x-select wire:model.live="buildingFilter" aria-label="Edificio" :options="$buildings" placeholder="Edificio" />
+        @else
+            {{-- Con más de un campus, el campus va dentro de este filtro (un grupo por campus y «Todo C2»), no como otro control. --}}
+            <label class="select w-full">
+                <select aria-label="Edificio" wire:change="setBuildingScope($event.target.value)" data-testid="building-scope">
+                    <option value="" @selected($buildingScope === '')>Edificio</option>
+                    @foreach ($buildingGroups as $code => $group)
+                        <optgroup label="{{ $group['name'] }}">
+                            <option value="campus:{{ $code }}" @selected($buildingScope === "campus:{$code}")>Todo {{ $code }}</option>
+                            @foreach ($group['buildings'] as $building)
+                                <option value="{{ $building['id'] }}" @selected($buildingScope === $building['id'])>{{ $building['name'] }}</option>
+                            @endforeach
+                        </optgroup>
+                    @endforeach
+                </select>
+            </label>
+        @endif
+        <x-select wire:model.live="typeFilter" aria-label="Tipo" :options="$types" placeholder="Tipo" />
+        <x-select wire:model.live="ownerFilter" aria-label="Dueño" :options="$ownerFilters" placeholder="Dueño" />
+        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
+
+        <x-slot:action>
+            @if ($canCreate)
+                <x-button label="Nuevo salón" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
+            @else
+                <x-button label="Nuevo salón" icon="o-plus" class="btn-primary" disabled title="Tu rol no administra salones." />
+            @endif
+        </x-slot:action>
+    </x-core::catalog-toolbar>
+
+    {{-- overflow-clip y no overflow-hidden: recorta las esquinas sin volverse contenedor de scroll, así la barra de selección (sticky) se pega al pie de la ventana. --}}
+    <div class="overflow-clip rounded-box border border-base-300 bg-base-100">
+        <x-table
+            :headers="$headers"
+            wire:model.live="selected"
+            :selectable="$canAssignOwner"
+            :rows="$rooms"
+            :row-decoration="$rowDecoration"
+            class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
+        >
+            @scope('cell_code', $room)
+                <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $room->is_active])>{{ $room->code }}</span>
+            @endscope
+
+            @scope('cell_name', $room)
+                {{ $room->name ?? '—' }}
+            @endscope
+
+            @scope('cell_campus', $room)
+                <span class="font-mono" title="{{ $room->campus->name }}" data-testid="room-campus">{{ $room->campus->code }}</span>
+            @endscope
+
+            @scope('cell_building', $room)
+                <span class="font-mono" title="{{ $room->building?->name }}">{{ $room->building?->code }}</span>
+            @endscope
+
+            @scope('cell_type', $room)
+                {{ $room->type->label() }}
+            @endscope
+
+            @scope('cell_capacity', $room)
+                <span class="font-mono tabular-nums">{{ $room->capacity }}</span>
+            @endscope
+
+            @scope('cell_department', $room)
+                @if ($room->department === null)
+                    <span class="text-neutral">Sin dueño</span>
+                @else
+                    <span class="font-mono" title="{{ $room->department->name }}">{{ $room->department->code }}</span>
+                @endif
+            @endscope
+
+            @scope('cell_blocks_count', $room)
+                <span class="font-mono tabular-nums">{{ $room->blocks_count }}</span>
+            @endscope
+
+            @scope('cell_is_active', $room)
+                <x-core::status-badge :tone="$room->is_active ? 'success' : 'neutral'" :label="$room->is_active ? 'Activo' : 'Inactivo'" />
+            @endscope
+
+            @scope('actions', $room)
+                @include('facilities::rooms.row-actions', ['room' => $room, 'inTable' => true])
+            @endscope
+
+            <x-slot:empty>
+                <x-icon name="o-rectangle-stack" label="Ningún salón coincide con la búsqueda." />
+            </x-slot:empty>
+        </x-table>
+
+        <ul class="divide-y divide-base-300 md:hidden" data-testid="room-cards">
+            @foreach ($rooms as $room)
+                <li wire:key="room-card-{{ $room->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $room->is_active, 'bg-primary/5' => in_array($room->id, $selected, true)])>
+                    <div class="flex items-center gap-2.5">
+                        @if ($canAssignOwner)
+                            <input type="checkbox" class="checkbox checkbox-sm" value="{{ $room->id }}" wire:model.live="selected" aria-label="Elegir el salón {{ $room->code }}" data-testid="select-card-{{ $room->code }}">
+                        @endif
+                        <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $room->is_active])>{{ $room->code }}</span>
+                        <span @class(['min-w-0 flex-1', 'font-semibold' => $room->is_active])>{{ $room->name ?? $room->type->label() }}</span>
+
+                        <x-core::status-badge :tone="$room->is_active ? 'success' : 'neutral'" :label="$room->is_active ? 'Activo' : 'Inactivo'" />
+                    </div>
+
+                    <div class="text-neutral">
+                        @if ($campusOptions->count() > 1)<span class="font-mono">{{ $room->campus->code }}</span> · @endif<span class="font-mono">{{ $room->building?->code }}</span> ·
+                        {{ $room->type->label() }} ·
+                        <span class="font-mono tabular-nums">{{ $room->capacity }}</span> lugares ·
+                        @if ($room->department === null) Sin dueño @else <span class="font-mono">{{ $room->department->code }}</span> @endif
+                        @if ($room->blocks_count > 0) · {{ trans_choice('{1} 1 bloqueo|[2,*] :count bloqueos', $room->blocks_count) }} @endif
+                    </div>
+
+                    @include('facilities::rooms.row-actions', ['room' => $room, 'inTable' => false])
+                </li>
+            @endforeach
+        </ul>
+
+        @if ($canAssignOwner && $selected !== [])
+            <div class="sticky bottom-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-base-300 bg-base-200 px-4 py-2.5 shadow-float" role="region" aria-label="Selección" data-testid="selection-bar">
+                <span class="text-sm" aria-live="polite"><b class="font-mono font-semibold">{{ count($selected) }}</b> {{ count($selected) === 1 ? 'elegido' : 'elegidos' }}</span>
+                @if (count($selected) < $rooms->total())
+                    <button type="button" class="link text-sm font-medium underline-offset-4" wire:click="chooseAll" data-testid="choose-all">Elegir los {{ $rooms->total() }} de la lista</button>
+                @endif
+                <button type="button" class="link text-sm font-medium underline-offset-4" wire:click="clearSelection" data-testid="clear-selection">Quitar la selección</button>
+                <button type="button" class="btn btn-primary btn-sm max-md:h-11 max-md:w-full md:ms-auto" wire:click="openOwnerModal" data-testid="assign-owner">
+                    <x-icon name="o-building-office" class="h-4 w-4" aria-hidden="true" />
+                    Asignar dueño
+                </button>
+            </div>
+        @endif
+
+        @if ($rooms->isNotEmpty() || $rooms->hasPages())
+            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
+                @if ($rooms->isNotEmpty())
+                    <p>Salones <span class="font-mono">{{ $rooms->first()->code }}</span>@if ($rooms->count() > 1) a <span class="font-mono">{{ $rooms->last()->code }}</span> · <span class="font-mono">{{ $rooms->firstItem() }}–{{ $rooms->lastItem() }}</span>@else · <span class="font-mono">{{ $rooms->firstItem() }}</span>@endif de <span class="font-mono">{{ $rooms->total() }}</span>@if ($shownCampus !== null) en <span class="font-mono">{{ $shownCampus->code }}</span>@endif</p>
+                @endif
+
+                {{ $rooms->onEachSide(1)->links(data: ['scrollTo' => false]) }}
+            </div>
+        @endif
+    </div>
+
+    <x-modal wire:model="showModal" :title="$editingId === null ? 'Nuevo salón' : 'Editar salón'" box-class="max-w-2xl" separator>
+        <x-form wire:submit="save" no-separator>
+            <div class="grid gap-4 md:grid-cols-6">
+                <div class="md:col-span-3">
+                    <fieldset class="fieldset py-0">
+                        <legend class="fieldset-legend">Edificio</legend>
+                        <label class="select w-full">
+                            <select name="building_id" wire:model="building_id" aria-label="Edificio" data-testid="room-building">
+                                <option value="">Elige el edificio</option>
+                                @foreach ($formBuildings as $campusCode => $group)
+                                    <optgroup label="{{ $campusCode }}">
+                                        @foreach ($group as $building)
+                                            <option value="{{ $building['id'] }}">{{ $building['name'] }}</option>
+                                        @endforeach
+                                    </optgroup>
+                                @endforeach
+                            </select>
+                        </label>
+                        @error('building_id') <p class="text-error text-sm">{{ $message }}</p> @enderror
+                    </fieldset>
+                </div>
+                <div class="md:col-span-3">
+                    <x-input label="Clave" name="code" wire:model="code" placeholder="A-101" />
+                </div>
+
+                <div class="md:col-span-6">
+                    <x-input label="Nombre (opcional)" name="name" wire:model="name" />
+                </div>
+
+                <div class="md:col-span-3">
+                    <x-select label="Tipo" name="type" wire:model="type" :options="$types" placeholder="Elige el tipo" />
+                </div>
+                <div class="md:col-span-3">
+                    <x-input label="Capacidad" name="capacity" wire:model="capacity" type="number" min="1" inputmode="numeric" />
+                </div>
+
+                <div class="md:col-span-6">
+                    <x-select label="Departamento dueño" name="department_id" wire:model="department_id" :options="$ownerOptions" placeholder="Sin dueño" />
+                </div>
+
+                <div class="md:col-span-6">
+                    <x-input label="Características" name="features" wire:model="features" placeholder="Proyector, aire acondicionado" hint="Sepáralas con comas." />
+                </div>
+            </div>
+
+            <x-slot:actions>
+                <x-button label="Cancelar" @click="$wire.showModal = false" />
+                <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="save" />
+            </x-slot:actions>
+        </x-form>
+    </x-modal>
+
+    <x-modal wire:model="showOwnerModal" title="Asignar dueño" box-class="max-w-md" separator>
+        <x-form wire:submit="assignOwner" no-separator>
+            <p class="text-sm">
+                Elige el departamento dueño {{ trans_choice('{1} del salón elegido|[2,*] de los :count salones elegidos', count($selected)) }}. Sin departamento, {{ count($selected) === 1 ? 'queda compartido' : 'quedan compartidos' }}.
+            </p>
+            <x-select label="Departamento dueño" name="bulkOwner" wire:model="bulkOwner" :options="$bulkOwnerOptions" placeholder="Sin dueño (compartidos)" />
+            @error('selected') <p class="text-error text-sm">{{ $message }}</p> @enderror
+            @error('department_id') <p class="text-error text-sm">{{ $message }}</p> @enderror
+
+            <x-slot:actions>
+                <x-button label="Cancelar" @click="$wire.showOwnerModal = false" />
+                <x-button label="Asignar" type="submit" icon="o-check" class="btn-primary" spinner="assignOwner" data-testid="confirm-assign-owner" />
+            </x-slot:actions>
+        </x-form>
+    </x-modal>
+
+    {{-- Los atributos que no son de x-drawer caen en su panel (la x-card): ahí van la semántica de diálogo y el título que lo nombra. --}}
+    <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="blocks-drawer-title">
+        @if ($blocksRoom !== null)
+            @include('facilities::rooms.blocks-panel')
+        @endif
+    </x-drawer>
+</div>

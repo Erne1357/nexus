@@ -1,0 +1,168 @@
+<?php
+
+namespace App\Modules\AcademicLoad\Exports;
+
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Queries\PublishedGroup;
+use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
+use App\Modules\AcademicLoad\Queries\PublishedWeek;
+use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Support\WeekTime;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Common\Entity\Style\Style;
+use OpenSpout\Writer\XLSX\Writer;
+
+/**
+ * El Excel de todo lo publicado de una modalidad y periodo (tarea 4.5; M1): un renglón por sesión de cada grupo (o uno
+ * solo si el grupo no tiene horario), con su departamento, el campus del grupo, materia, grupo, capacidad, docente, carrera dueña, retícula,
+ * semestre, día, horas, tipo, salón, edificio y si el salón es prestado. Solo para el personal con sesión
+ * (`academic_load.load.export`; decisión del usuario del 10 de noviembre de 2026: el Excel completo, para cualquiera
+ * del personal que cubre alguno de los departamentos que publicaron). Se arma con openspout, que ya usa Imports.
+ *
+ * Desde la tarea 8.5, arriba de los encabezados va «Actualizado el …» con la fecha y la hora de la publicación más
+ * reciente, y un renglón vacío para que el filtro de la hoja tome solo la tabla; la última columna, «Cambió», dice en
+ * palabras lo que le cambió al grupo en la última publicación de su carga (la línea de SnapshotDiffText::publicEntries(),
+ * sin cupos), vacía si no cambió. Sin número de versión. Los grupos cancelados no van: la hoja es lo publicado (supuesto
+ * por confirmar).
+ */
+final class CampusWorkbook implements StaffExport
+{
+    public const array HEADER = ['Departamento', 'Campus', 'Clave', 'Materia', 'Grupo', 'Créditos', 'Capacidad', 'Docente', 'Carrera', 'Retícula', 'Semestre', 'Día', 'Inicio', 'Fin', 'Tipo', 'Salón', 'Edificio', 'Préstamo', 'Cambió'];
+
+    /** La forma del archivo, en su llave (como PublishedPdf::FORMAT). 2: la fecha arriba y la columna «Cambió» (tarea 8.5). */
+    public const int FORMAT = 2;
+
+    /**
+     * @param  list<string>  $snapshotIds
+     */
+    public function __construct(
+        public readonly string $termId,
+        public readonly string $modalityId,
+        public readonly string $termCode,
+        public readonly string $modalityCode,
+        public readonly array $snapshotIds,
+        /** @var list<string> los departamentos que publicaron, para el permiso */
+        public readonly array $departmentIds,
+    ) {}
+
+    public static function fromRequest(PublishedScheduleQuery $query, Term $term, Modality $modality, Request $request): ?static
+    {
+        $ids = $query->snapshotIds($term, $modality);
+
+        return $ids === [] ? null : new self($term->getKey(), $modality->getKey(), $term->code, $modality->code, $ids, array_keys($query->departmentsOf($ids)));
+    }
+
+    public static function label(): string
+    {
+        return 'Excel de la modalidad';
+    }
+
+    public function key(): string
+    {
+        return 'excel-'.hash('xxh128', implode('|', [self::FORMAT, $this->termId, $this->modalityId, ...$this->snapshotIds]));
+    }
+
+    public function filename(): string
+    {
+        return "Carga publicada {$this->termCode} {$this->modalityCode}.xlsx";
+    }
+
+    public function mimeType(): string
+    {
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    }
+
+    public static function requiredPermission(): AcademicLoadPermission
+    {
+        return AcademicLoadPermission::LoadExport;
+    }
+
+    public function permission(): AcademicLoadPermission
+    {
+        return self::requiredPermission();
+    }
+
+    public function scope(): Target
+    {
+        return Target::of(modality: $this->modalityId, unit: StaffExports::units($this->departmentIds));
+    }
+
+    public function build(): string
+    {
+        $term = Term::query()->findOrFail($this->termId);
+        $modality = Modality::withTrashed()->findOrFail($this->modalityId);
+        $schedule = app(PublishedScheduleQuery::class)->scheduleOf($term, $modality, $this->snapshotIds);
+        $path = sys_get_temp_dir().'/nexus-'.Str::uuid7().'.xlsx';
+
+        try {
+            $writer = new Writer;
+            $writer->openToFile($path);
+            $writer->getCurrentSheet()->setName("{$this->termCode} {$this->modalityCode}");
+            $updated = PublishedWeek::updatedOn($schedule->updatedAt($schedule->groups()));
+            $writer->addRow(Row::fromValues([$updated === '' ? null : "Actualizado el {$updated}"]));
+            $writer->addRow(Row::fromValues([]));
+            $writer->addRow(Row::fromValuesWithStyle(self::HEADER, (new Style)->withFontBold(true)));
+
+            $profile = $schedule->profile();
+
+            foreach ($schedule->groups() as $group) {
+                foreach (self::rows($group, $schedule->loads[$group->departmentId]['department']['code'] ?? '', $profile->usesRooms, $profile->usesTimeBlocks) as $row) {
+                    $writer->addRow(Row::fromValues($row));
+                }
+            }
+
+            $writer->close();
+
+            return (string) file_get_contents($path);
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    /**
+     * Los renglones de un grupo: uno por sesión, o uno sin horario (también en una modalidad sin bloques de tiempo). En
+     * una modalidad sin salones, las columnas de salón van vacías en lugar de decir «Por asignar». Cada renglón termina
+     * con lo que le cambió al grupo en la última publicación, o vacío.
+     *
+     * @return list<list<string|int|null>>
+     */
+    public static function rows(PublishedGroup $group, string $departmentCode, bool $usesRooms = true, bool $usesTimeBlocks = true): array
+    {
+        $owner = array_find($group->placements, fn (array $placement): bool => $placement['is_owner']) ?? ($group->placements[0] ?? null);
+        $base = [
+            $departmentCode,
+            $group->campus['code'] ?? null,
+            $group->subject['code'],
+            $group->subject['name'],
+            $group->code,
+            $group->subject['credits'],
+            $group->capacity,
+            $group->teacher['name'] ?? 'Por asignar',
+            $owner['career']['code'] ?? null,
+            $owner['study_plan']['code'] ?? null,
+            $owner['semester'] ?? null,
+        ];
+
+        $change = $group->change?->line;
+
+        if ($group->sessions === [] || ! $usesTimeBlocks) {
+            return [[...$base, null, null, null, null, null, null, null, $change]];
+        }
+
+        return array_map(fn ($session): array => [
+            ...$base,
+            ucfirst(WeekTime::day($session->day)),
+            WeekTime::clock($session->startsAt),
+            WeekTime::clock($session->endsAt),
+            $session->kindLabel,
+            $usesRooms ? ($session->room['code'] ?? ($session->kind === 'virtual' ? 'Virtual' : 'Por asignar')) : null,
+            $usesRooms ? ($session->room['building']['name'] ?? null) : null,
+            $usesRooms ? ($session->isLoanedTo($group->departmentId) ? 'Sí' : 'No') : null,
+            $change,
+        ], $group->sessions);
+    }
+}

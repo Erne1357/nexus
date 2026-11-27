@@ -26,3 +26,5 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /public/frankenphp-worker.php
+/.worktrees
+/tests/Browser/Screenshots

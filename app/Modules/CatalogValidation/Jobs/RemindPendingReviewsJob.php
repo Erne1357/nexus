@@ -1,0 +1,41 @@
+<?php
+
+namespace App\Modules\CatalogValidation\Jobs;
+
+use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Queue\Queueable;
+
+/**
+ * «Recordar a todos los pendientes» del tablero de avance (tarea 2.5): avisar a los jefes de varios departamentos
+ * tarda, así que va a la cola (CLAUDE.md, §4.7). Lleva solo ids; la pantalla ya autorizó
+ * (CatalogReviewPolicy::remind) y a quién se recuerda lo decide la lista de departamentos (y Servicios Escolares, CV15)
+ * que le pasó.
+ */
+final class RemindPendingReviewsJob implements ShouldQueue
+{
+    use Queueable;
+
+    /**
+     * @param  list<string>  $departmentIds  ids de departamento y, para Servicios Escolares, ReviewOwner::SCHOOL_SERVICES (CV15)
+     */
+    public function __construct(
+        public readonly string $termId,
+        public readonly string $actorId,
+        public readonly array $departmentIds,
+    ) {}
+
+    public function handle(RemindPendingReviews $remind): void
+    {
+        $term = Term::query()->find($this->termId);
+        $actor = User::query()->find($this->actorId);
+
+        if ($term === null || $actor === null) {
+            return;
+        }
+
+        $remind->handle($term, $actor, $this->departmentIds);
+    }
+}

@@ -1,0 +1,19 @@
+{
+    "feasible": true,
+    "must_schedule": [
+        "g002",
+        "g003",
+        "g004",
+        "g005",
+        "g006",
+        "g007",
+        "g008",
+        "g009",
+        "g010",
+        "g011",
+        "g012"
+    ],
+    "may_leave_unscheduled": [],
+    "max_soft_score": null,
+    "notes": "Dos carreras de Sistemas con un tronco común de Básicas ya fijo (g001, no movible, ocupa r001 y las cohortes de ambos planes), laboratorio r003 que es de otro departamento y solo se usa dentro del préstamo aceptado del día 2, dos instancias de un paquete (g007 y g008, misma cohorte package:k001:C1:1; g007 solo cabe en r002 por capacidad), un docente en dos campus con traslado (t004, con ocupación en C2), un grupo sin docente (g006) y r006, salón ajeno sin préstamo que no se debe usar. Factible."
+}

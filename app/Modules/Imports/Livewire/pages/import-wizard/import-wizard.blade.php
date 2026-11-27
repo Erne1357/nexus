@@ -1,0 +1,406 @@
+@use('App\Modules\Imports\Enums\BatchStatus')
+
+<div>
+    <x-header title="Importaciones" subtitle="Importa una exportación del SII: sube el archivo, revisa cada fila y aplica." separator progress-indicator />
+
+    <x-steps wire:model="step" steps-color="step-primary" stepper-classes="w-full mb-6">
+        <x-step step="1" text="Archivo">
+            @if ($currentStep === 1)
+                <x-card shadow>
+                    @if ($templates === [])
+                        <x-alert
+                            title="Todavía no hay plantillas de importación."
+                            description="Llegan con cada catálogo: Students (tarea 1.4), Academic (1.9), Faculty (1.13) y Facilities (1.15)."
+                            icon="o-information-circle"
+                            class="alert-info"
+                        />
+                    @else
+                        <x-form wire:submit="continue" no-separator>
+                            <div class="grid gap-4 md:grid-cols-2">
+                                <x-select label="Plantilla" name="template" wire:model.live="template" :options="$templates" placeholder="Elige qué importas" />
+
+                                <x-file label="Archivo" name="file" wire:model="file" accept=".xlsx,.csv,.txt" hint="Exportación del SII en .xlsx, .csv o .txt, hasta 19 MB." />
+                            </div>
+
+                            @if ($definition?->requiresCampus())
+                                <div class="md:w-1/2" data-testid="import-campus">
+                                    @if ($campusOptions->count() === 1)
+                                        <p class="text-sm">Campus: <span class="font-medium">{{ $campus->code }} · {{ $campus->name }}</span></p>
+                                    @else
+                                        <x-select
+                                            label="Campus del archivo"
+                                            name="campus"
+                                            wire:model.live="campusCode"
+                                            :options="$campusChoices"
+                                            placeholder="Elige el campus"
+                                            hint="Solo los campus donde puedes importar."
+                                        />
+                                    @endif
+                                </div>
+                            @endif
+
+                            <x-slot:actions>
+                                <x-button label="Continuar" type="submit" icon-right="o-arrow-right" class="btn-primary" spinner="continue" />
+                            </x-slot:actions>
+                        </x-form>
+                    @endif
+                </x-card>
+
+                <x-card title="Lotes recientes" subtitle="Retoma uno para ver su validación o aplicarlo." shadow class="mt-6" separator>
+                    <x-table :headers="[
+                        ['key' => 'created_at', 'label' => 'Subido'],
+                        ['key' => 'original_name', 'label' => 'Archivo'],
+                        ['key' => 'template', 'label' => 'Plantilla'],
+                        ['key' => 'campus', 'label' => 'Campus'],
+                        ['key' => 'status', 'label' => 'Estado'],
+                    ]" :rows="$recent">
+                        @scope('cell_created_at', $recentBatch)
+                            {{ $recentBatch->created_at->format('d/m/Y H:i') }}
+                        @endscope
+
+                        @scope('cell_template', $recentBatch, $templateLabels)
+                            {{ $templateLabels[$recentBatch->template] ?? $recentBatch->template }}
+                        @endscope
+
+                        @scope('cell_campus', $recentBatch)
+                            {{ $recentBatch->campus?->code ?? '—' }}
+                        @endscope
+
+                        @scope('cell_status', $recentBatch, $stalledRecent)
+                            @if (in_array($recentBatch->id, $stalledRecent, true))
+                                <x-core::status-badge tone="warning" label="Atorado" icon="o-exclamation-triangle" />
+                            @else
+                                <x-core::status-badge :tone="$recentBatch->status->tone()" :label="$recentBatch->status->label()" :icon="$recentBatch->status->icon()" />
+                            @endif
+                        @endscope
+
+                        @scope('actions', $recentBatch)
+                            <x-button
+                                label="Ver"
+                                wire:click="open('{{ $recentBatch->id }}')"
+                                spinner="open('{{ $recentBatch->id }}')"
+                                class="btn-ghost btn-sm"
+                                data-testid="open-batch-{{ $recentBatch->id }}"
+                            />
+                        @endscope
+
+                        <x-slot:empty>
+                            <x-icon name="o-arrow-up-tray" label="Todavía no se ha importado ningún archivo." />
+                        </x-slot:empty>
+                    </x-table>
+                </x-card>
+            @endif
+        </x-step>
+
+        <x-step step="2" text="Columnas">
+            @if ($currentStep === 2 && $definition)
+                <x-card shadow>
+                    <x-form wire:submit="uploadBatch" no-separator>
+                        <p class="text-sm">
+                            <span class="font-medium">{{ $definition->label() }}</span>
+                            desde <span class="font-medium">{{ $file?->getClientOriginalName() }}</span>
+                            @if ($definition->requiresCampus() && $campus)
+                                · Campus <span class="font-medium" data-testid="import-campus-chosen">{{ $campus->code }} · {{ $campus->name }}</span>
+                            @endif
+                        </p>
+
+                        <x-select
+                            label="Mapeo de columnas"
+                            name="mappingId"
+                            wire:model.live="mappingId"
+                            :options="$mappings"
+                            hint="Por nombre reconoce las columnas que se llaman como el campo, sin importar mayúsculas ni acentos."
+                        />
+
+                        @if ($absentColumns !== [])
+                            <x-alert
+                                :title="'El mapeo «'.$selectedMapping->name.'» espera columnas que el archivo no trae: '.implode(', ', $absentColumns).'.'"
+                                description="Sus campos se quedan sin datos. Si el SII cambió la exportación, ajusta las columnas y guárdalas como un mapeo nuevo."
+                                icon="o-exclamation-triangle"
+                                class="alert-warning"
+                            />
+                        @endif
+
+                        <div class="overflow-x-auto">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Campo de Nexus</th>
+                                        <th>Columna del archivo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($definition->fields() as $field => $label)
+                                        <tr wire:key="field-{{ $field }}">
+                                            <td>
+                                                {{ $label }}
+                                                @if (in_array($field, $definition->naturalKey(), true))
+                                                    <x-badge value="Clave" class="badge-primary badge-soft badge-sm" />
+                                                @endif
+                                            </td>
+                                            <td>
+                                                <x-select
+                                                    wire:model="assignments.{{ $field }}"
+                                                    :options="$columnOptions"
+                                                    aria-label="Columna para {{ $label }}"
+                                                    data-testid="column-{{ $field }}"
+                                                />
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @error('assignments')
+                            <x-alert :title="$message" icon="o-x-circle" class="alert-error" />
+                        @enderror
+
+                        <x-input
+                            label="Nombre del mapeo"
+                            name="mappingName"
+                            wire:model="mappingName"
+                            placeholder="Por ejemplo: Exportación de escolares 2026"
+                            hint="Solo si cambias la propuesta: se guarda para importar así la próxima vez."
+                        />
+
+                        @foreach (['template', 'file', 'campus', 'mapping'] as $key)
+                            @error($key)
+                                <x-alert :title="$message" icon="o-x-circle" class="alert-error" />
+                            @enderror
+                        @endforeach
+
+                        <x-slot:actions>
+                            <x-button label="Volver" icon="o-arrow-left" wire:click="back" />
+                            <x-button label="Validar el archivo" type="submit" icon="o-check" class="btn-primary" spinner="uploadBatch" />
+                        </x-slot:actions>
+                    </x-form>
+                </x-card>
+            @endif
+        </x-step>
+
+        <x-step step="3" text="Validación" />
+        <x-step step="4" text="Aplicación" />
+    </x-steps>
+
+    @if ($batch)
+        <div @if ($polling) wire:poll.2s @endif data-testid="batch-status">
+            <x-card :title="$batch->original_name" :subtitle="$batchTemplate" shadow separator>
+                <x-slot:menu>
+                    @if ($stalled)
+                        <x-core::status-badge tone="warning" label="Atorado" icon="o-exclamation-triangle" />
+                    @else
+                        <x-core::status-badge :tone="$batch->status->tone()" :label="$batch->status->label()" :icon="$batch->status->icon()" />
+                    @endif
+                </x-slot:menu>
+
+                @if ($stalled)
+                    <x-alert :title="$stalledNotice['title']" :description="$stalledNotice['description']" icon="o-exclamation-triangle" class="alert-warning" data-testid="batch-stalled" />
+                @elseif ($batch->status === BatchStatus::Uploaded)
+                    <x-progress class="progress-info h-1" indeterminate />
+                    <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <p class="text-sm">En la cola: la validación empieza en cuanto se libere el proceso.</p>
+                        <x-button
+                            label="Validar de nuevo"
+                            icon="o-arrow-path"
+                            class="btn-ghost btn-sm"
+                            wire:click="requeue"
+                            spinner="requeue"
+                            tooltip-left="Si lleva mucho en la cola o la cola no respondió al subirlo."
+                        />
+                    </div>
+                @elseif ($batch->status === BatchStatus::Validating)
+                    <x-progress class="progress-info h-1" indeterminate />
+                    <p class="mt-3 text-sm">Validando… {{ number_format($batch->processed_rows) }} filas leídas.</p>
+                @elseif ($batch->status === BatchStatus::Applying)
+                    <x-progress class="progress-primary h-1" :value="$batch->processed_rows" :max="max($batch->valid_rows, 1)" />
+                    <p class="mt-3 text-sm">Aplicando… {{ number_format($batch->processed_rows) }} de {{ number_format($batch->valid_rows) }} filas.</p>
+                @elseif ($batch->status === BatchStatus::Failed)
+                    <x-alert :title="$batch->failure_reason" icon="o-x-circle" class="alert-error" />
+                @endif
+
+                @if ($applyQueued)
+                    <x-progress class="progress-primary h-1" indeterminate />
+                    <p class="mt-3 mb-4 text-sm">En la cola: la aplicación empieza en cuanto se libere el proceso.</p>
+                @endif
+
+                @if ($currentStep === 3 && $batch->status === BatchStatus::Validated)
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <x-stat title="Filas" :value="number_format($batch->total_rows)" icon="o-table-cells" />
+                        <x-stat title="Válidas" :value="number_format($batch->valid_rows)" icon="o-check-circle" />
+                        <x-stat title="Con advertencia" :value="number_format($warningRows)" icon="o-exclamation-triangle" />
+                        <x-stat title="Con error" :value="number_format($batch->error_rows)" icon="o-x-circle" />
+                    </div>
+
+                    @if ($missing !== null)
+                        {{-- Con wire:key propio: sin él, Livewire transforma esta tabla en la de desactivados del paso 4 y el x-table de MaryUI se reinicia sin su x-ref de encabezados. --}}
+                        <div class="mt-6 space-y-3 border-t border-base-300 pt-4" wire:key="missing-records" data-testid="missing-records">
+                            @if ($missing['missing'] === 0)
+                                <p class="text-sm text-base-content/70">Todos los registros activos de {{ $missingScope }} vienen en el archivo.</p>
+                            @else
+                                <p class="text-sm">{{ number_format($missing['missing']) }} de {{ number_format($missing['active']) }} registros activos de {{ $missingScope }} {{ $missing['missing'] === 1 ? 'no viene' : 'no vienen' }} en el archivo.</p>
+
+                                <x-toggle
+                                    label="Desactivar los que no vienen en el archivo"
+                                    wire:model.live="deactivateMissing"
+                                    hint="Se marcan como inactivos, no se borran; se reactivan a mano en el catálogo."
+                                    data-testid="deactivate-missing"
+                                />
+
+                                @if ($missingRows !== null)
+                                    @include('imports::import-wizard.records', ['records' => $missingRows])
+                                @endif
+                            @endif
+                        </div>
+                    @endif
+                @elseif ($applied !== null)
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <x-stat title="Altas" :value="number_format($applied['created'])" icon="o-plus-circle" />
+                        <x-stat title="Cambios" :value="number_format($applied['updated'])" icon="o-pencil-square" />
+                        <x-stat title="Sin cambios" :value="number_format($applied['unchanged'])" icon="o-minus-circle" />
+                        <x-stat title="Con error, sin aplicar" :value="number_format($applied['skipped'])" icon="o-x-circle" />
+                    </div>
+
+                    @if ($deactivatedRows !== null)
+                        <div class="mt-6 border-t border-base-300 pt-4" wire:key="deactivated-records" data-testid="deactivated-records">
+                            @if ($applied['deactivated'] === 0)
+                                <p class="text-sm text-base-content/70">No se desactivó ningún registro.</p>
+                            @else
+                                <p class="text-sm font-medium">{{ $applied['deactivated'] === 1 ? '1 registro desactivado' : number_format($applied['deactivated']).' registros desactivados' }} por no venir en el archivo</p>
+                                @include('imports::import-wizard.records', ['records' => $deactivatedRows])
+                            @endif
+                        </div>
+                    @endif
+                @endif
+
+                @if ($summary !== [])
+                    <div class="mt-6 border-t border-base-300 pt-4" wire:key="batch-summary" data-testid="batch-summary">
+                        <h3 class="font-semibold">Resumen de {{ mb_strtolower($batchTemplate) }}</h3>
+                        <dl class="mt-2 divide-y divide-base-300">
+                            @foreach ($summary as $group)
+                                <div wire:key="summary-{{ $loop->index }}" class="grid gap-x-4 gap-y-1 py-2 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+                                    <dt class="flex items-baseline gap-2">
+                                        <span class="font-mono font-semibold tabular-nums">{{ number_format($group['count']) }}</span>
+                                        <span>{{ $group['label'] }}</span>
+                                    </dt>
+                                    <dd class="min-w-0 text-sm text-neutral">
+                                        @if ($group['keys'] !== [])
+                                            <span class="break-words font-mono text-base-content">{{ implode(', ', $group['keys']) }}</span>@if ($group['count'] > count($group['keys'])) <span>y {{ number_format($group['count'] - count($group['keys'])) }} más</span>@endif
+                                        @endif
+                                        @if ($group['hint'] !== null)
+                                            <span class="block">{{ $group['hint'] }}</span>
+                                        @endif
+                                    </dd>
+                                </div>
+                            @endforeach
+                        </dl>
+                    </div>
+                @endif
+
+                @if ($issueRows !== null)
+                    <div class="mt-6 flex flex-wrap items-end justify-between gap-4">
+                        <x-select label="Filas" wire:model.live="issues" :options="$issueKinds" class="w-56" />
+
+                        @if ($errorRows === 0)
+                            <span class="text-sm text-base-content/70">Ninguna fila trae error.</span>
+                        @elseif ($errorsReady)
+                            <x-button
+                                label="Descargar errores"
+                                icon="o-arrow-down-tray"
+                                :link="route('imports.batch-errors', $batch->id)"
+                                external
+                                no-wire-navigate
+                                class="btn-outline"
+                                tooltip-left="Las filas con error como vinieron, para corregirlas y volver a subir el archivo."
+                            />
+                        @elseif ($errorsLost)
+                            <span class="text-sm text-base-content/70">No se pudo preparar el archivo de errores. Avisa al equipo de Nexus.</span>
+                        @else
+                            <span class="text-sm text-base-content/70">Preparando el archivo de errores…</span>
+                        @endif
+                    </div>
+
+                    <x-table
+                        :headers="[
+                            ['key' => 'row_number', 'label' => 'Fila', 'class' => 'w-24'],
+                            ['key' => 'key', 'label' => 'Clave', 'sortable' => false],
+                            ['key' => 'messages', 'label' => 'Mensajes', 'sortable' => false],
+                        ]"
+                        :rows="$issueRows"
+                        with-pagination
+                        class="mt-2"
+                    >
+                        @scope('cell_row_number', $row)
+                            Fila {{ $row->row_number }}
+                        @endscope
+
+                        @scope('cell_key', $row, $batchKey)
+                            {{ implode(' · ', array_map(fn (string $field): string => is_scalar($value = $row->normalized[$field] ?? '—') ? (string) $value : json_encode($value), $batchKey)) }}
+                        @endscope
+
+                        @scope('cell_messages', $row, $batchFields)
+                            <ul class="space-y-1">
+                                @foreach ($row->errors as $field => $messages)
+                                    <li class="flex items-start gap-2">
+                                        <x-core::status-badge tone="error" label="Error" class="shrink-0" />
+                                        <span>{{ $batchFields[$field] ?? $field }}: {{ implode(' ', $messages) }}</span>
+                                    </li>
+                                @endforeach
+                                @foreach ($row->warnings as $field => $messages)
+                                    <li class="flex items-start gap-2">
+                                        <x-core::status-badge tone="warning" label="Advertencia" icon="o-exclamation-triangle" class="shrink-0" />
+                                        <span>{{ $batchFields[$field] ?? $field }}: {{ implode(' ', $messages) }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endscope
+
+                        <x-slot:empty>
+                            <x-icon name="o-check-circle" label="Ninguna fila en esta lista." />
+                        </x-slot:empty>
+                    </x-table>
+                @endif
+
+                {{-- Con wrap: a 390 px «Aplicar … y desactivar …» no cabe junto a «Importar otro archivo». --}}
+                <x-slot:actions class="flex-wrap">
+                    <x-button label="Importar otro archivo" icon="o-arrow-up-tray" wire:click="startOver" />
+
+                    @if ($stalledNotice['action'] ?? null)
+                        <x-button
+                            :label="$stalledNotice['action']['label']"
+                            :icon="$stalledNotice['action']['icon']"
+                            class="btn-primary"
+                            wire:click="retryStalled"
+                            spinner="retryStalled"
+                            x-confirm="{{ $stalledNotice['action']['message'] }}"
+                            data-confirm-title="{{ $stalledNotice['action']['title'] }}"
+                            data-confirm-button="{{ $stalledNotice['action']['label'] }}"
+                            data-confirm-tone="{{ $stalledNotice['action']['tone'] }}"
+                            data-testid="retry-stalled"
+                        />
+                    @endif
+
+                    @if ($currentStep === 3 && $batch->status === BatchStatus::Validated && ! $applyQueued)
+                        @if ($batch->valid_rows > 0)
+                            <x-button
+                                :label="($batch->valid_rows === 1 ? 'Aplicar 1 fila' : 'Aplicar '.number_format($batch->valid_rows).' filas').($deactivating ? ' y desactivar '.number_format($missing['missing']) : '')"
+                                icon="o-check"
+                                class="btn-primary"
+                                wire:click="{{ $deactivating ? 'apply('.$missing['missing'].')' : 'apply' }}"
+                                spinner="apply"
+                                x-confirm="{{ $batch->valid_rows === 1 ? 'Se escribirá 1 fila' : 'Se escribirán '.number_format($batch->valid_rows).' filas' }} en {{ $batchTemplate }}.{{ $batch->error_rows > 0 ? ' Las '.number_format($batch->error_rows).' filas con error se saltan.' : '' }}{{ ! $deactivating ? '' : ($missing['missing'] === 1 ? ' Se desactivará 1 registro que no viene en el archivo; no se borra y se reactiva a mano en el catálogo.' : ' Se desactivarán '.number_format($missing['missing']).' registros que no vienen en el archivo; no se borran y se reactivan a mano en el catálogo.') }}"
+                                data-confirm-title="¿{{ ($batch->valid_rows === 1 ? 'Aplicar 1 fila' : 'Aplicar '.number_format($batch->valid_rows).' filas').($deactivating ? ' y desactivar '.number_format($missing['missing']) : '') }}?"
+                                data-confirm-button="Aplicar"
+                                data-confirm-tone="{{ $deactivating ? 'error' : 'warning' }}"
+                            />
+                        @else
+                            <span class="tooltip tooltip-left" data-tip="No hay filas válidas que aplicar.">
+                                <x-button label="Aplicar" icon="o-check" class="btn-primary" disabled />
+                            </span>
+                        @endif
+                    @endif
+                </x-slot:actions>
+            </x-card>
+        </div>
+    @endif
+</div>

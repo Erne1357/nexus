@@ -1,0 +1,159 @@
+<?php
+
+namespace App\Modules\Core\Actions;
+
+use App\Modules\Core\Authorization\AcademicLoadVisibility;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\TermSlot;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\NexusNotification;
+use App\Modules\Core\Notifications\NotificationMessage;
+use App\Modules\Core\Notifications\NotificationTarget;
+use App\Modules\Core\Queries\KeyLookup;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Routing\Exceptions\UrlGenerationException;
+
+/**
+ * Abre una notificación desde la campana (tarea 2.9): la marca leída y da a dónde lleva. Si su destino ya no
+ * está disponible para el usuario (lo decide su clase, NexusNotification::unavailableReason, o la ruta ya no
+ * acepta sus parámetros), da el motivo en lugar de la dirección, para que la campana lo avise. Si el aviso es
+ * de una modalidad (los de la carga, MS14), la pantalla se abre en ella (`?modalidad=<clave>`); si es de un campus, en
+ * ese campus (`?campus=<código>`, #415: la credencial ya no lo elige); y la credencial queda en el periodo del aviso
+ * (SetActiveContext), también si no es de una modalidad ni de un campus (la validación de catálogos, tarea 1.21), para
+ * que la pantalla muestre lo que dice el aviso. Si el usuario ya no trabaja en esa modalidad o
+ * ese campus, tampoco lo lleva. Solo abre notificaciones del usuario, que es el de la
+ * sesión: la credencial que cambia es la suya.
+ *
+ * Si el aviso es de un puesto (`data.role`; sin él o con uno que ya no existe, se abre con el perfil activo) que el usuario tiene y no es el activo, todo lo anterior se decide
+ * con ese puesto (Actor::asRole(), sin tocar la sesión) y, solo si se puede abrir, cambia a ese perfil
+ * (SwitchRole) antes de mover el periodo, para que el destino se vea con su alcance; si no se puede, la sesión
+ * se queda como estaba. Si ya no tiene el puesto, se decide con ese puesto igual (AZ-S8): sin roles, el aviso
+ * no está disponible, aunque el perfil activo sea otro (el de Administración cubre todo).
+ *
+ * Un aviso que lleva a una pantalla de la carga académica no está disponible si esa pantalla está cerrada para el usuario
+ * con el puesto del aviso: la carga oculta (MN-05) o, al jefe y al JPD, fuera de la etapa de su carga (MN-06). La campana
+ * lo dice en lugar de llevarlo a un 403.
+ */
+final class OpenNotification
+{
+    public function __construct(
+        private readonly Actor $context,
+        private readonly SetActiveContext $setActiveContext,
+        private readonly SwitchRole $switchRole,
+        private readonly AcademicLoadVisibility $visibility,
+    ) {}
+
+    /**
+     * @throws AuthorizationException si la notificación no es del usuario o él no es el de la sesión
+     */
+    public function handle(User $user, string $notificationId): NotificationTarget
+    {
+        if (! $this->context->user()?->is($user)) {
+            throw new AuthorizationException('Solo puedes abrir tus notificaciones.');
+        }
+
+        $notification = KeyLookup::find($user->notifications()->getQuery(), $notificationId);
+
+        if (! $notification instanceof DatabaseNotification) {
+            throw new AuthorizationException('Esa notificación no es tuya.');
+        }
+
+        $notification->markAsRead();
+
+        $message = NotificationMessage::fromArray($notification->data);
+        $type = is_subclass_of($notification->type, NexusNotification::class) ? $notification->type : NexusNotification::class;
+        $addressed = $message->role;
+        $role = $this->roleToSwitchTo($addressed);
+        $context = $addressed === null ? $this->context : $this->context->asRole($addressed);
+
+        // La etapa del jefe (MN-06) es la del periodo del aviso, que queda en su credencial al abrirlo.
+        $noticeTerm = $message->termId === null ? null : KeyLookup::find(Term::query(), $message->termId);
+        // Sin periodo (o uno que ya no existe) cuenta el periodo de carga de la sesión, como en la campana: el contexto de
+        // otro puesto (asRole) no trae sesión y caería al periodo vigente.
+        $stageTerm = $noticeTerm ?? $this->context->loadTerm();
+
+        if (AcademicLoadVisibility::isLoadRoute($message->route) && $this->visibility->closesFor($context, $message->route, $stageTerm)) {
+            return NotificationTarget::unavailable('La carga académica no está disponible por ahora.');
+        }
+
+        $problem = $type::unavailableReason($context, $message);
+
+        if ($problem !== null) {
+            return NotificationTarget::unavailable($problem);
+        }
+
+        $campus = null;
+        $modality = null;
+        $term = null;
+
+        if ($message->modalityId !== null) {
+            $modality = KeyLookup::find(Modality::query(), $message->modalityId);
+
+            if (! $modality instanceof Modality || ! $context->modalities()->contains($modality)) {
+                return NotificationTarget::unavailable('Ya no trabajas en la modalidad de ese aviso.');
+            }
+        }
+
+        if ($message->campusId !== null) {
+            $campus = KeyLookup::find(Campus::query(), $message->campusId);
+
+            if (! $campus instanceof Campus || ! $context->campuses()->contains($campus)) {
+                return NotificationTarget::unavailable('Ya no trabajas en el campus de ese aviso.');
+            }
+        }
+
+        if ($message->termId !== null || $modality !== null || $campus !== null) {
+            $term = $message->termId === null ? $this->context->loadTerm() : $noticeTerm;
+
+            if (! $term instanceof Term) {
+                return NotificationTarget::unavailable('El periodo de ese aviso ya no existe.');
+            }
+        }
+
+        try {
+            // Un parámetro `modalidad` o `campus` guardado en el aviso (el de una ruta que lo lleva en su camino) gana.
+            $url = route($message->route, $message->parameters + array_filter(['modalidad' => $modality?->code, 'campus' => $campus?->code]));
+        } catch (UrlGenerationException) {
+            return NotificationTarget::unavailable('Esa pantalla no está disponible.');
+        }
+
+        if ($role !== null) {
+            $this->switchRole->handle($role);
+        }
+
+        if ($term !== null) {
+            $this->moveTerm($term);
+        }
+
+        return NotificationTarget::to($url, switchedRole: $role !== null);
+    }
+
+    /**
+     * El perfil al que hay que cambiar para abrir un aviso del puesto `$addressed` (null si no es de un puesto): ese
+     * puesto si el usuario lo tiene y no es el activo; si no, ninguno.
+     */
+    private function roleToSwitchTo(?Role $addressed): ?Role
+    {
+        if ($addressed === null) {
+            return null;
+        }
+
+        return $this->context->activeRole() !== $addressed && in_array($addressed, $this->context->heldRoles(), true) ? $addressed : null;
+    }
+
+    /**
+     * Deja el periodo de carga de la credencial en el periodo del aviso (los avisos son de la carga). El periodo vigente
+     * se deja como el de omisión, igual que en el selector de la credencial. Si ya está ahí, no la toca (cambiarla olvida las últimas pantallas del menú).
+     */
+    private function moveTerm(Term $term): void
+    {
+        if (! $term->is($this->context->loadTerm())) {
+            $this->setActiveContext->handle($term->is_current ? null : $term, TermSlot::Load);
+        }
+    }
+}

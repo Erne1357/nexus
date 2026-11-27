@@ -1,0 +1,250 @@
+<?php
+
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Specialty;
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\User;
+use App\Modules\Imports\Templates\ImportContext;
+use App\Modules\Imports\Templates\StudentsTemplate;
+use App\Modules\Imports\Templates\TemplateRegistry;
+use App\Modules\Students\Enums\StudentStatus;
+use App\Modules\Students\Jobs\RecomputeStudentProgress;
+use App\Modules\Students\Models\Student;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
+
+/*
+| Plantilla `students` (tarea 1.4): alumnos del SII por número de control, con su carrera, su plan (de esa
+| carrera) y su campus, que vienen en el archivo. Un estatus que Nexus no conoce no detiene la importación:
+| el alumno entra sin estatus y con advertencia (confirmado el 29 de octubre de 2026). Al terminar el lote se
+| recalcula el progreso.
+*/
+
+beforeEach(function () {
+    $this->career = Career::factory()->create(['code' => 'ISIC']);
+    $this->plan = StudyPlan::factory()->for($this->career)->create(['code' => 'ISIC-2010-224']);
+    $this->c2 = Campus::factory()->create(['code' => 'C2']);
+    $this->context = new ImportContext(User::factory()->admin()->create());
+    $this->template = new StudentsTemplate;
+});
+
+/**
+ * Una fila normalizada de alumno, con lo que se le cambie.
+ *
+ * @param  array<string, mixed>  $changes
+ * @return array<string, mixed>
+ */
+function studentRow(array $changes = []): array
+{
+    return (new StudentsTemplate)->normalize([
+        'control_number' => '19111234',
+        'name' => 'Ana López',
+        'career' => 'ISIC',
+        'study_plan' => 'ISIC-2010-224',
+        'campus' => 'C2',
+        'semester' => 3,
+        'status' => 'activo',
+        ...$changes,
+    ]);
+}
+
+it('está registrada en Imports con su clave y su nombre', function () {
+    expect(app(TemplateRegistry::class)->get('students'))
+        ->toBeInstanceOf(StudentsTemplate::class)
+        ->label()->toBe('Alumnos');
+});
+
+it('una fila con carrera, plan de esa carrera y campus que existen no trae errores', function () {
+    $issues = $this->template->validate(studentRow(), $this->context);
+
+    expect($issues->errors)->toBe([])->and($issues->warnings)->toBe([]);
+});
+
+it('revisa contra la base la carrera, el plan y el campus', function (array $changes, string $field, string $message) {
+    StudyPlan::factory()->create(['code' => 'IIND-2010-227']);
+
+    expect($this->template->validate(studentRow($changes), $this->context)->errors)->toBe([$field => [$message]]);
+})->with([
+    'carrera que no existe' => [['career' => 'XYZ'], 'career', 'No hay una carrera con la clave XYZ.'],
+    'plan que no existe' => [['study_plan' => 'P-1'], 'study_plan', 'No hay un plan con la clave P-1.'],
+    'plan de otra carrera' => [['study_plan' => 'IIND-2010-227'], 'study_plan', 'El plan IIND-2010-227 no es de la carrera ISIC.'],
+    'campus que no existe' => [['campus' => 'C9'], 'campus', 'No hay un campus con la clave C9.'],
+]);
+
+it('un estatus que Nexus no conoce es advertencia: el alumno queda sin estatus, también si ya tenía uno', function (bool $existing) {
+    if ($existing) {
+        $this->template->apply(studentRow(), $this->context);
+    }
+    $row = studentRow(['status' => 'SUSPENDIDO']);
+
+    $issues = $this->template->validate($row, $this->context);
+    $student = $this->template->apply($row, $this->context);
+
+    expect($issues->errors)->toBe([])
+        ->and($issues->warnings)->toBe(['status' => ['El estatus «SUSPENDIDO» no está en Nexus: el alumno queda sin estatus.']])
+        ->and($student->fresh()->status)->toBeNull()
+        ->and(Student::count())->toBe(1);
+})->with(['alta' => false, 'cambio' => true]);
+
+it('no ofrece desactivar faltantes: un archivo suele ser de un campus y el número de control es de todo el Tec', function () {
+    expect($this->template->deactivatesMissing())->toBeFalse();
+});
+
+it('busca cada carrera, plan y campus una sola vez por corrida', function () {
+    DB::enableQueryLog();
+
+    foreach (['19111234', '19111235', '19111236'] as $number) {
+        $row = studentRow(['control_number' => $number]);
+        $this->template->validate($row, $this->context);
+        $this->template->apply($row, $this->context);
+    }
+
+    $lookups = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => preg_match('/from "(careers|study_plans|campuses)"/', $sql) === 1);
+
+    expect($lookups)->toHaveCount(3);
+});
+
+it('da de alta y actualiza por número de control, con la carrera, el plan y el campus de la base', function () {
+    $created = $this->template->apply(studentRow(), $this->context);
+    $updated = $this->template->apply(studentRow(['name' => 'Ana María López', 'semester' => 4, 'status' => 'baja temporal']), $this->context);
+
+    expect(Student::count())->toBe(1)
+        ->and($updated->is($created))->toBeTrue()
+        ->and($updated->fresh())
+        ->name->toBe('Ana María López')
+        ->career_id->toBe($this->career->id)
+        ->study_plan_id->toBe($this->plan->id)
+        ->campus_id->toBe($this->c2->id)
+        ->current_semester->toBe(4)
+        ->status->toBe(StudentStatus::BajaTemporal);
+});
+
+it('al terminar el lote despacha el recálculo del progreso', function () {
+    Queue::fake();
+
+    $this->template->afterApply($this->context);
+
+    Queue::assertPushed(RecomputeStudentProgress::class);
+});
+
+it('guarda la modalidad y el motivo del SII, y un cambio no los pisa con vacío', function () {
+    $row = studentRow(['modality' => 'A distancia', 'status_reason' => 'bt1']);
+
+    expect($this->template->validate($row, $this->context)->errors)->toBe([]);
+    $this->template->apply($row, $this->context);
+    $this->template->apply(studentRow(), $this->context);
+
+    expect(Student::query()->where('control_number', '19111234')->firstOrFail())
+        ->modality->code->toBe('EAD')
+        ->status_reason->toBe('BT1');
+});
+
+it('MS7: Presencial, A distancia, EAD y Mixta se importan como PRES, EAD, EAD y EAD, y el vacío como PRES', function () {
+    $codes = collect(['Presencial', 'A distancia', 'EAD', 'Mixta', null])->map(function (?string $text, int $i): string {
+        $row = studentRow(['control_number' => (string) (100 + $i), 'modality' => $text]);
+
+        expect($this->template->validate($row, $this->context)->errors)->toBe([]);
+
+        return $this->template->apply($row, $this->context)->modality->code;
+    })->all();
+
+    expect($codes)->toBe(['PRES', 'EAD', 'EAD', 'EAD', 'PRES']);
+});
+
+it('una modalidad que Nexus no conoce o un motivo demasiado largo son error', function () {
+    expect($this->template->validate(studentRow(['modality' => 'Híbrida']), $this->context)->errors)->toHaveKey('modality')
+        ->and($this->template->validate(studentRow(['status_reason' => 'ABCDEFGHIJK']), $this->context)->errors)->toHaveKey('status_reason');
+});
+
+it('MS7: una modalidad que Nexus no conoce es error de la fila y dice el texto del archivo', function () {
+    expect($this->template->validate(studentRow(['modality' => 'Híbrida']), $this->context)->errors['modality'] ?? [])
+        ->toBe(['La modalidad «Híbrida» no está en Nexus: usa presencial, a distancia, EAD o mixta.']);
+});
+
+it('MS7: una modalidad borrada del catálogo es error de la fila, también la Presencial que toma un alta sin modalidad', function () {
+    modalityOf('EAD')->delete();
+
+    expect($this->template->validate(studentRow(['modality' => 'Mixta']), $this->context)->errors['modality'] ?? [])
+        ->toBe(['La modalidad EAD está borrada en Nexus.']);
+
+    modalityOf('PRES')->delete();
+
+    expect($this->template->validate(studentRow(), $this->context)->errors['modality'] ?? [])
+        ->toBe(['La modalidad PRES está borrada en Nexus.']);
+});
+
+it('el alumno que el archivo marca inactivo nace inactivo y el vacío lo deja activo', function () {
+    $inactive = $this->template->apply(studentRow(['control_number' => '1', 'active' => 'No']), $this->context);
+    $unmarked = $this->template->apply(studentRow(['control_number' => '2']), $this->context);
+
+    expect($inactive->fresh()->is_active)->toBeFalse()
+        ->and($unmarked->fresh()->is_active)->toBeTrue();
+});
+
+it('un cambio no reactiva ni desactiva y avisa si el archivo no coincide', function () {
+    Student::factory()->create(['control_number' => '19111234', 'is_active' => true]);
+
+    $issues = $this->template->validate(studentRow(['active' => 'No']), $this->context);
+    $student = $this->template->apply(studentRow(['active' => 'No']), $this->context);
+
+    expect($issues->warnings)->toHaveKey('active')
+        ->and($student->fresh()->is_active)->toBeTrue()
+        ->and($this->template->validate(studentRow(['active' => 'tal vez']), $this->context)->errors)->toHaveKey('active');
+});
+
+it('advierte solo de los alumnos existentes y activos al validar varias filas, sin guardar modelos', function () {
+    Student::factory()->create(['control_number' => '19111001', 'is_active' => true]);
+    Student::factory()->create(['control_number' => '19111002', 'is_active' => false]);
+
+    $warns = fn (string $number): bool => $this->template
+        ->validate(studentRow(['control_number' => $number, 'active' => 'No']), $this->context)->warnings !== []
+        && array_key_exists('active', $this->template->validate(studentRow(['control_number' => $number, 'active' => 'No']), $this->context)->warnings);
+
+    expect($warns('19111001'))->toBeTrue()
+        ->and($warns('19111002'))->toBeFalse()
+        ->and($warns('19119999'))->toBeFalse()
+        ->and($warns('19111001'))->toBeTrue();
+});
+
+it('guarda la especialidad que el SII asignó al alumno, buscada por su clave en el plan (1.69)', function () {
+    $specialty = Specialty::factory()->for($this->plan)->create(['code' => 'LARU']);
+    $row = studentRow(['specialty' => 'LARU']);
+
+    expect($this->template->validate($row, $this->context)->warnings)->toBe([])
+        ->and($this->template->apply($row, $this->context)->specialty_id)->toBe($specialty->id);
+});
+
+it('una especialidad que el plan no tiene deja un aviso y el alumno sin ella; un cambio no la pisa con vacío (1.69)', function () {
+    $specialty = Specialty::factory()->for($this->plan)->create(['code' => 'LARU']);
+    $student = $this->template->apply(studentRow(['specialty' => 'LARU']), $this->context);
+
+    $row = studentRow(['specialty' => 'NOEXISTE']);
+
+    expect($this->template->validate($row, $this->context)->warnings)->toHaveKey('specialty')
+        ->and($this->template->apply($row, $this->context)->specialty_id)->toBe($specialty->id)
+        ->and($student->specialty_id)->toBe($specialty->id);
+});
+
+it('si el alumno cambia de plan, su especialidad vieja se limpia y la fila se guarda (1.69)', function () {
+    $old = Specialty::factory()->for($this->plan)->create(['code' => 'LARU']);
+    $student = $this->template->apply(studentRow(['specialty' => 'LARU']), $this->context);
+    $newPlan = StudyPlan::factory()->for($this->career)->create(['code' => 'ISIC-2020-300']);
+
+    $moved = $this->template->apply(studentRow(['study_plan' => 'ISIC-2020-300']), $this->context);
+
+    expect($student->specialty_id)->toBe($old->id)
+        ->and($moved->fresh()->study_plan_id)->toBe($newPlan->id)
+        ->and($moved->fresh()->specialty_id)->toBeNull();
+});
+
+it('si el alumno cambia de plan y el archivo trae una especialidad del plan nuevo, la guarda (1.69)', function () {
+    Specialty::factory()->for($this->plan)->create(['code' => 'LARU']);
+    $this->template->apply(studentRow(['specialty' => 'LARU']), $this->context);
+    $newPlan = StudyPlan::factory()->for($this->career)->create(['code' => 'ISIC-2020-300']);
+    $fresh = Specialty::factory()->for($newPlan)->create(['code' => 'NUEVA']);
+
+    $moved = $this->template->apply(studentRow(['study_plan' => 'ISIC-2020-300', 'specialty' => 'NUEVA']), $this->context);
+
+    expect($moved->fresh()->specialty_id)->toBe($fresh->id);
+});

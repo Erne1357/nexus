@@ -1,9 +1,352 @@
 @import 'tailwindcss';
 
+/* Solo los temas de Nexus (abajo); sin los de daisyUI. */
+@plugin 'daisyui' {
+    themes: false;
+}
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
+@source '../../app/Modules';
+@source '../../vendor/robsontenorio/mary/src/View/Components/**/*.php';
 
+/*
+| Tipografía y movimiento (DESIGN.md, "Typography" y "Movimiento"). Las fuentes las descarga y versiona
+| el plugin de fuentes de Vite (vite.config.js) y la directiva @fonts de los layouts declara su
+| @font-face; sin @fonts, el navegador cae en la fuente del sistema.
+*/
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+        'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-mono: 'Atkinson Hyperlegible Mono', ui-monospace, monospace;
+    /* Solo la credencial del alumno (tarea 1.27): la tipografía de la plantilla del TecNM. */
+    --font-credential: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+
+    --ease-open: cubic-bezier(0.3, 1.06, 0.5, 1);
+    --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* Escritorio desde 1200 px (DESIGN.md, "Responsivo"): desktop: y max-desktop:. La tableta empieza en md (768 px). */
+    --breakpoint-desktop: 75rem;
+
+    /* Sombra «Flotante» (DESIGN.md, "Elevation & Depth"): solo lo que flota sobre el contenido. */
+    --shadow-float: 0 16px 40px rgb(9 45 72 / 0.24), 0 2px 6px rgb(9 45 72 / 0.12);
+
+    /* El talón que se desprende de la credencial al guardar la contraseña (tarea 1.30; DESIGN.md, "Pantallas de contraseña"). */
+    --animate-nexus-tear: nexus-tear 0.7s var(--ease-open) 0.45s both;
+
+    @keyframes nexus-tear {
+        to {
+            transform: translate(10px, 24px) rotate(3deg);
+        }
+    }
+}
+
+/*
+| Colores propios de Nexus que no son de daisyUI (banda, texto sobre la banda, texto secundario sobre
+| gris polvo y las cadenas de seriación de la retícula del alumno). Cada tema los define abajo; aquí se
+| exponen como utilidades: bg-band, text-band-content, text-band-muted, text-secondary-muted y chain-1 a
+| chain-12 (border-chain-N, var(--color-chain-N)), y los estados de esa retícula (bg-standing-<caso>,
+| border-standing-<caso>-border, text-standing-<caso>-content).
+*/
+@theme inline {
+    --color-band: var(--nexus-band);
+    --color-band-content: var(--nexus-band-content);
+    --color-band-muted: var(--nexus-band-muted);
+    --color-secondary-muted: var(--nexus-secondary-muted);
+
+    /* Cadenas de seriación de la retícula del alumno (DESIGN.md, "Retícula del alumno"): chain-1 a chain-12. */
+    --color-chain-1: var(--nexus-chain-1);
+    --color-chain-2: var(--nexus-chain-2);
+    --color-chain-3: var(--nexus-chain-3);
+    --color-chain-4: var(--nexus-chain-4);
+    --color-chain-5: var(--nexus-chain-5);
+    --color-chain-6: var(--nexus-chain-6);
+    --color-chain-7: var(--nexus-chain-7);
+    --color-chain-8: var(--nexus-chain-8);
+    --color-chain-9: var(--nexus-chain-9);
+    --color-chain-10: var(--nexus-chain-10);
+    --color-chain-11: var(--nexus-chain-11);
+    --color-chain-12: var(--nexus-chain-12);
+
+    /* Estados de la retícula del alumno: bg-standing-<caso>, border-standing-<caso>-border y text-standing-<caso>-content. */
+    --color-standing-acreditada: var(--nexus-standing-acreditada);
+    --color-standing-acreditada-border: var(--nexus-standing-acreditada-border);
+    --color-standing-acreditada-content: var(--nexus-standing-acreditada-content);
+    --color-standing-sin-calificar: var(--nexus-standing-sin-calificar);
+    --color-standing-sin-calificar-border: var(--nexus-standing-sin-calificar-border);
+    --color-standing-sin-calificar-content: var(--nexus-standing-sin-calificar-content);
+    --color-standing-cursando: var(--nexus-standing-cursando);
+    --color-standing-cursando-border: var(--nexus-standing-cursando-border);
+    --color-standing-cursando-content: var(--nexus-standing-cursando-content);
+    --color-standing-reprobada-prioridad: var(--nexus-standing-reprobada-prioridad);
+    --color-standing-reprobada-prioridad-border: var(--nexus-standing-reprobada-prioridad-border);
+    --color-standing-reprobada-prioridad-content: var(--nexus-standing-reprobada-prioridad-content);
+    --color-standing-a-curso-especial: var(--nexus-standing-a-curso-especial);
+    --color-standing-a-curso-especial-border: var(--nexus-standing-a-curso-especial-border);
+    --color-standing-a-curso-especial-content: var(--nexus-standing-a-curso-especial-content);
+    --color-standing-curso-especial-reprobado: var(--nexus-standing-curso-especial-reprobado);
+    --color-standing-curso-especial-reprobado-border: var(--nexus-standing-curso-especial-reprobado-border);
+    --color-standing-curso-especial-reprobado-content: var(--nexus-standing-curso-especial-reprobado-content);
+    --color-standing-puede-seleccionarla: var(--nexus-standing-puede-seleccionarla);
+    --color-standing-puede-seleccionarla-border: var(--nexus-standing-puede-seleccionarla-border);
+    --color-standing-puede-seleccionarla-content: var(--nexus-standing-puede-seleccionarla-content);
+    --color-standing-no-permitida: var(--nexus-standing-no-permitida);
+    --color-standing-no-permitida-border: var(--nexus-standing-no-permitida-border);
+    --color-standing-no-permitida-content: var(--nexus-standing-no-permitida-content);
+    --color-standing-seleccionada: var(--nexus-standing-seleccionada);
+    --color-standing-seleccionada-border: var(--nexus-standing-seleccionada-border);
+    --color-standing-seleccionada-content: var(--nexus-standing-seleccionada-content);
+}
+
+/*
+| Temas de Nexus. Paleta institucional del ITCJ según DESIGN.md y ADR-0015: azul espacio para la casa,
+| rojo Tec solo como firma (accent) y neutros cálidos. Son aproximaciones de los colores institucionales
+| hasta tener los códigos oficiales. Las razones de contraste WCAG están medidas en DESIGN.md, "Colors";
+| un token nuevo entra con su medición. Radios: insignias 4 px, campos y botones 6 px, superficies 8 px.
+| Plano: sin profundidad decorativa (--depth: 0).
+*/
+@plugin 'daisyui/theme' {
+    name: 'nexus';
+    default: true;
+    prefersdark: false;
+    color-scheme: light;
+
+    --color-base-100: #ffffff;
+    --color-base-200: #f3f4f7;
+    --color-base-300: #e3e0de;
+    --color-base-content: #092d48;
+    --color-primary: #092d48;
+    --color-primary-content: #ffffff;
+    --color-secondary: #e6dedb;
+    --color-secondary-content: #092d48;
+    --color-accent: #c2201e;
+    --color-accent-content: #ffffff;
+    --color-neutral: #666567;
+    --color-neutral-content: #ffffff;
+    --color-info: #2b5c8a;
+    --color-info-content: #ffffff;
+    --color-success: #1f6f4f;
+    --color-success-content: #ffffff;
+    --color-warning: #8a5a00;
+    --color-warning-content: #ffffff;
+    --color-error: #b42318;
+    --color-error-content: #ffffff;
+
+    --radius-selector: 0.25rem;
+    --radius-field: 0.375rem;
+    --radius-box: 0.5rem;
+    --size-selector: 0.25rem;
+    --size-field: 0.25rem;
+    --border: 1px;
+    --depth: 0;
+    --noise: 0;
+
+    --nexus-band: #092d48;
+    --nexus-band-content: #ffffff;
+    --nexus-band-muted: #b4c3d1;
+    --nexus-secondary-muted: #59585a;
+
+    --nexus-chain-1: #6d4fc2;
+    --nexus-chain-2: #0f7c8c;
+    --nexus-chain-3: #b0457f;
+    --nexus-chain-4: #c2661a;
+    --nexus-chain-5: #3b56b8;
+    --nexus-chain-6: #6b7a1f;
+    --nexus-chain-7: #1f86c7;
+    --nexus-chain-8: #8a5a3c;
+    --nexus-chain-9: #4d6b7a;
+    --nexus-chain-10: #9c4fd1;
+    --nexus-chain-11: #2f8f5b;
+    --nexus-chain-12: #c24f9b;
+
+    /* Estados de la retícula del alumno (DESIGN.md, "Retícula del alumno"): relleno, borde y texto/icono de cada estado. */
+    --nexus-standing-acreditada: #e9f1ed;
+    --nexus-standing-acreditada-border: #a5c5b9;
+    --nexus-standing-acreditada-content: #1f6f4f;
+    --nexus-standing-sin-calificar: #fdf5cc;
+    --nexus-standing-sin-calificar-border: #a67c00;
+    --nexus-standing-sin-calificar-content: #5e4700;
+    --nexus-standing-cursando: #f1e7f4;
+    --nexus-standing-cursando-border: #6b3a78;
+    --nexus-standing-cursando-content: #4a1f58;
+    --nexus-standing-reprobada-prioridad: #dff3f6;
+    --nexus-standing-reprobada-prioridad-border: #177f91;
+    --nexus-standing-reprobada-prioridad-content: #0a4f5d;
+    --nexus-standing-a-curso-especial: #ffeadb;
+    --nexus-standing-a-curso-especial-border: #c0561a;
+    --nexus-standing-a-curso-especial-content: #7d3604;
+    --nexus-standing-curso-especial-reprobado: #fde6e4;
+    --nexus-standing-curso-especial-reprobado-border: #b42318;
+    --nexus-standing-curso-especial-reprobado-content: #8f1a10;
+    --nexus-standing-puede-seleccionarla: #e5effb;
+    --nexus-standing-puede-seleccionarla-border: #2f6fc9;
+    --nexus-standing-puede-seleccionarla-content: #1b4a8c;
+    --nexus-standing-no-permitida: #f3f4f7;
+    --nexus-standing-no-permitida-border: #8a888b;
+    --nexus-standing-no-permitida-content: #59585a;
+    /* Reservado, sin uso: «Seleccionada solamente» del SII no tiene estado en Nexus hasta la inscripción (R3, S3). */
+    --nexus-standing-seleccionada: #f0eafb;
+    --nexus-standing-seleccionada-border: #7c5cc4;
+    --nexus-standing-seleccionada-content: #4f3590;
+}
+
+@plugin 'daisyui/theme' {
+    name: 'nexus-dark';
+    default: false;
+    prefersdark: true;
+    color-scheme: dark;
+
+    --color-base-100: #0f2133;
+    --color-base-200: #0a1826;
+    --color-base-300: #1f3346;
+    --color-base-content: #e7ecf1;
+    --color-primary: #a9c7e3;
+    --color-primary-content: #06192a;
+    --color-secondary: #26384a;
+    --color-secondary-content: #e7ecf1;
+    --color-accent: #c2201e;
+    --color-accent-content: #ffffff;
+    --color-neutral: #9aa6b2;
+    --color-neutral-content: #0a1826;
+    --color-info: #8cbfee;
+    --color-info-content: #06233a;
+    --color-success: #6fcf8c;
+    --color-success-content: #06290f;
+    --color-warning: #f5c84c;
+    --color-warning-content: #2b2100;
+    --color-error: #f48a8a;
+    --color-error-content: #2e0606;
+
+    --radius-selector: 0.25rem;
+    --radius-field: 0.375rem;
+    --radius-box: 0.5rem;
+    --size-selector: 0.25rem;
+    --size-field: 0.25rem;
+    --border: 1px;
+    --depth: 0;
+    --noise: 0;
+
+    --nexus-band: #071a2b;
+    --nexus-band-content: #ffffff;
+    --nexus-band-muted: #9fb2c4;
+    --nexus-secondary-muted: #9aa6b2;
+
+    --nexus-chain-1: #b19cf0;
+    --nexus-chain-2: #5cc8d6;
+    --nexus-chain-3: #e88cc0;
+    --nexus-chain-4: #f0a565;
+    --nexus-chain-5: #8ea6f5;
+    --nexus-chain-6: #bfd06a;
+    --nexus-chain-7: #6cc0f2;
+    --nexus-chain-8: #d4a585;
+    --nexus-chain-9: #a3b9c6;
+    --nexus-chain-10: #d29cf5;
+    --nexus-chain-11: #7fd6a4;
+    --nexus-chain-12: #f29ad0;
+
+    /* Estados de la retícula del alumno (DESIGN.md, "Retícula del alumno"): relleno, borde y texto/icono de cada estado. */
+    --nexus-standing-acreditada: #19323c;
+    --nexus-standing-acreditada-border: #356757;
+    --nexus-standing-acreditada-content: #6fcf8c;
+    --nexus-standing-sin-calificar: #2c2910;
+    --nexus-standing-sin-calificar-border: #d9b93a;
+    --nexus-standing-sin-calificar-content: #f2dd7a;
+    --nexus-standing-cursando: #2a1d38;
+    --nexus-standing-cursando-border: #b58ac9;
+    --nexus-standing-cursando-content: #e3c9f0;
+    --nexus-standing-reprobada-prioridad: #0f3340;
+    --nexus-standing-reprobada-prioridad-border: #4fc0d4;
+    --nexus-standing-reprobada-prioridad-content: #9be3ee;
+    --nexus-standing-a-curso-especial: #38230f;
+    --nexus-standing-a-curso-especial-border: #f0944a;
+    --nexus-standing-a-curso-especial-content: #ffc799;
+    --nexus-standing-curso-especial-reprobado: #3a1a1d;
+    --nexus-standing-curso-especial-reprobado-border: #f48a8a;
+    --nexus-standing-curso-especial-reprobado-content: #ffb4b4;
+    --nexus-standing-puede-seleccionarla: #14294a;
+    --nexus-standing-puede-seleccionarla-border: #6fa3f0;
+    --nexus-standing-puede-seleccionarla-content: #b0cdfa;
+    --nexus-standing-no-permitida: #0a1826;
+    --nexus-standing-no-permitida-border: #6a7a8a;
+    --nexus-standing-no-permitida-content: #9aa6b2;
+    /* Reservado, sin uso: «Seleccionada solamente» del SII no tiene estado en Nexus hasta la inscripción (R3, S3). */
+    --nexus-standing-seleccionada: #26204a;
+    --nexus-standing-seleccionada-border: #a893ee;
+    --nexus-standing-seleccionada-content: #cfc1f8;
+}
+
+/*
+| Shell (DESIGN.md, "El menú que se transforma"). Con el menú abierto la página no se desplaza: se usa el
+| candado de daisyUI que también usan los modales (--page-scroll-lock), que además reserva el canal de la
+| barra de desplazamiento para que la banda y el contenido no brinquen. Es la única regla del shell
+| escrita a mano porque el candado vive en :root y una utilidad no llega ahí: MaryUI reescribe el
+| atributo class de <html> al cambiar el tema. Todo lo demás del shell son utilidades en su Blade.
+*/
+@layer base {
+    :root:has(body[data-menu='open']) {
+        --page-scroll-lock: ;
+    }
+}
+
+
+/*
+| Cambio de tema con la liebre (tarea 1.84; DESIGN.md, "Movimiento"). A mano porque Tailwind no alcanza los
+| pseudoelementos de la transición de vista, y solo bajo html[data-theme-switch] (lo pone `nexusSwitchTheme`,
+| resources/js/app.js) para no tocar otras transiciones. Se quita el fundido del navegador y el tema nuevo se
+| descubre con la liebre como máscara: aparece chica al centro, crece y su silueta termina cubriendo la
+| ventana (1400vmax: la parte sólida de la liebre mide ~33 px de radio en 512 y así pasa 1.5 veces la media diagonal).
+*/
+html[data-theme-switch]::view-transition-group(root),
+html[data-theme-switch]::view-transition-old(root),
+html[data-theme-switch]::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+}
+
+html[data-theme-switch]::view-transition-old(root) {
+    z-index: 1;
+}
+
+html[data-theme-switch]::view-transition-new(root) {
+    z-index: 2;
+    mask: url('../images/liebre-512.png') center / 0 no-repeat;
+    animation: nexus-hare-reveal 1s both;
+}
+
+@keyframes nexus-hare-reveal {
+    0% {
+        mask-size: 0;
+        animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    20% {
+        mask-size: 14vmin;
+        animation-timing-function: linear;
+    }
+
+    40% {
+        mask-size: 42vmin;
+        animation-timing-function: linear;
+    }
+
+    60% {
+        mask-size: 126vmin;
+        animation-timing-function: linear;
+    }
+
+    80% {
+        mask-size: 500vmax;
+        animation-timing-function: linear;
+    }
+
+    100% {
+        mask-size: 1400vmax;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html[data-theme-switch]::view-transition-new(root) {
+        animation: none;
+        mask: none;
+    }
 }

@@ -1,0 +1,93 @@
+<?php
+
+namespace App\Modules\AcademicLoad\Policies;
+
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Models\User;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
+
+/**
+ * Quién ve una carga y quién la pasa de un estado a otro, según docs/dominio/reglas-de-negocio.md, "Aprobaciones y
+ * permisos":
+ *
+ * - Ven la carga la subdirección, el jefe de departamento y el jefe de proyecto docente, dentro de su
+ *   modalidad y su departamento; con campus en el nombramiento ven igual toda la modalidad (AZ-S17, MS6).
+ * - Propone (sale de borrador) y pasa a asignación el jefe de departamento de esa modalidad y departamento (supuesto por
+ *   confirmar).
+ * - Cierra el jefe de departamento; Subdirección también, cualquier carga, sin ser paso obligatorio (confirmado el 10
+ *   de noviembre de 2026).
+ * - Reabre y da el visto bueno la Subdirección (tareas 4.1 y 4.2).
+ *
+ * - Publica la Subdirección, o el jefe de departamento si la modalidad de la carga no exige visto bueno (tarea 4.3, M1).
+ *
+ * El admin pasa por la concesión implícita del registro.
+ */
+final class AcademicLoadPolicy
+{
+    use AuthorizesActor;
+
+    public function view(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadView, $load);
+    }
+
+    public function propose(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadPropose, $load);
+    }
+
+    public function startStaffing(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadStartStaffing, $load);
+    }
+
+    public function close(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadClose, $load);
+    }
+
+    public function reopen(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadReopen, $load);
+    }
+
+    /**
+     * Iniciar el re-análisis: el jefe del departamento de la carga, en su modalidad (RA-01, confirmado el 17 de noviembre
+     * de 2026). Subdirección no lo inicia: ve la carga y la devuelve (`reopen`, RA-08).
+     */
+    public function startReanalysis(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadStartReanalysis, $load);
+    }
+
+    /**
+     * Cancelar el re-análisis sin cambios (RA-10): quien lo inicia, con el mismo permiso y alcance que `startReanalysis`.
+     */
+    public function cancelReanalysis(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadStartReanalysis, $load);
+    }
+
+    public function approve(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadApprove, $load);
+    }
+
+    /**
+     * Publicar: Subdirección, o el jefe del departamento si la modalidad no exige visto bueno (reglas-de-negocio.md,
+     * tabla de permisos). Con visto bueno, la carga aprobada solo la publica quien tiene `LoadPublishApproved`.
+     */
+    public function publish(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, $load->modality->profile->requiresSubdireccionApproval
+            ? AcademicLoadPermission::LoadPublishApproved
+            : AcademicLoadPermission::LoadPublish, $load);
+    }
+
+    private function can(User $user, AcademicLoadPermission $permission, AcademicLoad $load): bool
+    {
+        return $this->actor($user)->allows($permission, Target::of(modality: $load->modality_id, unit: $load->department_id));
+    }
+}

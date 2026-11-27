@@ -5,8 +5,22 @@
 ARG FRANKENPHP_IMAGE=dunglas/frankenphp:1.13.4-php8.5-trixie@sha256:ada77754f475352a9105b7961f89ab17ece97048514799532d2d27a1dea2fda7
 ARG COMPOSER_IMAGE=composer:2.9.8@sha256:b09bccd91a78fe8a9ab4b33d707b862e8fe54fec17782e32683ad2a69c46867d
 ARG NODE_IMAGE=node:24.22.1-alpine3.24@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+# Node con glibc para la etapa dev (Chromium de Playwright no corre sobre musl/Alpine).
+# Misma versión de Node que NODE_IMAGE; cambiar ambos juntos.
+ARG NODE_GLIBC_IMAGE=node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea
 
 FROM ${COMPOSER_IMAGE} AS composer
+
+FROM ${NODE_GLIBC_IMAGE} AS node-glibc
+
+# Versión de Playwright leída de package-lock.json: los navegadores de la imagen
+# dev siempre coinciden con el paquete npm que usa pest-plugin-browser. La capa
+# de Chromium solo se reconstruye si esa versión cambia, no con cada `npm install`.
+FROM node-glibc AS playwright-version
+
+COPY package-lock.json /tmp/package-lock.json
+
+RUN node -p "require('/tmp/package-lock.json').packages['node_modules/playwright'].version" > /playwright-version
 
 # ---------------------------------------------------------------------------
 # base: runtime PHP + extensiones + usuario sin privilegios
@@ -18,6 +32,8 @@ ARG GID=1000
 
 RUN install-php-extensions \
         bcmath \
+        exif \
+        gd \
         intl \
         opcache \
         pcntl \
@@ -45,7 +61,31 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
 # ---------------------------------------------------------------------------
 FROM base AS dev
 
-RUN cp "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
+# sockets: lo exige pestphp/pest-plugin-browser (solo dev y CI, no prod)
+RUN cp "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini" \
+    && install-php-extensions sockets
+
+# Node: lo necesita Playwright para los browser tests (solo dev y CI, no prod).
+# Vite y el build de assets siguen en sus propios contenedores.
+COPY --link --from=node-glibc /usr/local/bin/node /usr/local/bin/node
+COPY --link --from=node-glibc /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=playwright-version /playwright-version /tmp/playwright-version
+
+# Chromium de Playwright y sus librerías de sistema, en una ruta fuera de /app
+# (que es un bind mount). Se instala como root; el usuario app solo lo ejecuta.
+# --only-shell: solo chromium-headless-shell, que es lo que usan los browser tests
+# (sin pantalla); omitir el Chromium completo ahorra unos 400 MB.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && npm install --prefix /tmp/playwright --no-save --no-audit --no-fund "playwright@$(cat /tmp/playwright-version)" \
+    && /tmp/playwright/node_modules/.bin/playwright install --with-deps --only-shell chromium \
+    && rm -rf /tmp/playwright /tmp/playwright-version /root/.npm /var/lib/apt/lists/*
+
+# pcov: driver de cobertura para el reporte de CI (`--coverage`). Va en su propia
+# capa, después de Chromium, para no invalidarla. Solo se carga cuando se pide cobertura.
+RUN install-php-extensions pcov
 
 USER app
 
@@ -75,8 +115,11 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY vite.config.js ./
 COPY resources ./resources
-# Tailwind escanea las vistas de paginación de Laravel
+# Vistas Blade y componentes MFC de los módulos: Tailwind toma de ahí sus clases (resources/css/app.css)
+COPY app/Modules ./app/Modules
+# Tailwind escanea las vistas de paginación de Laravel y los componentes de MaryUI
 COPY --from=vendor /app/vendor/laravel/framework/src/Illuminate/Pagination/resources/views ./vendor/laravel/framework/src/Illuminate/Pagination/resources/views
+COPY --from=vendor /app/vendor/robsontenorio/mary/src/View/Components ./vendor/robsontenorio/mary/src/View/Components
 
 RUN npm run build
 
@@ -87,6 +130,9 @@ FROM base AS prod
 
 ARG UID=1000
 ARG GID=1000
+# El SHA del release: /health dice qué versión atiende.
+ARG NEXUS_RELEASE=dev
+ENV NEXUS_RELEASE=$NEXUS_RELEASE
 
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
@@ -104,4 +150,5 @@ RUN composer dump-autoload --no-dev --optimize --classmap-authoritative --no-int
 USER app
 
 ENTRYPOINT ["entrypoint"]
-CMD ["php", "artisan", "octane:frankenphp", "--host=0.0.0.0", "--port=8000", "--max-requests=1000"]
+# OCTANE_WORKERS (compose.prod.yaml): `auto` = uno por núcleo. Durante un cambio de color corren dos instancias.
+CMD ["sh", "-c", "exec php artisan octane:frankenphp --host=0.0.0.0 --port=8000 --max-requests=1000 --workers=\"${OCTANE_WORKERS:-auto}\""]

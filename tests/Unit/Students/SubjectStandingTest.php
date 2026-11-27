@@ -1,0 +1,97 @@
+<?php
+
+use App\Modules\Students\Enums\KardexResult;
+use App\Modules\Students\Enums\SubjectStanding;
+
+/*
+| Estado de una materia en la retícula del alumno, con los nombres del SII (tarea 1.6): sale de sus filas de
+| kardex de esa materia y de si ya puede cursarla según su avance. La oportunidad 1 es ordinaria, la 2
+| repetición y la 3 curso especial; una baja no gasta oportunidad (reglas-de-negocio.md, "Retícula del alumno").
+*/
+
+/**
+ * @return array{result: KardexResult, attempt: int, term: string}
+ */
+function take(KardexResult $result, int $attempt = 1, string $term = '20253'): array
+{
+    return ['result' => $result, 'attempt' => $attempt, 'term' => $term];
+}
+
+it('da el estado de la materia según su kardex: :dataset', function (array $attempts, bool $available, SubjectStanding $standing) {
+    expect(SubjectStanding::of($attempts, $available, termInProgress: '20263'))->toBe($standing);
+})->with([
+    'aprobada, aunque antes la reprobó' => [[take(KardexResult::Reprobada), take(KardexResult::Aprobada, 2, '20261')], false, SubjectStanding::Acreditada],
+    'cursando en el periodo más reciente' => [[take(KardexResult::Cursando, 1, '20263')], true, SubjectStanding::Cursando],
+    'cursando de nuevo después de reprobarla' => [[take(KardexResult::Reprobada), take(KardexResult::Cursando, 2, '20263')], true, SubjectStanding::Cursando],
+    'cursando en un periodo anterior, sin calificación' => [[take(KardexResult::Cursando, 1, '20261')], true, SubjectStanding::SinCalificar],
+    'cursando en un verano después del periodo en curso' => [[take(KardexResult::Cursando, 1, '20272')], true, SubjectStanding::Cursando],
+    'una fila vieja sin calificar no tapa una reprobada posterior' => [[take(KardexResult::Cursando, 1, '20251'), take(KardexResult::Reprobada, 2, '20253')], true, SubjectStanding::ACursoEspecial],
+    'reprobada una vez' => [[take(KardexResult::Reprobada)], true, SubjectStanding::ReprobadaPrioridad],
+    'reprobada en repetición' => [[take(KardexResult::Reprobada), take(KardexResult::Reprobada, 2, '20261')], true, SubjectStanding::ACursoEspecial],
+    'reprobada en curso especial' => [[take(KardexResult::Reprobada, 3, '20261')], true, SubjectStanding::CursoEspecialReprobado],
+    'una baja no gasta oportunidad' => [[take(KardexResult::Reprobada), take(KardexResult::Baja, 2, '20261')], true, SubjectStanding::ReprobadaPrioridad],
+    'solo una baja, y ya puede cursarla' => [[take(KardexResult::Baja)], true, SubjectStanding::PuedeSeleccionarla],
+    'sin kardex y ya puede cursarla' => [[], true, SubjectStanding::PuedeSeleccionarla],
+    'sin kardex y todavía no puede' => [[], false, SubjectStanding::NoPermitida],
+]);
+
+it('cada estado lleva el nombre del SII y su icono', function (SubjectStanding $standing, string $label, string $icon) {
+    expect($standing->label())->toBe($label)
+        ->and($standing->icon())->toBe($icon);
+})->with([
+    [SubjectStanding::Acreditada, 'Acreditada', 'o-check-circle'],
+    [SubjectStanding::Cursando, 'Cursando', 'o-clock'],
+    [SubjectStanding::SinCalificar, 'Sin calificar', 'o-question-mark-circle'],
+    [SubjectStanding::ReprobadaPrioridad, 'Reprobada · prioridad', 'o-arrow-path'],
+    [SubjectStanding::ACursoEspecial, 'A curso especial', 'o-exclamation-triangle'],
+    [SubjectStanding::CursoEspecialReprobado, 'Curso especial reprobado', 'o-x-circle'],
+    [SubjectStanding::PuedeSeleccionarla, 'Puede seleccionarla', 'o-arrow-right-circle'],
+    [SubjectStanding::NoPermitida, 'No permitida aún', 'o-lock-closed'],
+]);
+
+it('sin periodo en curso conocido (su campus no tiene kardex), lo que cursa cuenta como cursando', function () {
+    expect(SubjectStanding::of([take(KardexResult::Cursando, 1, '20251')], true, termInProgress: null))->toBe(SubjectStanding::Cursando);
+});
+
+it('solo las que puede cursar y no agotó cuentan para seleccionar: reprobar el curso especial da de baja al alumno', function (SubjectStanding $standing, bool $selectable) {
+    expect($standing->countsAsSelectable())->toBe($selectable);
+})->with([
+    [SubjectStanding::PuedeSeleccionarla, true],
+    [SubjectStanding::ReprobadaPrioridad, true],
+    [SubjectStanding::ACursoEspecial, true],
+    [SubjectStanding::CursoEspecialReprobado, false],
+    [SubjectStanding::Acreditada, false],
+    [SubjectStanding::Cursando, false],
+    [SubjectStanding::SinCalificar, false],
+    [SubjectStanding::NoPermitida, false],
+]);
+
+it('1.43: cada estado pinta su mosaico con sus propios tokens standing-* (relleno, borde y texto), no con los semáforos de daisyUI', function (SubjectStanding $standing) {
+    $token = str_replace('_', '-', $standing->value);
+
+    expect($standing->tileClasses())
+        ->toContain("bg-standing-{$token}")
+        ->toContain("border-standing-{$token}-border")
+        ->toContain("text-standing-{$token}-content")
+        ->not->toMatch('/(bg|border|text)-(success|info|warning|error|primary|base-\d+|neutral)\b/');
+})->with(SubjectStanding::cases());
+
+it('1.43: los tokens de cada estado, y el lila reservado de «Seleccionada solamente» (S3), existen en el tema claro y en el oscuro', function () {
+    $css = file_get_contents(dirname(__DIR__, 3).'/resources/css/app.css');
+    $themes = preg_split('/@plugin \'daisyui\/theme\'/', $css);
+    $tokens = [...array_map(fn (SubjectStanding $standing): string => str_replace('_', '-', $standing->value), SubjectStanding::cases()), 'seleccionada'];
+
+    expect($themes)->toHaveCount(3);
+    foreach ([1, 2] as $theme) {
+        foreach ($tokens as $token) {
+            foreach (['', '-border', '-content'] as $suffix) {
+                expect($themes[$theme])->toContain("--nexus-standing-{$token}{$suffix}:");
+            }
+        }
+    }
+    foreach ($tokens as $token) {
+        foreach (['', '-border', '-content'] as $suffix) {
+            expect($css)->toContain("--color-standing-{$token}{$suffix}: var(--nexus-standing-{$token}{$suffix});");
+        }
+    }
+});

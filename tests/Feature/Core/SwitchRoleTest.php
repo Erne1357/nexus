@@ -1,0 +1,79 @@
+<?php
+
+use App\Modules\Core\Actions\SwitchRole;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
+use Spatie\Activitylog\Models\Activity;
+
+/*
+| Cambio de perfil (spec 8.1, AZ-S4): la sesión pasa a actuar con un solo puesto, que se recuerda para la siguiente.
+*/
+
+beforeEach(function () {
+    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $this->user = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+        ->create();
+});
+
+it('cambia el perfil, lo recuerda para la siguiente sesión y deja bitácora', function () {
+    actingAsRole($this->user, Role::JefeDepartamento);
+
+    app(SwitchRole::class)->handle(Role::Coordinador);
+
+    $log = Activity::latest('id')->first();
+
+    expect(session(Actor::ACTIVE_ROLE))->toBe(Role::Coordinador->value)
+        ->and(app(Actor::class)->activeRole())->toBe(Role::Coordinador)
+        ->and($this->user->fresh()->last_role)->toBe(Role::Coordinador)
+        ->and($log->description)->toBe('Cambió al perfil Coordinador de carrera')
+        ->and($log->subject->is($this->user))->toBeTrue()
+        ->and($log->properties->all())->toBe(['from' => 'jefe_departamento', 'to' => 'coordinador', 'acting_as' => 'jefe_departamento']);
+});
+
+it('rechaza un puesto que no tiene', function () {
+    actingAsRole($this->user, Role::JefeDepartamento);
+
+    expect(fn () => app(SwitchRole::class)->handle(Role::Subdireccion))
+        ->toThrow(AuthorizationException::class, 'No tienes ese puesto.')
+        ->and(app(Actor::class)->activeRole())->toBe(Role::JefeDepartamento);
+});
+
+it('conserva el periodo de la credencial y no guarda campus: la credencial ya no lo elige (AZ-S6 sin efecto)', function () {
+    $term = Term::factory()->create();
+    actingAsRole($this->user, Role::JefeDepartamento);
+    session([Actor::ACTIVE_TERM => $term->id]);
+
+    app(SwitchRole::class)->handle(Role::Coordinador);
+
+    expect(session(Actor::ACTIVE_TERM))->toBe($term->id)
+        ->and(array_filter(array_keys(session()->all()), fn (string $key): bool => str_contains($key, 'campus')))->toBe([]);
+});
+
+it('olvida las páginas recientes', function () {
+    actingAsRole($this->user, Role::JefeDepartamento);
+    session(['core.recent_pages' => ['academico' => 'core.campuses']]);
+
+    app(SwitchRole::class)->handle(Role::Coordinador);
+
+    expect(session()->has('core.recent_pages'))->toBeFalse();
+});
+
+it('si la bitácora falla, no cambia el perfil de la sesión, ni last_role, ni olvida las páginas recientes', function () {
+    actingAsRole($this->user, Role::JefeDepartamento);
+    session(['core.recent_pages' => ['academico' => '/campus']]);
+    Activity::creating(function (): void {
+        throw new RuntimeException('No se pudo escribir la bitácora.');
+    });
+
+    expect(fn () => app(SwitchRole::class)->handle(Role::Coordinador))->toThrow(RuntimeException::class, 'No se pudo escribir la bitácora.')
+        ->and(session(Actor::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value)
+        ->and($this->user->fresh()->last_role)->toBeNull()
+        ->and(session('core.recent_pages'))->toBe(['academico' => '/campus']);
+});

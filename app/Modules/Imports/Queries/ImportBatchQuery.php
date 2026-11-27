@@ -1,0 +1,268 @@
+<?php
+
+namespace App\Modules\Imports\Queries;
+
+use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Imports\Enums\BatchStatus;
+use App\Modules\Imports\Enums\RowIssue;
+use App\Modules\Imports\Enums\RowStatus;
+use App\Modules\Imports\Jobs\ApplyQueuedBatch;
+use App\Modules\Imports\Jobs\ValidateQueuedBatch;
+use App\Modules\Imports\Models\ImportBatch;
+use App\Modules\Imports\Models\ImportDeactivation;
+use App\Modules\Imports\Models\ImportRow;
+use App\Modules\Imports\Templates\ImportContext;
+use App\Modules\Imports\Templates\ImportTemplate;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\LazyCollection;
+use Spatie\Activitylog\Models\Activity;
+
+/**
+ * Lecturas de lotes de importación para el asistente y el archivo de errores. Quién las ve lo decide
+ * la página con ImportBatchPolicy, que solo deja al admin: por eso no filtran por alcance.
+ */
+final class ImportBatchQuery
+{
+    /** Lo que espera stalled(), además del tiempo máximo del job, para dar por atorado un lote. */
+    public const int STALL_MARGIN_MINUTES = 10;
+
+    /**
+     * Los lotes más recientes, para retomar uno desde el asistente.
+     *
+     * @return Collection<int, ImportBatch>
+     */
+    public function recent(int $limit = 10): Collection
+    {
+        return ImportBatch::query()
+            // Con el campus aunque se haya retirado: el lote sigue diciendo de cuál era.
+            ->with(['campus' => fn (BelongsTo $campus) => $campus->withTrashed(), 'uploader'])
+            ->latest()
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * Si el lote se atoró (E-03, ensayo 8.11): sigue validándose o aplicándose, pero lleva sin avanzar más que el tiempo
+     * máximo de su job más STALL_MARGIN_MINUTES. El avance es `updated_at`, que cada bloque de 500 filas mueve al sumar
+     * `processed_rows`. Como la Action pone el estado al empezar el job, y la cola corta todo job que pasa de su tiempo
+     * máximo, un lote así ya no lo trabaja ningún job: el proceso murió sin que corriera su failed() (sin memoria, un
+     * despliegue) y nadie lo va a terminar. El margen deja que la cola lo marque fallida primero cuando sí puede (el
+     * `retry_after` de la conexión, 1860 s, entrega otra vez el job muerto y su failed() corre). Supuesto por confirmar:
+     * el tiempo máximo más diez minutos.
+     */
+    public function stalled(ImportBatch $batch): bool
+    {
+        $timeout = match ($batch->status) {
+            BatchStatus::Validating => ValidateQueuedBatch::TIMEOUT,
+            BatchStatus::Applying => ApplyQueuedBatch::TIMEOUT,
+            default => null,
+        };
+
+        return $timeout !== null && $batch->updated_at->lt(now()->subSeconds($timeout)->subMinutes(self::STALL_MARGIN_MINUTES));
+    }
+
+    /**
+     * Quienes escribieron la aplicación del lote: quien la empezó (`applied_by`) y quien la reanudó después de atorarse
+     * (la bitácora `retried` de la aplicación, RetryStalledBatch), sin repetir. Cada uno escribió a su nombre su parte,
+     * así que lo que salió de ella (las invitaciones de los correos) se busca a nombre de todos.
+     *
+     * @return list<string>
+     */
+    public function appliers(ImportBatch $batch): array
+    {
+        return Activity::query()
+            ->where('subject_type', $batch->getMorphClass())
+            ->where('subject_id', $batch->getKey())
+            ->where('event', 'retried')
+            ->where('properties->stage', BatchStatus::Applying->value)
+            ->pluck('causer_id')
+            ->prepend($batch->applied_by)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * El lote con su campus aunque se haya retirado: una plantilla de un campus lo necesita para revisar
+     * el lote.
+     */
+    public function findOrFail(string $id): ImportBatch
+    {
+        return KeyLookup::findOrFail(ImportBatch::query()->with(['campus' => fn (BelongsTo $campus) => $campus->withTrashed()]), $id);
+    }
+
+    /**
+     * Las filas del lote con error, o las que se aplican con advertencia (también las ya aplicadas),
+     * por número de fila.
+     *
+     * @return LengthAwarePaginator<int, ImportRow>
+     */
+    public function issues(ImportBatch $batch, RowIssue $kind, int $perPage = 25): LengthAwarePaginator
+    {
+        return ImportRow::query()
+            ->select(['id', 'batch_id', 'row_number', 'normalized', 'errors', 'warnings', 'status'])
+            ->where('batch_id', $batch->id)
+            ->tap(fn (Builder $query) => match ($kind) {
+                RowIssue::Errors => $query->where('status', RowStatus::Error),
+                RowIssue::Warnings => $this->withWarnings($query),
+            })
+            ->orderBy('row_number')
+            ->paginate($perPage);
+    }
+
+    /**
+     * Cuántas filas se aplican con advertencia: `valid_rows` las cuenta como válidas.
+     */
+    public function warningRows(ImportBatch $batch): int
+    {
+        return $this->withWarnings(ImportRow::query()->where('batch_id', $batch->id))->count();
+    }
+
+    /**
+     * Lo que la aplicación del lote lleva escrito (las cuentas que ApplyImportBatch suma en cada bloque),
+     * las filas con error que no se aplican y lo que desactivó por no venir en el archivo. Lo usan la
+     * bitácora, BatchApplied y la pantalla.
+     *
+     * @return array{created: int, updated: int, unchanged: int, skipped: int, deactivated: int}
+     */
+    public function appliedCounts(ImportBatch $batch): array
+    {
+        return [
+            'created' => $batch->created_rows,
+            'updated' => $batch->updated_rows,
+            'unchanged' => $batch->unchanged_rows,
+            'skipped' => ImportRow::query()->where('batch_id', $batch->id)->where('status', RowStatus::Error)->count(),
+            'deactivated' => $batch->deactivated_rows,
+        ];
+    }
+
+    /**
+     * Los grupos propios del resumen de la plantilla (ImportTemplate::summaryGroups()), contados, con su etiqueta en
+     * singular si tienen una sola fila (`one`) y las claves de sus primeras `$sample` filas en el orden del archivo.
+     *
+     * @return list<array{label: string, hint: ?string, live: bool, count: int, keys: list<string>}>
+     */
+    public function summary(ImportBatch $batch, ImportTemplate $template, int $sample = 10): array
+    {
+        $key = $template->naturalKey()[0];
+
+        return array_map(function (array $group) use ($key, $sample): array {
+            $count = (clone $group['rows'])->count();
+
+            return [
+                'label' => $count === 1 ? ($group['one'] ?? $group['label']) : $group['label'],
+                'hint' => $group['hint'] ?? null,
+                'live' => $group['live'] ?? false,
+                'count' => $count,
+                'keys' => (clone $group['rows'])
+                    ->orderBy('row_number')
+                    ->limit($sample)
+                    ->selectRaw('normalized ->> ? as natural_key', [$key])
+                    ->pluck('natural_key')
+                    ->map(fn (mixed $value): string => (string) $value)
+                    ->all(),
+            ];
+        }, $template->summaryGroups($batch));
+    }
+
+    /**
+     * Lo que "desactivar faltantes" haría con el lote: cuántos registros activos tiene el catálogo (los
+     * del campus del lote si es de un campus) y cuántos de ellos no vienen en el archivo. Solo para una
+     * plantilla que lo ofrece (ImportTemplate::deactivatesMissing()).
+     *
+     * @return array{active: int, missing: int}
+     */
+    public function missingSummary(ImportBatch $batch, ImportTemplate $template, ImportContext $context): array
+    {
+        return [
+            'active' => $template->deactivationScope($context)->count(),
+            'missing' => $template->missing($batch, $context)->count(),
+        ];
+    }
+
+    /**
+     * Los registros que "desactivar faltantes" desactivaría con el lote, por clave natural.
+     *
+     * @return LengthAwarePaginator<int, Model>
+     */
+    public function missingRecords(ImportBatch $batch, ImportTemplate $template, ImportContext $context, int $perPage = 10): LengthAwarePaginator
+    {
+        return $this->byNaturalKey($template->missing($batch, $context), $template)->paginate($perPage, pageName: 'faltantes');
+    }
+
+    /**
+     * Los registros que el lote desactivó por no venir en el archivo, por clave natural; también si
+     * después se borraron.
+     *
+     * @return LengthAwarePaginator<int, Model>
+     */
+    public function deactivatedRecords(ImportBatch $batch, ImportTemplate $template, int $perPage = 10): LengthAwarePaginator
+    {
+        $query = $template->model()::query()->withoutGlobalScope(SoftDeletingScope::class);
+        $model = $query->getModel();
+
+        $query->whereIn($model->getQualifiedKeyName(), ImportDeactivation::query()
+            ->where('batch_id', $batch->id)
+            ->where('target_type', $model->getMorphClass())
+            ->select('target_id'));
+
+        return $this->byNaturalKey($query, $template)->paginate($perPage, pageName: 'desactivados');
+    }
+
+    /**
+     * Si la cola ya dejó el CSV de errores del lote (ExportBatchErrors) para su último estado: el de la
+     * validación deja de valer en cuanto el lote se empieza a aplicar, hasta que la cola lo rehace.
+     */
+    public function errorsFileReady(ImportBatch $batch): bool
+    {
+        return $batch->errors_exported_at !== null && Storage::disk('imports')->exists($batch->errors_path);
+    }
+
+    /**
+     * Las filas con error en el orden del archivo, de mil en mil, con la fila como vino y sus errores,
+     * para ExportBatchErrors. Un kardex mal mapeado puede traer cientos de miles.
+     *
+     * @return LazyCollection<int, ImportRow>
+     */
+    public function errorRows(ImportBatch $batch): LazyCollection
+    {
+        return ImportRow::query()
+            ->select(['id', 'batch_id', 'row_number', 'raw', 'errors'])
+            ->where('batch_id', $batch->id)
+            ->where('status', RowStatus::Error)
+            ->lazyById(1000, 'row_number');
+    }
+
+    /**
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
+     */
+    private function byNaturalKey(Builder $query, ImportTemplate $template): Builder
+    {
+        foreach ($template->naturalKey() as $field) {
+            $query->orderBy($query->getModel()->qualifyColumn($field));
+        }
+
+        return $query->orderBy($query->getModel()->getQualifiedKeyName());
+    }
+
+    /**
+     * Las filas sin error que traen advertencia. Una advertencia vacía puede estar guardada como `{}`
+     * (la validación) o como `[]` (el cast del modelo).
+     *
+     * @param  Builder<ImportRow>  $query
+     * @return Builder<ImportRow>
+     */
+    private function withWarnings(Builder $query): Builder
+    {
+        return $query->where('status', '<>', RowStatus::Error)->whereRaw("warnings NOT IN ('{}'::jsonb, '[]'::jsonb)");
+    }
+}
