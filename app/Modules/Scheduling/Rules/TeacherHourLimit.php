@@ -106,7 +106,7 @@ final class TeacherHourLimit
     }
 
     /** PL-04 (tarea 1.83): lo que dicen las pantallas de quien no tiene plaza docente en vez de su banda. */
-    public const string NO_PLAZA_LABEL = 'Sin plaza docente · sus horas son de honorarios';
+    public const string NO_PLAZA_LABEL = TeachingHours::NO_PLAZA_LABEL;
 
     /**
      * PL-04: sin plaza docente en Nexus y sin horas frente a grupo del CSV, todas sus horas son extra (honorarios). Es el

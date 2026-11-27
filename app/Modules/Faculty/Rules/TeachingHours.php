@@ -27,6 +27,9 @@ final class TeachingHours
     /** Art. 147: la carga frente a grupo puede variar dos horas arriba o abajo (la banda de SEL-05 y el tope de HC-08). */
     public const int MARGIN = 2;
 
+    /** PL-04 (tarea 1.83): lo que dicen las pantallas de quien no tiene plaza docente en vez de su banda. */
+    public const string NO_PLAZA_LABEL = 'Sin plaza docente · sus horas son de honorarios';
+
     /** PL-03 y HC-22: lo más que pueden sumar clases, horas externas y horas administrativas de quien tiene plaza administrativa (límite duro). */
     public const int ADMINISTRATIVE_MAX = 42;
 

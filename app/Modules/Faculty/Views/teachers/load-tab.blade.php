@@ -53,7 +53,7 @@
                             {{ $week['administrative_summary'] }}
                         @elseif ($week['no_plaza'])
                             {{-- PL-04 (tarea 1.83): sin plaza docente todas sus horas son de honorarios; no hay banda. --}}
-                            {{ \App\Modules\Scheduling\Rules\TeacherHourLimit::NO_PLAZA_LABEL }}
+                            {{ \App\Modules\Faculty\Rules\TeachingHours::NO_PLAZA_LABEL }}
                         @elseif ($week['honorarios_cap'] !== null)
                             Tope de honorarios: {{ $week['honorarios_cap'] }} h
                         @else
