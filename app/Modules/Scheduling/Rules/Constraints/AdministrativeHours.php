@@ -8,6 +8,10 @@ use App\Modules\Scheduling\Validation\ValidationScope;
 use App\Modules\Scheduling\Validation\Violation;
 
 /**
+ * HC-22 (tarea 1.81, PL-04): también es el tope con honorarios de quien tiene plaza docente: las horas de su plaza más sus horas
+ * extra (clases y externas por encima de frente a grupo + 2) no pueden pasar de `staffing.max_hours_with_honorarios` (por
+ * omisión 44, confirmado el 27 de noviembre de 2026); mismo veto, misma marca `sin_cupo`.
+ *
  * HC-22 (tarea 1.80, confirmado el 27 de noviembre de 2026): quien tiene plaza administrativa (apoyo y asistencia, PL-03)
  * no puede pasar de `staffing.administrative_max_hours` (por omisión 42) entre sus horas administrativas, sus clases
  * (las que le cuentan, PL-02) y sus horas externas (supuesto por confirmar). Es un choque duro: la asignación y la
@@ -27,7 +31,17 @@ final class AdministrativeHours implements Constraint
             $teacher = $state->teacher($teacherId);
             $hours = TeacherHourLimit::of($state, $teacherId);
 
-            if ($teacher === null || $hours === null || $hours['administrative_hours'] === null || $hours['administrative_excess'] <= 0) {
+            if ($teacher === null || $hours === null) {
+                continue;
+            }
+
+            if ($hours['honorarios_excess'] > 0) {
+                yield from $this->honorarios($scope, $teacher->name, $teacherId, $hours);
+
+                continue;
+            }
+
+            if ($hours['administrative_hours'] === null || $hours['administrative_excess'] <= 0) {
                 continue;
             }
 
@@ -47,6 +61,31 @@ final class AdministrativeHours implements Constraint
                     'excess_hours' => $hours['administrative_excess'],
                 ]);
             }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $hours
+     * @return iterable<Violation>
+     */
+    private function honorarios(ValidationScope $scope, string $name, string $teacherId, array $hours): iterable
+    {
+        $message = $name.' '.lcfirst((string) TeacherHourLimit::honorariosNotice($hours));
+
+        foreach ($hours['groups'] as $groupId => $groupHours) {
+            if (! $scope->hasTeacher($teacherId) && ! $scope->hasGroup($groupId)) {
+                continue;
+            }
+
+            yield Violation::hard($this->rule(), $message, 'teacher', $teacherId, $groupId, [
+                'plaza_hours' => $hours['plaza_hours'],
+                'extra_hours' => $hours['extra_hours'],
+                'with_honorarios_max' => $hours['with_honorarios_max'],
+                'external_hours' => $hours['external_hours'],
+                'assigned_hours' => $hours['assigned_hours'],
+                'group_hours' => $groupHours,
+                'excess_hours' => $hours['honorarios_excess'],
+            ]);
         }
     }
 }

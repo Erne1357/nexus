@@ -84,7 +84,7 @@ it('HC-08: cada renglón dice cuántos docentes pasan su banda, como aviso (tare
 
     $html = closingBoardPage($this->subdireccion)->html();
 
-    expect(textOf(domOf($html)->querySelector('[data-testid=board-row-SC] [data-testid=board-over-band-SC]')))->toBe('1 pasa su banda · aviso, oficio pendiente')
+    expect(textOf(domOf($html)->querySelector('[data-testid=board-row-SC] [data-testid=board-over-band-SC]')))->toBe('1 con honorarios por autorizar · aviso')
         ->and(domOf($html)->querySelector('[data-testid=board-row-EE] [data-testid=board-over-band-EE]'))->toBeNull();
 });
 

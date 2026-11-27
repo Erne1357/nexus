@@ -101,7 +101,7 @@ describe('pasan su banda (HC-08, tarea 1.50)', function () {
     it('HC-08: quien pasa su banda va en su bloque, abierto y asignable, entre los demás y el bloque final', function () {
         $html = volumeAssignPage($this->jefe)->call('toggleRanking', $this->band->id)
             ->assertSeeHtmlInOrder(['Ana Ruiz', 'data-testid="over-band-tier"', 'Beto Salas', 'Carla Díaz', 'data-testid="flagged-tier"'])
-            ->assertSeeText('2 pasan su banda de horas frente a grupo con este grupo')
+            ->assertSeeText('2 quedan con horas extra con este grupo')
             ->assertSeeText('1 docente no puede tomarlo (1 choque)')
             ->assertDontSee('Dante Ortiz')
             ->html();
@@ -114,7 +114,7 @@ describe('pasan su banda (HC-08, tarea 1.50)', function () {
         $dom = domOf(volumeAssignPage($this->jefe)->call('toggleRanking', $this->band->id)->html());
         $title = fn (int $index): string => $dom->querySelector('[data-testid=ranking] [data-teacher="'.$this->teachers[$index]->id.'"] [data-testid=notice-sin_horas]')->getAttribute('title');
 
-        expect($title(1))->toBe('Con este grupo pasa su banda de horas frente a grupo: se puede asignar, pero requiere oficio de conformidad del docente (pendiente).')
+        expect($title(1))->toBe('Con este grupo pasa su banda de horas frente a grupo: se puede asignar: sus horas extra quedan como honorarios por autorizar (jefe de depto).')
             ->and($title(2))->toBe('Con este grupo pasa su banda de horas frente a grupo, aceptado por el docente (casilla).');
     });
 });

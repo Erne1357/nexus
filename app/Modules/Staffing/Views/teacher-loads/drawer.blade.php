@@ -56,6 +56,29 @@
             </div>
         @endif
 
+        @if ($row->extraLabel() !== null)
+            {{-- PL-04 (tarea 1.81): el estado de sus horas extra y, para quien tiene el permiso (jefe de su departamento), decidirlas. --}}
+            @php
+                $extraState = $row->extraHours->state;
+            @endphp
+            <section class="space-y-3 rounded-box border border-base-300 p-4" aria-labelledby="extra-title" data-testid="drawer-extra">
+                <h3 id="extra-title" class="font-semibold">Horas extra · honorarios</h3>
+                <p class="flex items-start gap-2 text-sm" data-testid="drawer-extra-label">
+                    <x-icon :name="$extraState->value === 'authorized' ? 'o-check-circle' : 'o-document-text'" :class="'mt-0.5 h-4 w-4 shrink-0 '.match ($extraState->value) { 'pending' => 'text-warning', 'authorized' => 'text-success', default => 'text-neutral' }" aria-hidden="true" />
+                    <span>{{ $row->extraLabel() }}</span>
+                </p>
+                @if ($row->extraHours->isDecidable() && $canDecide)
+                    <div class="flex flex-wrap gap-2">
+                        <x-button label="Autorizar honorarios" icon="o-check" class="btn-primary btn-sm max-md:min-h-11" wire:click="decideExtra('authorized')" spinner="decideExtra" data-testid="extra-authorize" />
+                        <x-button label="No autorizar" icon="o-x-mark" class="btn-outline btn-sm max-md:min-h-11" wire:click="decideExtra('unauthorized')" spinner="decideExtra" data-testid="extra-unauthorize" />
+                    </div>
+                    <p class="text-xs text-neutral">Sin autorización, el docente firma el oficio de conformidad y no se le pagan esas horas.</p>
+                @elseif ($row->extraHours->isDecidable())
+                    <p class="text-xs text-neutral">Las autoriza el jefe del departamento al que está adscrito el docente.</p>
+                @endif
+            </section>
+        @endif
+
         @forelse ($byCampus as $code => $groups)
             <section aria-labelledby="campus-{{ $code }}" data-testid="drawer-campus-{{ $code }}">
                 <h3 id="campus-{{ $code }}" class="mb-2 flex items-center gap-2 font-semibold">

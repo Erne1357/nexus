@@ -11,7 +11,8 @@ use App\Modules\Scheduling\Rules\TeacherHourLimit;
  * los de HC-08 desde la tarea 1.50 (nulos en una fila calculada antes): con ellos la pantalla muestra la banda de horas
  * frente a grupo y el aviso del oficio con los mismos textos que el validador (TeacherHourLimit). Con plaza administrativa
  * (PL-03: `administrativeHours` y `administrativeCapHours`) no hay banda: muestra el resumen «Plaza administrativa: 36 h ·
- * clases 4 h · 40 de 42 h» y excede si pasa el tope duro de 42 h (HC-22).
+ * clases 4 h · 40 de 42 h» y excede si pasa el tope duro de 42 h (HC-22). Con plaza docente (PL-04, 1.81) `extraHours` trae sus horas
+ * extra y su estado (por autorizar, autorizadas, no autorizadas o jefatura).
  */
 final readonly class TeacherLoadRow
 {
@@ -53,6 +54,7 @@ final readonly class TeacherLoadRow
         public ?int $honorariosCapHours = null,
         public ?int $administrativeHours = null,
         public ?int $administrativeCapHours = null,
+        public ?ExtraHoursStatus $extraHours = null,
     ) {}
 
     /**
@@ -123,10 +125,19 @@ final readonly class TeacherLoadRow
     }
 
     /**
+     * PL-04 (tarea 1.81): el estado de sus horas extra («2 h extra · honorarios por autorizar (jefe de depto)», «2 h de
+     * honorarios autorizadas»…), o null si no tiene horas extra o es de plaza administrativa.
+     */
+    public function extraLabel(): ?string
+    {
+        return $this->isAdministrative() || $this->extraHours === null || ! $this->extraHours->hasExtra() ? null : $this->extraHours->label();
+    }
+
+    /**
      * Lo que TeacherHourLimit necesita para la banda y el aviso, desde la fila: pasa su banda si lleva más que su tope;
      * la casilla lo cubre si con eso no rebasa su límite (que ya es lo que autorizó, SEL-12).
      *
-     * @return array{teaching_hours: int, band_from: int, band_to: int, honorarios_cap: ?int, assigned_hours: int, external_hours: int, over_band: bool, accepted: bool}
+     * @return array{teaching_hours: int, band_from: int, band_to: int, honorarios_cap: ?int, assigned_hours: int, external_hours: int, over_band: bool, accepted: bool, extra_hours: ?int, extra_state: string}
      */
     private function hourLimit(): array
     {
@@ -142,6 +153,8 @@ final readonly class TeacherLoadRow
             'external_hours' => $this->externalHours,
             'over_band' => $overBand,
             'accepted' => $overBand && $this->remainingHours >= 0,
+            'extra_hours' => $this->extraHours?->extra,
+            'extra_state' => $this->extraHours?->state->value ?? 'pending',
         ];
     }
 }

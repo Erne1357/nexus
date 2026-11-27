@@ -47,6 +47,14 @@ enum Role: string
     public const ADMINISTRATIVE = [self::Subdireccion, self::Directivo, self::JefeDepartamento, self::JefeProyectoDocente, self::Coordinador, self::Personal];
 
     /**
+     * PL-04 (tarea 1.81, confirmado el 27 de noviembre de 2026: «Solo jefes de depto y arriba»): los puestos cuyo titular no
+     * puede tener honorarios. Sus horas extra van directo al oficio de conformidad y nadie las autoriza.
+     *
+     * @var list<self>
+     */
+    public const NO_HONORARIOS = [self::JefeDepartamento, self::Subdireccion, self::Directivo];
+
+    /**
      * Si es un puesto administrativo (ADMINISTRATIVE).
      */
     public function isAdministrative(): bool

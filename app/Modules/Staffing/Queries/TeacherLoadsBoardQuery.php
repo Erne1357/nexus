@@ -25,13 +25,15 @@ use Illuminate\Support\Facades\DB;
  */
 final class TeacherLoadsBoardQuery
 {
+    public function __construct(private readonly ExtraHoursStatusQuery $extraHours) {}
+
     public function forDepartment(Term $term, Department $department): TeacherLoadsBoard
     {
         $teachers = Teacher::query()
             ->where('is_active', true)
             ->whereHas('adscriptions', fn ($adscription) => $adscription->where('department_id', $department->getKey()))
             ->orderBy('name')
-            ->get(['id', 'name', 'rfc']);
+            ->get(['id', 'name', 'rfc', 'user_id']);
 
         $ids = $teachers->modelKeys();
 
@@ -55,6 +57,7 @@ final class TeacherLoadsBoardQuery
             ->orderBy('day')->orderBy('starts_at')
             ->get(['group_id', 'day', 'starts_at', 'ends_at'])->groupBy('group_id');
 
+        $extra = $this->extraHours->forTerm($term, $ids, $loads->map->extra_hours->all(), $teachers->pluck('user_id', 'id')->all());
         $rows = [];
 
         foreach ($teachers as $teacher) {
@@ -102,6 +105,7 @@ final class TeacherLoadsBoardQuery
                 $load->honorarios_cap_hours,
                 $load->administrative_hours,
                 $load->administrative_cap_hours,
+                $extra[$teacher->id] ?? null,
             );
         }
 

@@ -63,7 +63,7 @@
                         ['Asignadas', $totals['assigned'], collect($totals['byCampus'])->map(fn ($hours, $code) => "{$code} {$hours}")->implode(' · ').'|'.$totals['groups'].' grupos', ''],
                         ['Restantes', $totals['remaining'], 'sin contar honorarios', ''],
                         ['Sin carga', $totals['none'], 'sin grupos en el periodo', $totals['none'] > 0 ? 'text-warning' : ''],
-                        ['Exceden', $totals['over'], 'pasan su banda frente a grupo · oficio pendiente', $totals['over'] > 0 ? 'text-warning' : ''],
+                        ['Exceden', $totals['over'], 'con horas extra sobre su banda · honorarios por autorizar', $totals['over'] > 0 ? 'text-warning' : ''],
                     ];
                 @endphp
                 @foreach ($kpis as [$label, $value, $note, $tone])
@@ -166,7 +166,7 @@
                                 @if ($notice !== null)
                                     <span @class(['flex items-start gap-1 text-xs', 'text-warning' => $status === 'over', 'text-neutral' => $status !== 'over']) data-testid="tile-notice">
                                         <x-icon :name="$status === 'over' ? 'o-document-text' : 'o-check-circle'" class="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                        {{ $status === 'over' ? 'Oficio de conformidad pendiente' : 'Aceptado por el docente (casilla)' }}
+                                        {{ $status === 'over' ? ($row->extraLabel() ?? 'Honorarios por autorizar (jefe de depto)') : 'Aceptado por el docente (casilla)' }}
                                     </span>
                                 @endif
                             </button>
@@ -182,7 +182,7 @@
 
         <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-lg max-md:max-w-none p-0!" role="dialog" aria-modal="true" aria-labelledby="teacher-drawer-title" data-testid="teacher-drawer">
             @if ($showDrawer && $selected !== null)
-                @include('staffing::teacher-loads.drawer', ['row' => $selected, 'campusTones' => $campusTones, 'campusBar' => $campusBar])
+                @include('staffing::teacher-loads.drawer', ['row' => $selected, 'campusTones' => $campusTones, 'campusBar' => $campusBar, 'canDecide' => $canDecide])
             @endif
         </x-drawer>
     @endif

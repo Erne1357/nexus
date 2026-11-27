@@ -226,7 +226,7 @@ it('SEL-12 y HC-08: las horas de más aceptadas con la casilla quedan como «ace
 
     expect($pending())->not->toBeEmpty()
         ->and(collect($pending())->every(fn ($violation) => $violation->severity->value === 'soft'))->toBeTrue()
-        ->and($pending()[0]->message)->toEndWith('Requiere oficio de conformidad del docente (pendiente).')
+        ->and($pending()[0]->message)->toEndWith('h extra · honorarios por autorizar (jefe de depto).')
         ->and(Group::query()->where('teacher_id', $teacher->id)->count())->toBe(2);
 });
 

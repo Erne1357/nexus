@@ -124,7 +124,8 @@ it('HC-08: si pasa su banda, ve que su oficio de conformidad está pendiente', f
 
     Livewire::actingAs($this->user)->test('staffing::pages.my-load')
         ->assertSee('Pasas de tu banda')
-        ->assertSee('Pasas de tu banda de horas frente a grupo: requiere tu oficio de conformidad (pendiente).');
+        ->assertSee('Te pasas de tus horas de nombramiento: ')
+        ->assertSee('h extra · honorarios por autorizar (jefe de depto).');
 });
 
 it('PL-02: una tutoría ocupa su día con «0 h · no cuenta en tu carga» y no suma en sus asignadas', function () {
@@ -170,7 +171,7 @@ it('mantiene un número constante de consultas sin importar cuántos grupos tien
         myLoadGroup($n % 2 === 0 ? $this->c1 : $this->c2, 'G'.$n, 'Materia '.$n, [[1 + $n % 5, sprintf('%02d:00', 8 + $n), sprintf('%02d:00', 9 + $n)]]);
     }
 
-    expect($count())->toBe($few)->and($few)->toBeLessThanOrEqual(25);
+    expect($count())->toBe($few)->and($few)->toBeLessThanOrEqual(27);
 });
 
 describe('alcance', function () {

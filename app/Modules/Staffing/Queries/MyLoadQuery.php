@@ -47,6 +47,7 @@ final class MyLoadQuery
         private readonly ScheduleStateQuery $states,
         private readonly PublishedLoadsQuery $published,
         private readonly SiiTeacherScheduleQuery $sii,
+        private readonly ExtraHoursStatusQuery $extraHours,
     ) {}
 
     /**
@@ -290,7 +291,7 @@ final class MyLoadQuery
      * (PL-03: con plaza administrativa no hay banda, solo el tope duro de 42 h, HC-22; HC-08, que desde la tarea 1.50 se mide contra las horas frente a grupo: el límite es el tope de su banda o lo que
      * autorizó su casilla, SEL-12). `over_band` y `accepted` dicen si pasa su banda y si su casilla lo cubre.
      *
-     * @return array{base: int, teaching: int, band_from: int, band_to: int, band_limit: int, honorarios_cap: ?int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, administrative: ?int, administrative_cap: ?int, over_band: bool, accepted: bool, sources: list<array{source: string, hours: int}>}
+     * @return array{extra: int, extra_state: string, extra_label: ?string, base: int, teaching: int, band_from: int, band_to: int, band_limit: int, honorarios_cap: ?int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, administrative: ?int, administrative_cap: ?int, over_band: bool, accepted: bool, sources: list<array{source: string, hours: int}>}
      */
     private function hours(Teacher $teacher, Term $term, ScheduleState $state, int $assigned): array
     {
@@ -306,7 +307,16 @@ final class MyLoadQuery
         // PL-03 y HC-22: con plaza administrativa no hay banda de ±2; pasar el tope de 42 h es el choque duro HC-22.
         $overBand = $administrative === null ? $total > $limit['band_limit'] : $total > $limit['limit'];
 
+        // PL-04: las horas extra de ahora (de lo que ve) y su estado: por autorizar, autorizadas, no autorizadas o jefatura.
+        $extra = $limit['extra_hours'] ?? 0;
+        $extraStatus = $administrative === null && $extra > 0
+            ? $this->extraHours->forTerm($term, [$teacher->id], [$teacher->id => $extra], [$teacher->id => $teacher->user_id])[$teacher->id]
+            : ExtraHoursStatus::none();
+
         return [
+            'extra' => $extra,
+            'extra_state' => $extraStatus->state->value,
+            'extra_label' => $extraStatus->hasExtra() ? $extraStatus->label() : null,
             'base' => $limit['base_hours'],
             'teaching' => $limit['teaching_hours'],
             'band_from' => $limit['band_from'],

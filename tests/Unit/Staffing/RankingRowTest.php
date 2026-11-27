@@ -46,7 +46,7 @@ it('HC-08: «pasa su banda» va en su propio bloque, asignable, y no en el final
         ->and($row->isOverBand())->toBeTrue()
         ->and($row->bandAccepted())->toBeFalse()
         ->and($row->marks())->toBe([])
-        ->and($row->notices())->toBe(['sin_horas' => 'pasa su banda', 'traslado_justo' => 'traslado justo'])
+        ->and($row->notices())->toBe(['sin_horas' => 'con horas extra', 'traslado_justo' => 'traslado justo'])
         ->and($withClash->isFlagged())->toBeTrue()
         ->and($withClash->isOverBand())->toBeFalse()
         ->and(rankingRow(['flags' => ['sin_horas', 'banda_aceptada']])->bandAccepted())->toBeTrue();

@@ -9,7 +9,7 @@
     <span @class(['inline-flex items-center gap-1 whitespace-nowrap', 'text-warning' => $band, 'text-neutral' => ! $band])
         title="{{ match (true) {
             $band && $candidate->bandAccepted() => 'Con este grupo pasa su banda de horas frente a grupo, aceptado por el docente (casilla).',
-            $band => 'Con este grupo pasa su banda de horas frente a grupo: se puede asignar, pero requiere oficio de conformidad del docente (pendiente).',
+            $band => 'Con este grupo pasa su banda de horas frente a grupo: se puede asignar: sus horas extra quedan como honorarios por autorizar (jefe de depto).',
             default => 'Entre dos de sus clases seguidas le queda poco tiempo para cambiar de campus.',
         } }}" data-testid="notice-{{ $notice }}">
         <x-icon :name="$band ? 'o-clock' : 'o-map-pin'" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ $noticeLabel }}

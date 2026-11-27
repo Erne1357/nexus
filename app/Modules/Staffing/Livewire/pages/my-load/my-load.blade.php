@@ -82,7 +82,7 @@
                 @if ($h['administrative'] !== null)
                     Pasas del tope de {{ $h['administrative_cap'] }} h de tu plaza administrativa: Nexus no deja asignarte más clases.
                 @else
-                    {{ $h['accepted'] ? 'Pasas de tu banda de horas frente a grupo; lo aceptaste con la casilla.' : 'Pasas de tu banda de horas frente a grupo: requiere tu oficio de conformidad (pendiente).' }}
+                    {{ $h['accepted'] ? 'Pasas de tu banda de horas frente a grupo; lo aceptaste con la casilla.' : 'Te pasas de tus horas de nombramiento: '.($h['extra_label'] ?? $h['extra'].' h extra · honorarios por autorizar (jefe de depto)').'.' }}
                 @endif
             </p>
         @endif

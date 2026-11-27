@@ -52,7 +52,11 @@
                 <x-icon name="o-exclamation-triangle" class="mt-0.5 h-5 w-5" aria-hidden="true" />
                 <div>
                     <p class="font-semibold">{{ $band === 'under' ? 'Te faltan '.($low - $hours).' h para tu margen' : 'Pasas tu margen por '.($hours - $high).' h' }}</p>
-                    <p>Es responsabilidad del docente cubrir sus horas frente a grupo de acuerdo con su plaza.</p>
+                    @if ($band === 'over')
+                        <p data-testid="selection-finish-extra">Te pasas de tus horas de nombramiento: {{ $hours - $high }} h extra quedan a consideración de tu jefe de departamento como honorarios.</p>
+                    @else
+                        <p>Es responsabilidad del docente cubrir sus horas frente a grupo de acuerdo con su plaza.</p>
+                    @endif
                 </div>
             </div>
             <x-checkbox wire:model.live="acknowledged" label="Entiendo que es mi responsabilidad cubrir mis horas frente a grupo de acuerdo con mi plaza." class="checkbox-primary" data-testid="selection-acknowledge" />

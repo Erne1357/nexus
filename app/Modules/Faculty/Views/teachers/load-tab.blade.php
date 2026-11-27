@@ -60,7 +60,7 @@
                     @if ($week['administrative'] === null)
                         <p class="text-xs font-semibold {{ $over ? 'text-warning' : 'text-success' }}">
                             <x-icon :name="$over ? 'o-exclamation-triangle' : 'o-check-circle'" class="inline w-3.5 h-3.5" />
-                            {{ $over ? 'Pasa su banda' : 'Dentro de su banda' }}
+                            {{ $over ? 'Con horas extra' : 'Dentro de su banda' }}
                         </p>
                     @elseif ($over)
                         <p class="text-xs font-semibold text-error">
