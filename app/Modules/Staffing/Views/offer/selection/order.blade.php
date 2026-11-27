@@ -25,7 +25,7 @@
 
         return Minutes::dayLabel($at->dayOfWeekIso, true).' '.$at->format('G:i');
     };
-    $tiers = collect($order)->groupBy(fn ($row) => $row['prior'] ? 'prior' : ($row['source'] === 'appended' ? 'nd' : (string) $row['tier']), preserveKeys: false);
+    $tiers = collect($order)->groupBy(fn ($row) => $row['prior'] ? 'prior' : ($row['admin_post'] !== null ? 'admin' : ($row['source'] === 'appended' ? 'nd' : (string) $row['tier'])), preserveKeys: false);
     $extraStarts = $selection->extra_round_starts_at?->setTimezone(config('app.timezone'));
 @endphp
 <x-drawer wire:model.live="showOrder" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="selection-order-title" data-testid="selection-order-drawer">
@@ -45,14 +45,14 @@
             <div class="flex-1 space-y-4 px-5 pt-4 pb-6">
                 <p class="flex gap-2 text-sm text-neutral">
                     <x-icon name="o-information-circle" class="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
-                    <span>Va primero la plaza (TC, ¾, ½, Asignatura) y cada criterio que no se cumple baja un escalón. Dentro del escalón va primero quien cumple más criterios y luego la antigüedad; con todo igual se comparte el turno y el primero que elige se queda el grupo. Quien no viene en el CSV va al final, por su antigüedad en Nexus. Quien ya trae sus grupos escritos (elección previa) va arriba, sin turno. Los turnos no se recorren si alguien termina antes.</span>
+                    <span>Los docentes con un puesto administrativo (jefatura, coordinación, subdirección, plaza de apoyo) eligen primero. Luego va la plaza (TC, ¾, ½, Asignatura) y cada criterio que no se cumple baja un escalón. Dentro del escalón va primero quien cumple más criterios y luego la antigüedad; con todo igual se comparte el turno y el primero que elige se queda el grupo. Quien no viene en el CSV va al final, por su antigüedad en Nexus. Quien ya trae sus grupos escritos (elección previa) va arriba, sin turno. Los turnos no se recorren si alguien termina antes.</span>
                 </p>
 
                 <div class="space-y-4">
                     @foreach ($tiers as $key => $rows)
                         <section wire:key="tier-{{ $key }}" aria-labelledby="tier-title-{{ $key }}" class="min-w-0">
                             <h3 id="tier-title-{{ $key }}" class="mb-1.5 flex items-baseline gap-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">
-                                {{ match ($key) { 'prior' => 'Elección previa · ya traen sus grupos, sin turno', 'nd' => 'Sin datos · al final, por antigüedad en Nexus', default => $rows->first()['tier_label'] } }}
+                                {{ match ($key) { 'prior' => 'Elección previa · ya traen sus grupos, sin turno', 'admin' => 'Puesto administrativo · eligen primero', 'nd' => 'Sin datos · al final, por antigüedad en Nexus', default => $rows->first()['tier_label'] } }}
                                 <span class="font-mono">{{ $rows->count() }}</span>
                             </h3>
                             <ol class="divide-y divide-base-300 rounded-box border border-base-300 [&>li:first-child]:rounded-t-box [&>li:last-child]:rounded-b-box">
@@ -65,8 +65,8 @@
                                                 <p class="flex min-w-[10rem] flex-1 flex-wrap items-center gap-x-2 gap-y-1">
                                                     <b class="min-w-0 break-words">{{ $row['name'] }}</b>
                                                     @if ($me)<span class="badge badge-info badge-sm">tú</span>@endif
-                                                    {{-- Lugar de las etiquetas cortas por fila (p. ej. «Puesto administrativo», 1.54). --}}
-                                                    <span class="contents" data-slot="order-row-tags"></span>
+                                                    {{-- Lugar de las etiquetas cortas por fila: «Puesto administrativo» (SEL-07, 1.54). --}}
+                                                    <span class="contents" data-slot="order-row-tags">@if ($row['admin_post'] !== null)<x-core::status-badge tone="info" label="Puesto administrativo" class="badge-sm" :title="$row['admin_post']" data-testid="order-admin-post" />@endif</span>
                                                 </p>
                                                 @include('staffing::offer.selection.status', ['status' => $row['status'], 'inTurn' => $row['in_turn'], 'confirmation' => $row['confirmation']])
                                             </div>
@@ -77,8 +77,11 @@
                                                 @else
                                                     <span class="whitespace-nowrap">
                                                         <span class="font-mono text-base-content">{{ $extraRound && $row['extra_slot'] ? $slot($row['extra_slot']) : $slot($row['slot']) }}</span>@if ($extraRound && $row['extra_slot']) <span class="text-[12px]">ronda extra</span>@endif
-                                                        @if ($row['tie'])<span class="ms-1 inline-flex items-center gap-0.5 text-[12px] font-semibold text-info" title="Mismo escalón, criterios y antigüedad: comparten el turno"><x-icon name="o-link" class="h-3 w-3" aria-hidden="true" />empate</span>@endif
+                                                        @if ($row['tie'])<span class="ms-1 inline-flex items-center gap-0.5 text-[12px] font-semibold text-info" title="Mismo puesto administrativo, escalón, criterios y antigüedad: comparten el turno"><x-icon name="o-link" class="h-3 w-3" aria-hidden="true" />empate</span>@endif
                                                     </span>
+                                                    @if ($row['admin_post'] !== null)
+                                                        <span class="text-base-content">{{ $row['admin_post'] }}</span>
+                                                    @endif
                                                     @if ($row['source'] === 'appended')
                                                         <span>Sin datos · no viene en el CSV{{ $row['hired_on'] ? ' · ingresó en '.substr($row['hired_on'], 0, 4) : '' }}</span>
                                                     @else

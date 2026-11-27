@@ -60,6 +60,8 @@ final class SelectionMonitorQuery
             return [
                 'entry' => $entry,
                 'name' => $entry->teacher?->name ?? $entry->csv_name,
+                // SEL-07: el puesto administrativo con el que pasa primero en la orden (tarea 1.54), o nulo.
+                'admin_post' => $entry->isPriorChoice() ? null : $entry->administrative_post,
                 'hours' => (int) $taken->sum('hours'),
                 'groups' => $taken->pluck('code')->sort()->values()->all(),
                 'current' => $current?->getKey() === $entry->getKey(),

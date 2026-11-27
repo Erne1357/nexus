@@ -13,9 +13,9 @@ use Carbon\CarbonImmutable;
  * escalón final (SEL-06: «TC → ¾» con un criterio fallido), los cuatro criterios del CSV, la antigüedad, el estado del
  * renglón, si comparte la media hora con otro (SEL-07) y si está en turno ahora. Quien no viene en el CSV (SEL-10) va
  * sin escalón ni criterios y con su fecha de ingreso. Quien tiene elección previa (SEL-16) va aparte, primero, sin lugar ni turno y con sus horas (`prior`, `hours`); no
- * comparte turno con nadie; `confirmation` es `pending` (falta confirmar sus horas de más, SEL-16 ampliada), `confirmed` o nulo. Tres consultas.
+ * comparte turno con nadie; `confirmation` es `pending` (falta confirmar sus horas de más, SEL-16 ampliada), `confirmed` o nulo. Tres consultas. `admin_post` es el puesto administrativo guardado en el renglón (SEL-07, RecomputeSelectionOrder), o nulo.
  *
- * @phpstan-type OrderRow array{position: int, slot_index: int, name: string, slot: ?string, extra_slot: ?string, plaza_tier_label: ?string, tier_label: ?string, criteria: ?array{auto_eval: ?bool, prior_compliance: ?bool, partials_1: ?bool, partials_2: ?bool}, seniority: ?string, status: string, source: string, teacher_id: ?string, base_hours: int, failed_criteria: int, tier: ?int, hired_on: ?string, tie: bool, in_turn: bool, prior: bool, hours: ?int, confirmation: ?string}
+ * @phpstan-type OrderRow array{position: int, slot_index: int, name: string, slot: ?string, extra_slot: ?string, plaza_tier_label: ?string, tier_label: ?string, criteria: ?array{auto_eval: ?bool, prior_compliance: ?bool, partials_1: ?bool, partials_2: ?bool}, seniority: ?string, status: string, source: string, teacher_id: ?string, base_hours: int, failed_criteria: int, tier: ?int, hired_on: ?string, tie: bool, in_turn: bool, prior: bool, hours: ?int, confirmation: ?string, admin_post: ?string}
  */
 final class SelectionOrderQuery
 {
@@ -68,6 +68,7 @@ final class SelectionOrderQuery
                 'tie' => ! $prior && ($perSlot[$entry->slot_index] ?? 0) > 1,
                 'in_turn' => isset($inTurn[$entry->getKey()]),
                 'prior' => $prior,
+                'admin_post' => $prior ? null : $entry->administrative_post,
                 'hours' => $prior ? ($measured[$entry->getKey()]['hours'] ?? 0) : null,
                 'confirmation' => match (true) {
                     ! $prior || ! isset($measured[$entry->getKey()]) => null,

@@ -346,3 +346,38 @@ describe('el CSV temporal (lleva datos personales) se borra siempre', function (
         expect($file->exists())->toBeFalse();
     });
 });
+
+it('SEL-07: el monitor y la vista previa marcan «Puesto administrativo» y el jefe va primero', function () {
+    $selection = Selection::factory()->create(['status' => SelectionStatus::Running, 'starts_at' => now()->subHour()]);
+    $head = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $selection->department_id])->create();
+    $boss = Teacher::factory()->create(['name' => 'Rosa Jefa Soto', 'user_id' => $head->id]);
+    $plain = Teacher::factory()->create(['name' => 'Luis Docente Ruiz']);
+    SelectionEntry::factory()->for($selection)->create(['teacher_id' => $boss->id, 'administrative_post' => 'Jefe de departamento académico', 'position' => 1, 'slot_index' => 0, 'slot_starts_at' => now()->subMinutes(5), 'slot_ends_at' => now()->addMinutes(25)]);
+    SelectionEntry::factory()->for($selection)->create(['teacher_id' => $plain->id, 'position' => 2, 'slot_index' => 1, 'slot_starts_at' => now()->addMinutes(25), 'slot_ends_at' => now()->addMinutes(55)]);
+
+    Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin', ['seleccion' => $selection->id])
+        ->assertSee('Puesto administrativo')
+        ->assertSeeInOrder(['Rosa Jefa Soto', 'Puesto administrativo', 'Luis Docente Ruiz']);
+});
+
+it('SEL-07: la vista previa del paso 6 pone aparte a quien tiene puesto administrativo', function () {
+    $s = adminScope();
+    $head = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $s['department']->id])->create();
+    Teacher::factory()->adscribedTo($s['department'])->create(['name' => 'Rosa Jefa Soto', 'user_id' => $head->id]);
+    Teacher::factory()->adscribedTo($s['department'])->create(['name' => 'Ana Pérez Lara']);
+
+    Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin')
+        ->set('termId', $s['term']->id)
+        ->set('modalityId', $s['modality']->id)
+        ->set('departmentId', $s['department']->id)
+        ->call('start')
+        ->call('goTo', 2)
+        ->set('csvFile', UploadedFile::fake()->createWithContent('criterios.csv', ADMIN_HEADER."ana perez lara;40;si;si;si;si;12\nrosa jefa soto;20;si;si;si;si;3\n"))
+        ->call('importCsv')
+        ->call('setSpace', $s['subject']->id, 'aula')
+        ->set('startsOn', now()->addDays(3)->format('Y-m-d'))
+        ->call('schedule')
+        ->call('goTo', 6)
+        ->assertSeeHtml('data-testid="preview-admin"')
+        ->assertSee('Puesto administrativo');
+});

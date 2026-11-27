@@ -87,3 +87,34 @@ it('SEL-10: los nombres con acento se ordenan sin acentos en los empates', funct
 
     expect(array_column($ranked, 'key'))->toBe(['alvaro', 'beto', 'nandu', 'zeta']);
 });
+
+it('SEL-07: los docentes con puesto administrativo van antes que los demás, sin importar su escalón', function () {
+    $ranked = SelectionOrder::rank([
+        [...selEntry('tc', 'csv', 0, 30.0, null, 'A', 0), 'admin' => false],
+        [...selEntry('admin-bajo', 'csv', 4, 1.0, null, 'B', 2), 'admin' => true],
+        [...selEntry('admin-alto', 'csv', 1, 5.0, null, 'C', 0), 'admin' => true],
+    ]);
+
+    expect(array_column($ranked, 'key'))->toBe(['admin-alto', 'admin-bajo', 'tc']);
+});
+
+it('SEL-07: dentro de cada grupo rige el orden de siempre, con el CSV antes que los agregados', function () {
+    $ranked = SelectionOrder::rank([
+        [...selEntry('agregado', 'appended', null, null, '2010-01-01', 'Z'), 'admin' => false],
+        [...selEntry('csv', 'csv', 2, 3.0, null, 'Y'), 'admin' => false],
+        [...selEntry('admin-agregado', 'appended', null, null, '2015-01-01', 'X'), 'admin' => true],
+        [...selEntry('admin-csv', 'csv', 3, 3.0, null, 'W'), 'admin' => true],
+    ]);
+
+    expect(array_column($ranked, 'key'))->toBe(['admin-csv', 'admin-agregado', 'csv', 'agregado']);
+});
+
+it('SEL-07: el turno compartido exige los cuatro valores iguales, el puesto administrativo incluido', function () {
+    $ranked = SelectionOrder::rank([
+        [...selEntry('a', 'csv', 0, 10.0, null, 'A', 0), 'admin' => true],
+        [...selEntry('b', 'csv', 0, 10.0, null, 'B', 0), 'admin' => true],
+        [...selEntry('c', 'csv', 0, 10.0, null, 'C', 0), 'admin' => false],
+    ]);
+
+    expect(array_column($ranked, 'slot_index'))->toBe([0, 0, 1]);
+});
