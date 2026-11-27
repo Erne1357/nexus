@@ -135,6 +135,11 @@ describe('en el Resumen del alumno', function () {
             ->assertDontSeeHtml('data-testid="role-block"');
     });
 
+    it('1.85: el encabezado del alumno lleva el subtítulo que Students registró en HomePanels', function () {
+        Livewire::actingAs($this->alumno)->test('core::pages.home')
+            ->assertSee('Tu avance, lo que cursas y lo que necesita tu atención.');
+    });
+
     it('AC-15: «Puede seleccionarla» es visible para el alumno, que va a su retícula por «Mis datos»', function () {
         Livewire::actingAs($this->alumno)->test('students::components.student-summary')
             ->assertSee('Puede seleccionarla')

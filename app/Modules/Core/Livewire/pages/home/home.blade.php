@@ -1,5 +1,5 @@
 <div>
-    <x-header :title="$panel !== null ? 'Resumen' : 'Hola, '.$name" :subtitle="$panel !== null ? 'Tu avance, lo que cursas y lo que necesita tu atención.' : 'Las pantallas de tu rol aparecen en el menú conforme se habilitan.'" separator />
+    <x-header :title="$panel !== null ? 'Resumen' : 'Hola, '.$name" :subtitle="($panel !== null ? $panelSubtitle : null) ?? 'Las pantallas de tu rol aparecen en el menú conforme se habilitan.'" separator />
 
     @if ($panel !== null)
         {{-- AC-15 (1.67): el módulo dueño del puesto pone su panel (HomePanels); para el alumno, el tablero de Students. --}}

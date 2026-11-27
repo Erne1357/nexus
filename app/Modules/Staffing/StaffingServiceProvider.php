@@ -24,6 +24,7 @@ use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Settings\SettingDefinition;
 use App\Modules\Core\Settings\SettingType;
+use App\Modules\Core\Support\HomePanels;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
@@ -139,6 +140,9 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     public function boot(): void
     {
         parent::boot();
+
+        // IN-03 (1.85): el Resumen del docente es el tablero de Staffing (Core no lo conoce: lo pinta con HomePanels).
+        $this->app->make(HomePanels::class)->register('docente', 'staffing::components.teacher-summary', 'Tus clases de hoy, tu carga y lo que necesita tu atención.');
 
         foreach (self::REFRESH_LOADS_ON as $event) {
             Event::listen($event, QueueTeacherLoadRefresh::class);

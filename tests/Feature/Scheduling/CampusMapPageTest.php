@@ -41,7 +41,7 @@ it('lo que era el Inicio queda como Resumen en Mi espacio', function () {
     actingAsRole($user, Role::Docente)
         ->get(route('core.summary'))
         ->assertOk()
-        ->assertSee('Hola, Ana López');
+        ->assertSee('Tus clases de hoy, tu carga y lo que necesita tu atención.');
 
     actingAsRole($user, Role::Docente)
         ->get('/')
