@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Queries\TeacherSearchQuery;
@@ -55,7 +56,7 @@ new class extends Component
 
     private function group(): Group
     {
-        $group = Group::query()->findOrFail($this->groupId);
+        $group = KeyLookup::findOrFail(Group::query(), $this->groupId);
         $this->authorize('create', [GroupTeacherAssignment::class, $group]);
 
         return $group;
