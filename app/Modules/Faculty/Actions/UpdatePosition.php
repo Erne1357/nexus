@@ -24,7 +24,7 @@ final class UpdatePosition
     public function __construct(private readonly PositionRules $rules) {}
 
     /**
-     * @param  array{kind?: string, base_hours?: int|string|null, valid_from?: ?string, valid_to?: ?string}  $data
+     * @param  array{kind?: string, category?: ?string, base_hours?: int|string|null, valid_from?: ?string, valid_to?: ?string}  $data
      *
      * @throws ValidationException
      */
@@ -37,7 +37,7 @@ final class UpdatePosition
                 ?? throw ValidationException::withMessages(['position' => 'Esa plaza ya se quitó.']);
 
             $old = $this->rules->logged($locked);
-            $new = $this->rules->normalize([...$old, ...$data]);
+            $new = $this->rules->normalize([...$old, ...$data], $old);
             $new['kind'] = $new['kind']->value;
 
             $changed = array_keys(array_filter($new, fn (mixed $value, string $field): bool => $value !== $old[$field], ARRAY_FILTER_USE_BOTH));

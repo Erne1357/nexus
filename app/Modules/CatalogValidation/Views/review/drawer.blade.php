@@ -91,12 +91,15 @@
                             </div>
                             @error('position') <p class="text-sm text-error">{{ $message }}</p> @enderror
                             @forelse ($positions as $i => $position)
-                                {{-- Aquí, junto con el tipo, va el select de la categoría de la plaza cuando exista (PL-01). --}}
                                 <fieldset @disabled(! ($editing['canPositions'] ?? false)) wire:key="position-{{ $position['id'] !== '' ? $position['id'] : 'new-'.$i }}" class="space-y-2 rounded-field border border-base-300 p-3" data-testid="position-row">
                                     <div class="grid grid-cols-[minmax(0,1fr)_6rem] gap-3">
-                                        <x-select label="Tipo" wire:model="positions.{{ $i }}.kind" :options="$positionKinds" />
+                                        <x-select label="Tipo" wire:model.live="positions.{{ $i }}.kind" :options="$positionKinds" />
                                         <x-input label="Horas" wire:model="positions.{{ $i }}.base_hours" type="number" min="0" inputmode="numeric" class="font-mono" />
                                     </div>
+                                    {{-- Categoría (PL-01, CV17): el nombre legible; la clave del catálogo se guarda sin mostrarse. Solo carrera y asignatura la tienen. --}}
+                                    @if ($categoryOptions[$i] ?? [])
+                                        <x-select label="Categoría" wire:model="positions.{{ $i }}.category" :options="$categoryOptions[$i]" :placeholder="$position['kind'] === 'asignatura' ? 'Sin categoría' : 'Sin categoría (se mide como titular)'" placeholder-value="" hint="Define las horas frente a grupo" data-testid="position-category" />
+                                    @endif
                                     <div class="grid grid-cols-2 gap-3">
                                         <x-input label="Vigente desde" wire:model="positions.{{ $i }}.valid_from" type="date" />
                                         <x-input label="Hasta" wire:model="positions.{{ $i }}.valid_to" type="date" hint="Vacío: sin fin" />

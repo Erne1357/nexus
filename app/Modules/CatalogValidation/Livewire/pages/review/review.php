@@ -43,6 +43,7 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Queries\TeacherAccessQuery;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
+use App\Modules\Faculty\Rules\PositionCategories;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Model;
@@ -203,10 +204,10 @@ new #[Title('Validación de catálogos')] class extends Component
     public string $hired_on = '';
 
     /**
-     * Las plazas de un docente en el panel «Corregir docente» (CV17): `id` (vacío si es nueva), `kind`, `base_hours`,
-     * `valid_from` y `valid_to`.
+     * Las plazas de un docente en el panel «Corregir docente» (CV17): `id` (vacío si es nueva), `kind`, `category`
+     * (la clave del catálogo o vacía, PL-01), `base_hours`, `valid_from` y `valid_to`.
      *
-     * @var list<array{id: string, kind: string, base_hours: string, valid_from: string, valid_to: string}>
+     * @var list<array{id: string, kind: string, category: string, base_hours: string, valid_from: string, valid_to: string}>
      */
     public array $positions = [];
 
@@ -329,6 +330,11 @@ new #[Title('Validación de catálogos')] class extends Component
 
     public function updated(string $property): void
     {
+        // Las categorías cambian con el tipo de plaza (PL-01): al cambiarlo, la de antes ya no aplica.
+        if (preg_match('/^positions\.(\d+)\.kind$/', $property, $match) === 1 && isset($this->positions[(int) $match[1]])) {
+            $this->positions[(int) $match[1]]['category'] = '';
+        }
+
         if ($property === 'department') {
             $this->resolved = null;
         }
@@ -547,7 +553,7 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     public function addPositionRow(): void
     {
-        $this->positions[] = ['id' => '', 'kind' => PositionKind::Asignatura->value, 'base_hours' => '', 'valid_from' => CarbonImmutable::now()->toDateString(), 'valid_to' => ''];
+        $this->positions[] = ['id' => '', 'kind' => PositionKind::Asignatura->value, 'category' => '', 'base_hours' => '', 'valid_from' => CarbonImmutable::now()->toDateString(), 'valid_to' => ''];
     }
 
     /**
@@ -913,6 +919,7 @@ new #[Title('Validación de catálogos')] class extends Component
             'degree' => 'grado',
             'hired_on' => 'fecha de ingreso',
             'positions.*.kind' => 'tipo de plaza',
+            'positions.*.category' => 'categoría',
             'positions.*.base_hours' => 'horas base',
             'positions.*.valid_from' => 'inicio de vigencia',
             'positions.*.valid_to' => 'fin de vigencia',
@@ -1347,6 +1354,7 @@ new #[Title('Validación de catálogos')] class extends Component
             'flagOptions' => collect(ReviewFlag::cases())->filter(fn (ReviewFlag $flag): bool => $flag->appliesTo($review->catalog))->map(fn (ReviewFlag $flag): array => ['id' => $flag->value, 'name' => $flag->label()])->values()->all(),
             'degrees' => array_map(fn (TeacherDegree $degree): array => ['id' => $degree->value, 'name' => $degree->label()], TeacherDegree::cases()),
             'positionKinds' => array_map(fn (PositionKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], PositionKind::cases()),
+            'categoryOptions' => array_map(fn (array $position): array => PositionCategories::options(PositionKind::tryFrom($position['kind']), $position['category'] ?? null), $this->positions),
             'kinds' => array_map(fn (SubjectKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], SubjectKind::cases()),
             'roomTypes' => array_map(fn (RoomType $type): array => ['id' => $type->value, 'name' => $type->label()], RoomType::cases()),
         ];
@@ -1707,6 +1715,7 @@ new #[Title('Validación de catálogos')] class extends Component
                 'positions' => $record->positions()->orderBy('valid_from')->get()->map(fn ($position): array => [
                     'id' => (string) $position->getKey(),
                     'kind' => $position->kind->value,
+                    'category' => (string) $position->category,
                     'base_hours' => (string) $position->base_hours,
                     'valid_from' => $position->valid_from?->toDateString() ?? '',
                     'valid_to' => $position->valid_to?->toDateString() ?? '',
@@ -1741,6 +1750,7 @@ new #[Title('Validación de catálogos')] class extends Component
                 'positions' => ['array'],
                 'positions.*.id' => ['nullable', 'string'],
                 'positions.*.kind' => ['required', Rule::enum(PositionKind::class)],
+                'positions.*.category' => ['nullable', 'string', 'max:8'],
                 'positions.*.base_hours' => ['nullable', 'integer', 'min:0', 'max:'.PositionKind::MAX_HOURS],
                 'positions.*.valid_from' => ['nullable', 'date_format:Y-m-d'],
                 'positions.*.valid_to' => ['nullable', 'date_format:Y-m-d'],
