@@ -93,6 +93,7 @@ Mientras llegan, cada módulo trabaja con factories y un `DemoSeeder` que reprod
 | 1.44 ✅ [#863](https://github.com/Erne1357/nexus/pull/863), [#870](https://github.com/Erne1357/nexus/pull/870) | El jefe del departamento dueño de la materia y el admin cambian su tipo de espacio desde Catálogos › Materias (permiso `academic.subject.set_space`, SEL-17) | | | | |
 | 1.45 ✅ [#872](https://github.com/Erne1357/nexus/pull/872) | Elección previa con más horas que su base (pedido del usuario del 25 de noviembre de 2026): al publicar la orden, a quien queda arriba de su base más 2 horas se le pide confirmar con una casilla en su pantalla de la orden (aviso en la campana y por correo); al confirmar se justifica su HC-08 a su nombre y queda en la bitácora; si sus horas cambiaron entre que vio la pantalla y confirmó, se le pide revisar de nuevo (SEL-16) | | | | |
 | 1.68 ✅ [#911](https://github.com/Erne1357/nexus/pull/911) | La retícula del alumno («Mis datos › Retícula») es interactiva como la del personal (pedido del usuario del 26 de noviembre de 2026): resaltado de cadenas de seriación, leyenda de cadenas plegada en celular y barra de selección con «Quitar resaltado»; AC-15 actualizada | | | | |
+| 1.70 ✅ [#910](https://github.com/Erne1357/nexus/pull/910) | Kárdex del alumno del último periodo cursado al primero (pedido del usuario del 26 de noviembre de 2026) | | | | |
 
 ## Pruebas de la fase
 
