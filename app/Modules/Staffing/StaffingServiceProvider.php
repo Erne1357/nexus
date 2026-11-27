@@ -176,6 +176,8 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         };
 
         return [
+            new NavigationItem('Carga actual', 'staffing.current-load', 'o-table-cells', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, order: -1, whyUnavailable: $loadInProgress,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView)),
             new NavigationItem('Asignación docente', 'staffing.assign', 'o-user-plus', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::RankingView)),
             new NavigationItem('Orden de selección', 'staffing.selection.admin', 'o-queue-list', NavigationArea::Administracion, group: NavigationGroup::Configuracion, order: -1,
