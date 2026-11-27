@@ -22,6 +22,7 @@ use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Support\PublishedStamps;
 use App\Modules\Staffing\Support\SessionLabels;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 
 /**
  * «Mi carga» (tarea 3.10): los grupos no cancelados del docente en el periodo, de todos los campus, acomodados por día
@@ -184,7 +185,7 @@ final class MyLoadQuery
         $publishedGroups = $published->teacher($teacher->id);
         // PL-02: la versión publicada no guarda si la materia cuenta en la carga del docente; se lee de la materia de hoy.
         $countsBySubject = $publishedGroups === [] ? collect() : Subject::query()->withTrashed()
-            ->whereIn('id', array_map(fn (array $entry): string => $entry['group']->subject['id'], $publishedGroups))
+            ->whereIn('id', array_values(array_filter(array_map(fn (array $entry): string => (string) ($entry['group']->subject['id'] ?? ''), $publishedGroups), Str::isUuid(...))))
             ->pluck('counts_teacher_hours', 'id');
 
         $groups = [
@@ -214,6 +215,7 @@ final class MyLoadQuery
             'campus_name' => $group['campus_name'],
             'department' => $group['department'],
             'hours' => $group['hours'],
+            'counts_teacher_hours' => $group['counts_teacher_hours'],
             'schedule' => SessionLabels::lines(array_map(fn (array $s): array => [$s['day'], $s['starts_at'], $s['ends_at']], $group['sessions'])),
             'sessions' => array_map(fn (array $s): array => self::session($s['day'], $s['starts_at'], $s['ends_at'], $s['room'], 'class'), $group['sessions']),
             'published' => null,

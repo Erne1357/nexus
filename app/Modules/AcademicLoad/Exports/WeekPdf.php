@@ -44,7 +44,19 @@ abstract class WeekPdf extends PublishedPdf
             'subtitle' => $this->subtitle($schedule),
             'updated' => self::updated($schedule->updatedAt($groups)),
             ...self::week($groups, $schedule, fn (PublishedGroup $group, array $session): array => $this->detailOf($group, $session)),
+            'countedHours' => $this->countedHours($groups),
         ], 'landscape'];
+    }
+
+    /**
+     * Las horas que cuentan en la carga del docente, si alguna materia no cuenta (PL-02, solo en la semana de un docente);
+     * null en lo demás.
+     *
+     * @param  list<PublishedGroup>  $groups
+     */
+    protected function countedHours(array $groups): int|float|null
+    {
+        return null;
     }
 
     /**

@@ -45,7 +45,7 @@
                 @if ($subtitle !== null)
                     <span class="font-medium text-base-content">{{ $subtitle }}</span>
                 @endif
-                <span data-testid="published-facts"><span class="font-medium text-base-content">{{ $plural(count($groups), 'grupo', 'grupos') }}</span> · <span class="font-mono">{{ $hours }}</span> {{ $hours === 1 ? 'hora' : 'horas' }} a la semana</span>
+                <span data-testid="published-facts"><span class="font-medium text-base-content">{{ $plural(count($groups), 'grupo', 'grupos') }}</span> · <span class="font-mono">{{ $hours }}</span> {{ $hours === 1 ? 'hora' : 'horas' }} a la semana{!! ($countedHours ?? null) !== null ? ' · <span class="font-mono" data-testid="published-counted-hours">'.e($countedHours).'</span> cuentan en su carga' : '' !!}</span>
                 <span>{{ $context->campus?->name ?? $context->modality->name }}</span>
             </p>
             @if ($updated !== '')

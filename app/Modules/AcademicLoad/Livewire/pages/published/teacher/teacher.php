@@ -2,6 +2,7 @@
 
 use App\Modules\AcademicLoad\Queries\PublishedContext;
 use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
+use App\Modules\AcademicLoad\Queries\PublishedTeacherHoursQuery;
 use App\Modules\AcademicLoad\Queries\PublishedWeek;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use Illuminate\Support\Str;
@@ -67,7 +68,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(PublishedContextQuery $contexts): array
+    public function with(PublishedContextQuery $contexts, ?PublishedTeacherHoursQuery $teacherHours = null): array
     {
         $context = $this->context($contexts);
         $schedule = $context->schedule;
@@ -90,6 +91,8 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'groups' => $groups,
             'profile' => $profile,
             'hours' => PublishedWeek::weeklyHours($groups),
+            // PL-02: si alguna materia no cuenta en la carga del docente, cuántas de esas horas sí le cuentan.
+            'countedHours' => ($teacherHours ?? app(PublishedTeacherHoursQuery::class))->counted($groups),
             'selectedDay' => $day,
             'updated' => PublishedWeek::updatedOn($schedule->updatedAt($groups)),
             'backUrl' => route('published.index', $this->routeParameters()),

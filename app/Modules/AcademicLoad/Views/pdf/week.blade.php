@@ -7,7 +7,7 @@
     @if ($cells === [])
         <p class="dim">No hay sesiones publicadas.</p>
     @else
-        <div class="meta"><b>{{ rtrim(rtrim(number_format($hours, 1), '0'), '.') }}</b> horas a la semana</div>
+        <div class="meta"><b>{{ rtrim(rtrim(number_format($hours, 1), '0'), '.') }}</b> horas a la semana{!! ($countedHours ?? null) !== null ? ' · <b>'.e(rtrim(rtrim(number_format($countedHours, 1), '0'), '.')).'</b> cuentan en su carga' : '' !!}</div>
         <table style="table-layout: fixed;">
             <thead>
                 <tr>

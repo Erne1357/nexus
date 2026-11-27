@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Exports;
 use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedSchedule;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
+use App\Modules\AcademicLoad\Queries\PublishedTeacherHoursQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -58,6 +59,14 @@ final class TeacherPdf extends WeekPdf
     protected function groupsOf(PublishedSchedule $schedule): array
     {
         return $schedule->teacher($this->teacherId);
+    }
+
+    /**
+     * PL-02: igual que la pantalla, si alguna de sus materias no cuenta en su carga, cuántas horas sí le cuentan.
+     */
+    protected function countedHours(array $groups): int|float|null
+    {
+        return app(PublishedTeacherHoursQuery::class)->counted($groups);
     }
 
     protected function title(): string
