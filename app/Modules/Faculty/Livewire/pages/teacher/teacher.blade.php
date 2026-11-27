@@ -540,6 +540,11 @@
                     :readonly="\App\Modules\Faculty\Enums\PositionKind::tryFrom($kind)?->fixedHours() !== null"
                     :hint="\App\Modules\Faculty\Enums\PositionKind::tryFrom($kind)?->fixedHours() !== null ? 'Las fija el tipo de plaza.' : 'De 1 a 40.'"
                 />
+                @if ($categoryOptions !== [])
+                    <div class="md:col-span-2">
+                        <x-select label="Categoría" name="category" wire:model="category" :options="$categoryOptions" :placeholder="$kind === 'asignatura' ? 'Sin categoría' : 'Sin categoría (se mide como titular)'" placeholder-value="" hint="Define las horas frente a grupo" data-testid="position-category" />
+                    </div>
+                @endif
                 <x-input label="Desde" name="valid_from" wire:model.live="valid_from" type="date" hint="Vacío es sin fecha de inicio." />
                 <x-input label="Hasta (si tiene)" name="valid_to" wire:model.live="valid_to" type="date" hint="Vacío es sin fecha de fin." />
             </div>
