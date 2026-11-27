@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling;
 
+use App\Modules\Academic\Events\SubjectUpdated;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
@@ -113,6 +114,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         PositionChanged::class,
         TeachingHoursChanged::class,
         ModalityUpdated::class,
+        SubjectUpdated::class,
     ];
 
     /**

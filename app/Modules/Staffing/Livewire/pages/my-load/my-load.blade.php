@@ -112,6 +112,10 @@
                                     <div @class(['flex min-w-0 flex-col gap-0.5 rounded-field border-l-4 px-2.5 py-2', 'border-l-primary bg-primary/10' => $block['campus_code'] === $load['home'], 'border-l-warning bg-warning/10' => $block['campus_code'] !== $load['home']]) data-testid="block-{{ $block['group_id'] }}">
                                         <b class="line-clamp-2 text-sm leading-tight">{{ $block['subject_name'] }}</b>
                                         <span class="font-mono text-xs text-neutral">{{ $block['time'] }}</span>
+                                        @unless ($block['counts_teacher_hours'])
+                                            {{-- PL-02 (tarea 1.73): ocupa tu horario, pero sus horas no cuentan en tu carga (supuesto por confirmar). --}}
+                                            <span class="text-xs text-neutral" data-testid="no-teacher-hours-{{ $block['group_id'] }}"><span class="font-mono">0 h</span> · no cuenta en tu carga</span>
+                                        @endunless
                                         <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
                                             <span class="font-mono font-semibold">{{ $block['group_code'] }}</span>
                                             @if ($block['room'])

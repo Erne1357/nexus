@@ -48,6 +48,10 @@
                         <div class="border-base-300 px-3 py-2.5 max-sm:border-b sm:border-e">
                             <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Horas</dt>
                             <dd><span class="font-mono font-semibold">{{ $card['hours'] }}</span> a la semana</dd>
+                            @unless ($card['counts_teacher_hours'] ?? true)
+                                {{-- PL-02 (tarea 1.73): ocupa tu horario, pero sus horas no cuentan en tu carga. --}}
+                                <dd class="text-[12.5px] text-neutral" data-testid="selection-no-teacher-hours">no cuentan en tu carga</dd>
+                            @endunless
                         </div>
                         <div class="border-base-300 px-3 py-2.5 max-sm:border-b sm:border-e">
                             <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Lugares</dt>
@@ -148,7 +152,7 @@
                         @endif
 
                         @if ($pickable && $hours !== null)
-                            @php($after = $hours['hours'] + $card['hours'])
+                            @php($after = $hours['hours'] + ($card['teacher_hours'] ?? $card['hours']))
                             @php($band = LoadBand::classify($after, $hours['base']))
                             <p class="flex items-start gap-2 text-sm" data-testid="selection-after">
                                 <x-icon name="o-calculator" class="mt-0.5 h-4 w-4 flex-none text-neutral" aria-hidden="true" />

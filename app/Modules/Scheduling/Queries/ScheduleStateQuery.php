@@ -115,9 +115,9 @@ final class ScheduleStateQuery
             ->each(fn (GroupQuota $quota) => $builder->quota(new StateQuota($quota->group_id, $quota->career_id, $quota->max_seats, $quota->is_owner)));
 
         Subject::query()->withTrashed()->whereIn('id', $groups->pluck('subject_id')->unique()->all())
-            ->get(['id', 'code', 'name', 'theory_hours', 'practice_hours', 'needs_lab', 'is_active', 'deleted_at'])
+            ->get(['id', 'code', 'name', 'theory_hours', 'practice_hours', 'needs_lab', 'is_active', 'deleted_at', 'counts_teacher_hours'])
             ->each(fn (Subject $subject) => $builder->subject(new StateSubject($subject->id, $subject->code, $subject->name,
-                $subject->theory_hours, $subject->practice_hours, $subject->needs_lab, $subject->is_active && ! $subject->trashed())));
+                $subject->theory_hours, $subject->practice_hours, $subject->needs_lab, $subject->is_active && ! $subject->trashed(), $subject->counts_teacher_hours)));
 
         $this->addRooms($builder, $term, $campusIds, array_keys($roomIds));
 

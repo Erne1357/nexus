@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing\Listeners;
 
+use App\Modules\Academic\Events\SubjectUpdated;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Faculty\Events\AdscriptionChanged;
@@ -45,6 +46,8 @@ final class QueueTeacherLoadRefresh
             $event instanceof HourAllowanceChanged => [$event->allowance->term_id],
             $event instanceof TeachingHoursChanged => [$event->termId],
             $event instanceof PositionChanged, $event instanceof TeacherUpdated, $event instanceof AdscriptionChanged => $this->openTerms(),
+            // PL-02: cambió si las horas de una materia cuentan en la carga del docente.
+            $event instanceof SubjectUpdated => in_array('counts_teacher_hours', $event->changed, true) ? $this->openTerms() : [],
             default => [],
         };
     }

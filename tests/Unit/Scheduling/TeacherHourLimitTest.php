@@ -80,3 +80,18 @@ it('HC-08: la banda para mostrar y el aviso sin el nombre, que comparten las pan
         ->and(TeacherHourLimit::notice(TeacherHourLimit::of($state, 'T3')))->toBeNull()
         ->and(TeacherHourLimit::notice(TeacherHourLimit::of($state, 'T4')))->toBe('Pasa su tope de honorarios (4 h): lleva 5 h. Requiere oficio de conformidad del docente (pendiente).');
 });
+
+it('PL-02: una materia que no cuenta en la carga del docente le suma 0 h; sus horas de sesión siguen siendo las de la materia', function () {
+    $tutoring = States::subject('TUT', theory: 1, practice: 0, countsTeacherHours: false);
+    $state = States::builder()
+        ->teacher(States::teacher('T1', base: 20, teaching: 12))
+        ->subject(States::subject('S-A', theory: 3, practice: 2))
+        ->subject($tutoring)
+        ->group(States::group('A', teacher: 'T1', subject: 'S-A'))
+        ->group(States::group('T', teacher: 'T1', subject: 'TUT'))
+        ->build();
+
+    expect(TeacherHourLimit::of($state, 'T1'))->toMatchArray(['assigned_hours' => 5, 'groups' => ['A' => 5, 'T' => 0], 'remaining_hours' => 9])
+        ->and($tutoring->weeklyHours())->toBe(1)
+        ->and($tutoring->teacherHours())->toBe(0);
+});

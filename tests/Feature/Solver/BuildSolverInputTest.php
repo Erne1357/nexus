@@ -257,6 +257,20 @@ it('HC-08: lo que las personas ya asignaron de más no es problema de la entrada
         ->and(collect((new ContractEvaluator)->evaluate($input, ContractState::currentSessions($input))->hardViolations)->where('rule', 'HC-08')->all())->toBe([]);
 });
 
+it('PL-02: una tutoría movible ocupa sus horas en el motor pero no le resta al docente (sin cambiar el contrato)', function () {
+    $input = buildInputForDepartment()->input;
+    $movable = collect($input->groups)->where('movable', true)->where('teacherId', $this->t1->id)->first();
+    $before = collect($input->teachers)->keyBy('id')[$this->t1->id]->remainingHours;
+    Subject::query()->whereKey(Group::query()->whereKey($movable->id)->value('subject_id'))->update(['counts_teacher_hours' => false]);
+
+    $after = buildInputForDepartment()->input;
+    $group = collect($after->groups)->firstWhere('id', $movable->id);
+
+    // La sesión pide las mismas horas (HC-12) y al docente le quedan esas horas más para el motor.
+    expect($group->weeklyHours)->toBe($movable->weeklyHours)
+        ->and(collect($after->teachers)->keyBy('id')[$this->t1->id]->remainingHours)->toBe($before + $movable->weeklyHours);
+});
+
 it('HC-08: el motor recibe el tope nuevo, frente a grupo + 2, o lo que autorizó la casilla si es más (tarea 1.50)', function () {
     app(GrantHourAllowance::class)->handle($this->t2, $this->term, 30, 'Cerró su carga con horas de más (SEL-05)', User::factory()->admin()->create());
 

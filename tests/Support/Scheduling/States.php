@@ -42,9 +42,9 @@ final class States
         return new StateGroup($id, $campus, $modality, $subject ?? "S-{$id}", $department, $career, $plan, $semester, $code ?? $id, $teacher, $capacity, $active, $package, $packageNumber);
     }
 
-    public static function subject(string $id, string $name = 'Materia', int $theory = 3, int $practice = 2, bool $lab = false, bool $active = true): StateSubject
+    public static function subject(string $id, string $name = 'Materia', int $theory = 3, int $practice = 2, bool $lab = false, bool $active = true, bool $countsTeacherHours = true): StateSubject
     {
-        return new StateSubject($id, $id, $name, $theory, $practice, $lab, $active);
+        return new StateSubject($id, $id, $name, $theory, $practice, $lab, $active, $countsTeacherHours);
     }
 
     public static function room(string $id, int $capacity = 35, RoomType $type = RoomType::Aula, ?string $department = null, string $campus = 'C2', bool $active = true): StateRoom

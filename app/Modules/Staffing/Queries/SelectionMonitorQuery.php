@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing\Queries;
 
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -51,7 +52,7 @@ final class SelectionMonitorQuery
 
         $groups = $this->groups->of($selection)
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->get(['groups.id', 'groups.code', 'groups.teacher_id', DB::raw('subjects.theory_hours + subjects.practice_hours as hours')]);
+            ->get(['groups.id', 'groups.code', 'groups.teacher_id', DB::raw(SubjectTeacherHours::SQL.' as hours')]);
 
         $byTeacher = $groups->whereNotNull('teacher_id')->groupBy('teacher_id');
         $access = $this->accessOf($entries);

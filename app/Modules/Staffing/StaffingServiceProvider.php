@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing;
 
+use App\Modules\Academic\Events\SubjectUpdated;
 use App\Modules\AcademicLoad\Database\Seeders\ReanalysisDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
@@ -66,6 +67,7 @@ use App\Modules\Staffing\Listeners\QueueTeacherLoadRefresh;
 use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupsCreated;
+use App\Modules\Staffing\Listeners\RerankOnSubjectTeacherHours;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\Selection;
@@ -107,6 +109,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         TeachingHoursChanged::class,
         TeacherUpdated::class,
         AdscriptionChanged::class,
+        SubjectUpdated::class,
     ];
 
     /**
@@ -153,6 +156,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             PositionChanged::class, ExternalLoadChanged::class, AvailabilityChanged::class, QualificationChanged::class,
             AdscriptionChanged::class, TeacherUpdated::class, TeacherAccessChanged::class, TeachingHoursChanged::class,
         ], RerankOnFacultyChange::class);
+        Event::listen(SubjectUpdated::class, RerankOnSubjectTeacherHours::class);
     }
 
     /**

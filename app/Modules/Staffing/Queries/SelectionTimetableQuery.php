@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing\Queries;
 
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\KeyLookup;
@@ -189,7 +190,7 @@ final class SelectionTimetableQuery
         $hours = (int) $this->groups->of($selection)
             ->where('groups.teacher_id', $entry->teacher_id)
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->sum(DB::raw('subjects.theory_hours + subjects.practice_hours'));
+            ->sum(DB::raw(SubjectTeacherHours::SQL));
 
         return ['hours' => $hours, 'base' => $this->baseOf($selection, $entry)];
     }
@@ -280,7 +281,7 @@ final class SelectionTimetableQuery
             ->whereIn('groups.teacher_id', $ids)
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->groupBy('groups.teacher_id')
-            ->selectRaw('groups.teacher_id, sum(subjects.theory_hours + subjects.practice_hours) as hours')
+            ->selectRaw('groups.teacher_id, sum('.SubjectTeacherHours::SQL.') as hours')
             ->toBase()
             ->pluck('hours', 'teacher_id');
         $targets = $this->targets->forTerm($this->term($selection), array_column(array_map(fn (array $row): array => ['id' => $row['teacher_id'], 'csv' => (int) $row['base_hours']], $order), 'csv', 'id'));
@@ -359,7 +360,7 @@ final class SelectionTimetableQuery
     {
         return $query
             ->with([
-                'subject' => fn ($subject) => $subject->withTrashed()->select(['id', 'code', 'name', 'theory_hours', 'practice_hours', 'required_space']),
+                'subject' => fn ($subject) => $subject->withTrashed()->select(['id', 'code', 'name', 'theory_hours', 'practice_hours', 'required_space', 'counts_teacher_hours']),
                 'teacher' => fn ($teacher) => $teacher->withTrashed()->select(['id', 'name']),
                 'department:id,name',
                 'sessions' => fn ($sessions) => $sessions->whereNotNull('starts_at')->whereNotNull('ends_at')->orderBy('day')->orderBy('starts_at')->with('room:id,code'),
@@ -426,6 +427,9 @@ final class SelectionTimetableQuery
             'teacher_id' => $reveal ? $group->teacher_id : null,
             'semester' => $group->semester,
             'hours' => (int) ($group->subject?->theory_hours ?? 0) + (int) ($group->subject?->practice_hours ?? 0),
+            // Las que le cuenta al docente en su banda (PL-02): las de la materia, o 0 si no cuenta en su carga (tutorías).
+            'teacher_hours' => (int) ($group->subject?->teacher_hours ?? 0),
+            'counts_teacher_hours' => (bool) ($group->subject?->counts_teacher_hours ?? true),
             'department_id' => $group->department_id,
             'modality_id' => $group->modality_id,
             'campus_id' => $group->campus_id,

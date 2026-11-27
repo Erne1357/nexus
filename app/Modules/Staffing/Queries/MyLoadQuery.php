@@ -2,6 +2,8 @@
 
 namespace App\Modules\Staffing\Queries;
 
+use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedSession;
 use App\Modules\Core\Models\Campus;
@@ -83,6 +85,7 @@ final class MyLoadQuery
                     'subject_code' => $group['subject_code'],
                     'campus_code' => $group['campus_code'],
                     'campus_name' => $group['campus_name'],
+                    'counts_teacher_hours' => $group['counts_teacher_hours'] ?? true,
                     'room' => $session['room'],
                     'kind' => $session['kind'],
                     'time' => $session['time'],
@@ -174,13 +177,20 @@ final class MyLoadQuery
             ->active()
             ->where('term_id', $term->id)
             ->where('teacher_id', $teacher->id)
-            ->with(['subject:id,code,name,theory_hours,practice_hours', 'campus:id,code,name', 'department:id,name', 'sessions' => fn ($sessions) => $sessions->with('room:id,code')])
+            ->with(['subject:id,code,name,theory_hours,practice_hours,counts_teacher_hours', 'campus:id,code,name', 'department:id,name', 'sessions' => fn ($sessions) => $sessions->with('room:id,code')])
             ->get()
             ->reject(fn (Group $group): bool => $published->isPublished($group->modality_id, $group->department_id));
 
+        $publishedGroups = $published->teacher($teacher->id);
+        // PL-02: la versión publicada no guarda si la materia cuenta en la carga del docente; se lee de la materia de hoy.
+        $countsBySubject = $publishedGroups === [] ? collect() : Subject::query()->withTrashed()
+            ->whereIn('id', array_map(fn (array $entry): string => $entry['group']->subject['id'], $publishedGroups))
+            ->pluck('counts_teacher_hours', 'id');
+
         $groups = [
             ...$live->map(self::fromLive(...))->values()->all(),
-            ...array_map(fn (array $entry): array => self::fromPublished($entry['group'], $entry['campus'], $entry['department']['name']), $published->teacher($teacher->id)),
+            ...array_map(fn (array $entry): array => self::fromPublished($entry['group'], $entry['campus'], $entry['department']['name'],
+                (bool) ($countsBySubject[$entry['group']->subject['id']] ?? true)), $publishedGroups),
         ];
 
         usort($groups, fn (array $a, array $b): int => strnatcmp($a['code'], $b['code']) ?: strcmp($a['subject_code'], $b['subject_code']));
@@ -223,7 +233,8 @@ final class MyLoadQuery
             'campus_code' => $group->campus->code,
             'campus_name' => $group->campus->name,
             'department' => (string) $group->department?->name,
-            'hours' => $group->subject->theory_hours + $group->subject->practice_hours,
+            'hours' => $group->subject->teacher_hours,
+            'counts_teacher_hours' => (bool) $group->subject->counts_teacher_hours,
             'schedule' => SessionLabels::schedule($group->sessions),
             'sessions' => $group->sessions
                 ->map(fn (GroupSession $session): array => self::session($session->day, (string) $session->starts_at, (string) $session->ends_at, $session->room?->code, $session->kind->value))
@@ -236,7 +247,7 @@ final class MyLoadQuery
     /**
      * @return array<string, mixed>
      */
-    private static function fromPublished(PublishedGroup $group, ?Campus $campus, string $department): array
+    private static function fromPublished(PublishedGroup $group, ?Campus $campus, string $department, bool $countsTeacherHours = true): array
     {
         return [
             'id' => $group->id,
@@ -246,7 +257,8 @@ final class MyLoadQuery
             'campus_code' => $campus?->code ?? ($group->campus['code'] ?? ''),
             'campus_name' => $campus?->name ?? ($group->campus['name'] ?? ''),
             'department' => $department,
-            'hours' => $group->subject['theory_hours'] + $group->subject['practice_hours'],
+            'hours' => SubjectTeacherHours::of((int) $group->subject['theory_hours'], (int) $group->subject['practice_hours'], $countsTeacherHours),
+            'counts_teacher_hours' => $countsTeacherHours,
             'schedule' => SessionLabels::published($group->sessions),
             'sessions' => array_map(fn (PublishedSession $session): array => self::session($session->day, $session->startsAt, $session->endsAt, $session->room['code'] ?? null, $session->kind), $group->sessions),
             'published' => ['version' => $group->version, 'at' => $group->publishedAt],

@@ -27,7 +27,7 @@ final readonly class TeacherLoadRow
      * @param  list<string>  $positionKinds  valores de PositionKind de las plazas vigentes
      * @param  list<string>  $positionLabels  TC, 3/4, MT, Asig. 12 h, Hon., Apoyo
      * @param  array<string, int>  $hoursByCampus  horas asignadas por clave de campus
-     * @param  list<array{code: string, subject: string, subject_code: string, campus: string, hours: int}>  $groups
+     * @param  list<array{code: string, subject: string, subject_code: string, campus: string, hours: int, counts_teacher_hours?: bool}>  $groups
      * @param  list<array{day: int, from: int, to: int, campus: string, code: string, subject: string}>  $sessions  minutos desde medianoche
      */
     public function __construct(
