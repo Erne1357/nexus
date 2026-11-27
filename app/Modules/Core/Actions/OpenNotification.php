@@ -35,8 +35,9 @@ use Illuminate\Routing\Exceptions\UrlGenerationException;
  * se queda como estaba. Si ya no tiene el puesto, se decide con ese puesto igual (AZ-S8): sin roles, el aviso
  * no está disponible, aunque el perfil activo sea otro (el de Administración cubre todo).
  *
- * Un aviso que lleva a una pantalla de la carga académica no está disponible mientras el admin la tiene oculta para el
- * usuario (MN-05): la campana lo dice en lugar de llevarlo a un 403.
+ * Un aviso que lleva a una pantalla de la carga académica no está disponible si esa pantalla está cerrada para el usuario
+ * con el puesto del aviso: la carga oculta (MN-05) o, al jefe y al JPD, fuera de la etapa de su carga (MN-06). La campana
+ * lo dice en lugar de llevarlo a un 403.
  */
 final class OpenNotification
 {
@@ -70,7 +71,10 @@ final class OpenNotification
         $role = $this->roleToSwitchTo($addressed);
         $context = $addressed === null ? $this->context : $this->context->asRole($addressed);
 
-        if (AcademicLoadVisibility::isLoadRoute($message->route) && $this->visibility->hiddenFrom($context)) {
+        // La etapa del jefe (MN-06) es la del periodo del aviso, que queda en su credencial al abrirlo.
+        $noticeTerm = $message->termId === null ? null : KeyLookup::find(Term::query(), $message->termId);
+
+        if (AcademicLoadVisibility::isLoadRoute($message->route) && $this->visibility->closesFor($context, $message->route, $noticeTerm)) {
             return NotificationTarget::unavailable('La carga académica no está disponible por ahora.');
         }
 
@@ -101,7 +105,7 @@ final class OpenNotification
         }
 
         if ($message->termId !== null || $modality !== null || $campus !== null) {
-            $term = $message->termId === null ? $this->context->loadTerm() : KeyLookup::find(Term::query(), $message->termId);
+            $term = $message->termId === null ? $this->context->loadTerm() : $noticeTerm;
 
             if (! $term instanceof Term) {
                 return NotificationTarget::unavailable('El periodo de ese aviso ya no existe.');

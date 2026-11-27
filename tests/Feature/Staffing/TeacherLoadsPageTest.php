@@ -296,8 +296,9 @@ describe('alcance', function () {
         };
         $proyecto = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
         $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => Career::factory()->create()->id])->create();
-        // MN-04: la entrada solo sale con carga en curso en el periodo; aquí se prueba quién la ve.
-        AcademicLoad::factory()->for($this->term)->create();
+        // MN-04: la entrada solo sale con carga en curso en el periodo; aquí se prueba quién la ve. Es de Sistemas, en
+        // borrador, para que el jefe y el JPD la vean en su etapa de asignación (MN-06).
+        AcademicLoad::factory()->for($this->term)->create(['department_id' => $this->sc->id]);
 
         expect($labels($this->jefe))->toContain('Carga por docente')
             ->and($labels($proyecto))->toContain('Carga por docente')

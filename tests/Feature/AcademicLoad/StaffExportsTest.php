@@ -29,7 +29,8 @@ use OpenSpout\Reader\XLSX\Reader;
 
 beforeEach(function () {
     Storage::fake(PublishedExports::DISK);
-    $this->term = Term::factory()->create(['code' => '20271', 'name' => 'Enero–Junio 2027']);
+    // El periodo de carga: el jefe y el JPD descargan con su carga publicada en él (MN-06, etapa de publicación).
+    $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Enero–Junio 2027']);
     $this->campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->department = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->load = AcademicLoad::factory()->for($this->term)->state(['modality_id' => modalityOf('PRES')->id])->for($this->department)->inStatus(LoadStatus::Published)->create();

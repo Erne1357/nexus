@@ -413,6 +413,9 @@ it('MS14 y M12: el aviso de un préstamo de otro campus abre Acuerdos en la moda
         'requested_by' => $this->jefeIi->id,
     ]);
 
+    // El jefe abre Acuerdos con la carga de su departamento en una etapa de horarios en el periodo del aviso (MN-06).
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->sc->id]);
+
     event(new AgreementRequested($loan));
     $this->actingAs($this->jefeSc);
     $target = app(OpenNotification::class)->handle($this->jefeSc, $this->jefeSc->notifications()->where('type', AgreementReceived::class)->value('id'));
