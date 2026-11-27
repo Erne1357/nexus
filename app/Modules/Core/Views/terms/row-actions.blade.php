@@ -5,7 +5,7 @@
     y «Editar» lleva el data-testid del browser test. Lo que no aplica se muestra deshabilitado, en el
     menú, con su motivo escrito. «Ver ficha» abre core::pages.term.
 --}}
-<div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3 max-md:[&>button]:min-h-11 max-md:[&>div>button]:min-h-11' => ! $inTable])>
+<div @class(['flex gap-1', 'justify-end whitespace-nowrap' => $inTable, '-ms-3 max-md:[&>button]:min-h-11 max-md:[&>div>button]:min-h-11' => ! $inTable])>
     <x-button
         icon="o-pencil-square"
         wire:click="edit('{{ $term->id }}')"

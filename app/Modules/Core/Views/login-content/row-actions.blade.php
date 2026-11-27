@@ -8,7 +8,7 @@
     $last = $row->is($items->last());
     $filtered = $search !== '' || $status !== '';
 @endphp
-<div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
+<div @class(['flex gap-1', 'justify-end whitespace-nowrap' => $inTable, '-ms-3' => ! $inTable])>
     @can('update', $row)
         <x-button icon="o-pencil-square" wire:click="edit('{{ $row->id }}')" aria-label="Editar {{ $row->title }}" class="btn-ghost btn-sm" spinner="edit('{{ $row->id }}')">
             <span @class(['max-[1200px]:hidden' => $inTable])>Editar</span>

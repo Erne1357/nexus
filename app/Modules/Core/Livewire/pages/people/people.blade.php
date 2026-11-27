@@ -85,7 +85,7 @@
             @endscope
 
             @scope('actions', $user)
-                <div class="flex justify-end">
+                <div class="flex justify-end whitespace-nowrap">
                     <a href="{{ route('core.people.show', $user->id) }}" wire:navigate class="btn btn-ghost btn-sm" data-testid="view-{{ $user->username }}" aria-label="Ver puestos de {{ $user->name }}">Ver puestos</a>
                 </div>
             @endscope
