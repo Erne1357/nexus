@@ -103,3 +103,21 @@ it('TP-04: el mapa sigue el periodo de consulta de la credencial; sin elegir, el
         ->assertSee('sin clases publicadas en Ene-Jun 2026')
         ->assertDontSee('sin clases publicadas en Ago-Dic 2026');
 });
+
+it('MP-02: el mapa de un periodo pasado o futuro lleva su tiempo y su aviso; el en curso, no', function () {
+    config(['nexus.campus_map_3d' => true]);
+    $this->travelTo('2026-11-24 10:00:00');
+    $past = Term::factory()->create(['code' => '20261', 'name' => 'Ene-Jun 2026', 'starts_on' => '2026-01-26', 'ends_on' => '2026-06-12']);
+    $future = Term::factory()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
+    Term::factory()->current()->create(['code' => '20263', 'name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
+    $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
+
+    actingAsRole($user, Role::Docente)->get('/')
+        ->assertOk()->assertSee('"time":"current"', false)->assertDontSee('data-testid="map-time-note"', false);
+
+    actingAsRole($user, Role::Docente)->withSession([Actor::VIEW_TERM => $past->id])->get('/')
+        ->assertOk()->assertSee('"time":"past"', false)->assertSee('Periodo terminado')->assertSee('data-testid="map-time-note"', false);
+
+    actingAsRole($user, Role::Docente)->withSession([Actor::VIEW_TERM => $future->id])->get('/')
+        ->assertOk()->assertSee('"time":"future"', false)->assertSee('Periodo por empezar');
+});
