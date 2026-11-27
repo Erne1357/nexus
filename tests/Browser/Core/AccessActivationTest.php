@@ -50,9 +50,9 @@ it('AC-07, AC-08 e IN-01: el docente activa su acceso con su propia contraseña 
         ->assertSee('Mapa del campus')
         ->assertNoJavaScriptErrors();
 
-    // Lo que era el Inicio (saludo y su acceso) está en Mi espacio › Resumen (tarea 1.24.1).
+    // Lo que era el Inicio está en Mi espacio › Resumen (tarea 1.24.1); con el perfil Docente es su tablero (1.85, IN-03).
     $page->navigate(route('core.summary', absolute: false))
-        ->assertSee('Hola, Ana Pérez')
+        ->assertSee('Tus clases de hoy, tu carga y lo que necesita tu atención.')
         ->assertSee('Tu acceso')
         ->assertSee('ana.perez@cdjuarez.tecnm.mx')
         ->assertDontSee('Calendario')
