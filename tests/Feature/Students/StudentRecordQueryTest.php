@@ -189,18 +189,19 @@ it('resume los créditos, las materias acreditadas, lo que cursa y lo que puede 
         ->approvedBySemester->toBe([1 => 1, 2 => 0, 4 => 0]);
 });
 
-it('el kárdex va por periodo, del más antiguo al más reciente, también con materias de fuera del plan y sin las filas borradas', function () {
+it('el kárdex va del periodo más reciente al más antiguo y «Sin periodo» al final (AL-KX), también con materias de fuera del plan y sin las filas borradas', function () {
     $outside = Subject::factory()->create(['code' => 'Z-9']);
     recordKardex($this->student, $this->subjects['A'], 'reprobada', '20251', grade: 50);
     recordKardex($this->student, $this->subjects['A'], 'aprobada', '20253', 2, 80);
     recordKardex($this->student, $outside, 'aprobada', '20253', grade: 95);
     recordKardex($this->student, $this->subjects['F'], 'aprobada', '20243', grade: 70)->delete();
+    KardexRecord::factory()->for($this->student)->for($this->subjects['F'])->create(['result' => 'aprobada', 'term_code' => null, 'attempt' => 1, 'grade' => 70]);
 
     $kardex = recordOf($this->student)->kardex;
 
-    expect(array_column($kardex, 'term'))->toBe(['20251', '20253'])
-        ->and(array_column($kardex, 'label'))->toBe(['Ene-Jun 2025', 'Ago-Dic 2025'])
-        ->and(collect($kardex[1]['records'])->map(fn (KardexRecord $row): string => "{$row->subject->code} {$row->attempt}")->all())->toBe(['A-1 2', 'Z-9 1']);
+    expect(array_column($kardex, 'term'))->toBe(['20253', '20251', null])
+        ->and(array_column($kardex, 'label'))->toBe(['Ago-Dic 2025', 'Ene-Jun 2025', 'Sin periodo'])
+        ->and(collect($kardex[0]['records'])->map(fn (KardexRecord $row): string => "{$row->subject->code} {$row->attempt}")->all())->toBe(['A-1 2', 'Z-9 1']);
 });
 
 it('muestra la calificación sin ceros de más, sin redondearla, y la oportunidad con su nombre', function () {
@@ -251,7 +252,7 @@ it('el kárdex pone primero, como «Sin periodo», lo que el SII trae con un per
 
     $kardex = recordOf($this->student)->kardex;
 
-    expect(array_column($kardex, 'term'))->toBe([null, '20253'])
-        ->and(array_column($kardex, 'label'))->toBe(['Sin periodo', 'Ago-Dic 2025'])
+    expect(array_column($kardex, 'term'))->toBe(['20253', null])
+        ->and(array_column($kardex, 'label'))->toBe(['Ago-Dic 2025', 'Sin periodo'])
         ->and(cellOf(recordOf($this->student), 'F')->standing)->toBe(SubjectStanding::Acreditada);
 });
