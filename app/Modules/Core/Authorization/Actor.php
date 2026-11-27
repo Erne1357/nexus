@@ -601,6 +601,15 @@ final class Actor
     }
 
     /**
+     * Si es solo alumno: su único puesto que vale es `alumno` (AC-22: el que acepta el aviso de privacidad; quien además
+     * tiene un puesto del personal se maneja como personal, supuesto por confirmar). No depende del perfil activo.
+     */
+    public function isStudentOnly(): bool
+    {
+        return $this->heldRoles() === [Role::Alumno];
+    }
+
+    /**
      * Los puestos con los que actúa: el perfil activo, con sesión; si no, todos los que tiene. En un contexto de
      * asRole() sin ese puesto, ninguno. Todo permiso de gestión y campuses() pasan por aquí.
      *

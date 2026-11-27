@@ -1,5 +1,7 @@
 {{-- El formulario de cambio de contraseña dentro de la credencial (core::auth.change-password): manda a Fortify
-(`PUT /user/password`, UpdateUserPassword). Cada tecla revisa los requisitos (`nexusPassword`). --}}
+(`PUT /user/password`, UpdateUserPassword). Cada tecla revisa los requisitos (`nexusPassword`). Con `$privacyNotice`
+(alumno que no ha aceptado el aviso vigente, AC-22), antes de Guardar van el aviso simplificado en su recuadro y la
+casilla obligatoria para aceptarlo. --}}
 <form method="POST" action="{{ route('user-password.update') }}" class="flex flex-col gap-3.5" x-on:input="check($el)">
     @csrf
     @method('PUT')
@@ -9,6 +11,21 @@
     <x-password label="Confirma la nueva contraseña" name="password_confirmation" error-field="password_confirmation" autocomplete="new-password" right required />
 
     <x-core::password.requirements :requirements="$requirements" />
+
+    @if ($privacyNotice)
+        <div class="flex flex-col gap-2.5 border-t border-base-300 pt-3.5" data-testid="password-privacy-notice-box">
+            <x-core::privacy-notice.box />
+            <x-checkbox
+                name="privacy_notice"
+                value="1"
+                error-field="privacy_notice"
+                label="He leído el aviso de privacidad y acepto el tratamiento de mis datos personales"
+                :checked="(bool) old('privacy_notice')"
+                class="mt-0.5 self-start"
+                required
+            />
+        </div>
+    @endif
 
     <x-button label="Guardar contraseña" type="submit" class="btn-primary mt-1 h-12 text-base" x-bind:disabled="! ready" />
 </form>

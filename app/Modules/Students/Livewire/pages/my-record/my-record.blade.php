@@ -255,7 +255,7 @@
             </dl>
             <p class="mt-3">
                 @if ($usesSiiNip)
-                    Entras con tu NIP del SII. Puedes cambiarlo por una contraseña propia cuando quieras; no es obligatorio.
+                    Entras con tu NIP del SII. Cámbialo por una contraseña propia: es obligatorio para seguir usando Nexus.
                 @else
                     Ya no entras con tu NIP del SII: entras con tu contraseña de Nexus.
                 @endif
