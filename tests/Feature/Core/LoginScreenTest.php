@@ -101,3 +101,33 @@ it('la banda a la que llega la credencial tiene las medidas de la banda de la ap
         expect($sizes($parent ? $copied?->parentElement : $copied))->not->toBe([])->toBe($sizes($band->querySelector($real)));
     }
 });
+
+it('LG-03: el login muestra la diapositiva oficial con el nombre completo de Nexus, sin avisos y sin puntos', function () {
+    $page = domOf($this->get('/login')->assertOk());
+    $slide = $page->querySelector('[data-testid="login-official-slide"]');
+
+    expect($slide)->not->toBeNull()
+        ->and(textOf($slide))->toContain('Nexus — Sistema Integral de Información del ITCJ')
+        ->and($slide->querySelector('img'))->not->toBeNull()
+        ->and($page->querySelector('button[aria-label^="Diapositiva"]'))->toBeNull();
+});
+
+it('LG-03: con avisos activos la diapositiva oficial es la primera y los puntos la cuentan', function () {
+    LoginNotice::factory()->create(['title' => 'Reinscripciones Ene–Jun 2027']);
+
+    $page = domOf($this->get('/login')->assertOk());
+    $slides = $page->querySelectorAll('[data-login-photos] article[role="group"]');
+
+    expect($slides)->toHaveCount(2)
+        ->and($slides[0]->getAttribute('data-testid'))->toBe('login-official-slide')
+        ->and(textOf($slides[1]))->toContain('Reinscripciones Ene–Jun 2027')
+        ->and($page->querySelectorAll('button[aria-label^="Diapositiva"]'))->toHaveCount(2);
+});
+
+it('LG-03: el título de la pestaña lleva el nombre completo de Nexus y el aviso de privacidad sigue a la vista', function () {
+    $this->get('/login')
+        ->assertOk()
+        ->assertSee('<title>Iniciar sesión · Nexus — Sistema Integral de Información del ITCJ</title>', false)
+        ->assertSee('data-testid="login-privacy-notice"', false)
+        ->assertSee(route('privacy-notice'), false);
+});
