@@ -1,8 +1,10 @@
 {{--
     Cambiar la contraseña (tarea 1.30; DESIGN.md, "Pantallas de contraseña"), con la credencial que se imprime con cada
-    requisito (core::password.badge). En el primer acceso cuelga en la escena del login (sin la aplicación, como pide
-    EnsurePasswordIsChanged); en un cambio voluntario, de la banda de la aplicación. Recién guardada, la credencial
-    impresa lleva el acuse (core::password.receipt) y el botón para seguir. Datos de ChangePasswordPage.
+    requisito (core::password.badge). En el primer acceso y en el cambio obligatorio del NIP del SII (AC-12) cuelga en la
+    escena del login (sin la aplicación, como pide EnsurePasswordIsChanged); en un cambio voluntario, de la banda de la
+    aplicación. Al alumno que no ha aceptado el aviso de privacidad, el formulario se lo muestra con su casilla (AC-22).
+    Recién guardada, la credencial impresa lleva el acuse (core::password.receipt) y el botón para seguir. Datos de
+    ChangePasswordPage.
 --}}
 @if ($firstAccess)
     <x-core::layouts.guest title="Cambiar contraseña" bare>
@@ -11,7 +13,7 @@
                 :credential="$credential"
                 :requirements="$requirements"
                 heading="Cambia tu contraseña"
-                lead="Es tu primer acceso: elige una propia."
+                :lead="$fromSiiNip ? 'Entraste con tu NIP del SII: elige una contraseña propia para seguir.' : 'Es tu primer acceso: elige una propia.'"
             >
                 @include('core::auth.partials.change-password-form')
             </x-core::password.badge>

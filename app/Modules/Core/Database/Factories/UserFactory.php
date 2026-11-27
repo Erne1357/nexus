@@ -7,6 +7,7 @@ use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Support\PrivacyNotice;
 use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -15,7 +16,8 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Usuario activo que ya cambió su contraseña inicial.
+ * Usuario activo que ya cambió su contraseña inicial y ya aceptó el aviso de privacidad vigente (AC-22): así pasa
+ * EnsurePasswordIsChanged y EnsurePrivacyNoticeAccepted. Las pruebas del aviso lo quitan con withoutPrivacyNotice().
  *
  * @extends Factory<User>
  */
@@ -42,7 +44,17 @@ class UserFactory extends Factory
             'is_active' => true,
             'must_change_password' => false,
             'remember_token' => Str::random(10),
+            'privacy_notice_accepted_at' => now(),
+            'privacy_notice_version' => PrivacyNotice::VERSION,
         ];
+    }
+
+    /**
+     * Sin haber aceptado ninguna versión del aviso de privacidad (AC-22).
+     */
+    public function withoutPrivacyNotice(): static
+    {
+        return $this->state(['privacy_notice_accepted_at' => null, 'privacy_notice_version' => null]);
     }
 
     /**
