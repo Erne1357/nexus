@@ -9,7 +9,6 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
-use App\Modules\Faculty\Queries\TeacherBaseHoursQuery;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
@@ -17,7 +16,6 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
-use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\Selection;
@@ -53,7 +51,7 @@ final class SelectionTimetableQuery
     public function __construct(
         private readonly SelectionGroupsQuery $groups,
         private readonly SelectionTurnQuery $turns,
-        private readonly TeacherBaseHoursQuery $baseHours,
+        private readonly TeachingTargetQuery $targets,
     ) {}
 
     /**
@@ -283,8 +281,7 @@ final class SelectionTimetableQuery
             ->selectRaw('groups.teacher_id, sum(subjects.theory_hours + subjects.practice_hours) as hours')
             ->toBase()
             ->pluck('hours', 'teacher_id');
-        $appended = array_column(array_filter($order, fn (array $row): bool => $row['source'] === SelectionEntrySource::Appended->value), 'teacher_id');
-        $nexusBase = $appended === [] ? [] : $this->baseHours->forTerm($this->term($selection), $appended);
+        $targets = $this->targets->forTerm($this->term($selection), array_column(array_map(fn (array $row): array => ['id' => $row['teacher_id'], 'csv' => (int) $row['base_hours']], $order), 'csv', 'id'));
         $clashes = $this->clashesFor($selection, $group, $ids);
 
         return array_map(fn (array $row): array => [
@@ -293,7 +290,7 @@ final class SelectionTimetableQuery
             'name' => $row['name'],
             'tier_label' => $row['tier_label'],
             'hours' => (int) ($hours[$row['teacher_id']] ?? 0),
-            'base_hours' => $row['source'] === SelectionEntrySource::Appended->value ? ($nexusBase[$row['teacher_id']] ?? 0) : $row['base_hours'],
+            'base_hours' => $targets[$row['teacher_id']] ?? 0,
             'status' => $row['status'],
             'in_turn' => $row['in_turn'],
             'clash_with' => $clashes[$row['teacher_id']] ?? null,
@@ -454,15 +451,12 @@ final class SelectionTimetableQuery
     }
 
     /**
-     * La base del docente (SEL-05): la del CSV o, si no viene en él, la de sus plazas en Nexus al inicio del periodo.
+     * Las horas frente a grupo del docente (SEL-05, PL-01): las de sus plazas en Nexus al inicio del periodo o, si no
+     * tiene, las que salen de las horas de su renglón del CSV.
      */
     private function baseOf(Selection $selection, SelectionEntry $entry): int
     {
-        if ($entry->source !== SelectionEntrySource::Appended) {
-            return $entry->base_hours;
-        }
-
-        return $this->baseHours->forTerm($this->term($selection), [$entry->teacher_id])[$entry->teacher_id] ?? 0;
+        return $this->targets->forTerm($this->term($selection), [$entry->teacher_id => (int) $entry->base_hours])[$entry->teacher_id] ?? 0;
     }
 
     private function term(Selection $selection): Term

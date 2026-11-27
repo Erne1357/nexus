@@ -152,7 +152,7 @@
                             @php($band = LoadBand::classify($after, $hours['base']))
                             <p class="flex items-start gap-2 text-sm" data-testid="selection-after">
                                 <x-icon name="o-calculator" class="mt-0.5 h-4 w-4 flex-none text-neutral" aria-hidden="true" />
-                                <span>Con este grupo llevarías <b class="font-mono">{{ $after }}</b> h · tu base <b class="font-mono">{{ $hours['base'] }}</b> (±2):
+                                <span>Con este grupo llevarías <b class="font-mono">{{ $after }}</b> h · frente a grupo: <b class="font-mono">{{ $hours['base'] }}</b> h ({{ $hours['base'] - 2 }} a {{ $hours['base'] + 2 }}):
                                     <b @class(['text-success' => $band === 'within', 'text-warning' => $band !== 'within'])>{{ match ($band) {
                                         'under' => 'te faltan de '.($hours['base'] - 2 - $after).' a '.($hours['base'] + 2 - $after).' h',
                                         'over' => 'pasas tu margen por '.($after - $hours['base'] - 2).' h',

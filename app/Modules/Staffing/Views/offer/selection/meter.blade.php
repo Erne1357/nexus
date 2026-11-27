@@ -1,6 +1,6 @@
 {{--
-    La cuenta de horas de la barra del turno (SEL-05): «Llevas N h · tu base B (±2)», la barra con la banda del margen
-    (de la base −2 a +2) y la marca de la base, y debajo qué le falta o cuánto se pasa. Espera $hours, $base y $compact.
+    La cuenta de horas de la barra del turno (SEL-05): «Llevas N h · frente a grupo: B h (B−2 a B+2)», la barra con la banda del margen
+    y la marca de las horas frente a grupo (PL-01), y debajo qué le falta o cuánto se pasa. Espera $hours, $base y $compact.
 --}}
 @use('App\Modules\Staffing\Rules\LoadBand')
 @php
@@ -15,10 +15,10 @@
         default => 'Dentro de tu margen',
     };
 @endphp
-<div role="group" aria-label="Tus horas" @class(['grid gap-1.5 md:border-s md:border-base-300 md:ps-5', 'min-w-[13rem]' => ! $compact, 'min-w-[11rem]' => $compact]) data-testid="selection-meter">
+<div role="group" aria-label="Tus horas frente a grupo" @class(['grid gap-1.5 md:border-s md:border-base-300 md:ps-5', 'min-w-[13rem]' => ! $compact, 'min-w-[11rem]' => $compact]) data-testid="selection-meter">
     <p class="flex flex-wrap items-baseline gap-x-1.5 text-sm">
         <span>Llevas <b class="font-mono text-[15px]">{{ $hours }}</b> h</span>
-        <span class="text-neutral">· tu base <b class="font-mono text-base-content">{{ $base }}</b> (±2)</span>
+        <span class="text-neutral">· frente a grupo: <b class="font-mono text-base-content">{{ $base }}</b> h ({{ $low }} a {{ $high }})</span>
     </p>
     <div class="relative my-1 h-2 w-full max-w-64 rounded-full border border-base-300 bg-base-200" aria-hidden="true">
         <span class="absolute -inset-y-1 rounded-[4px] border border-success/55 bg-success/15" style="left: {{ $at($low) }}%; width: {{ $at($high) - $at($low) }}%"></span>

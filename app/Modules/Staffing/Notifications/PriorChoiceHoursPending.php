@@ -35,7 +35,7 @@ final class PriorChoiceHoursPending extends SelectionTeacherNotice
     {
         return new NotificationMessage(
             title: 'Confirma tus horas de la elección previa',
-            body: "Tus grupos suman {$this->hours} h y tu base es de {$this->base} h: marca que estás de acuerdo para confirmarlas",
+            body: "Tus grupos suman {$this->hours} h y tus horas frente a grupo son {$this->base} h: marca que estás de acuerdo para confirmarlas",
             icon: 'o-exclamation-triangle',
             route: 'staffing.offer',
             termId: $this->termId,
@@ -49,7 +49,7 @@ final class PriorChoiceHoursPending extends SelectionTeacherNotice
         return (new MailMessage)
             ->subject('Confirma tus horas de carga')
             ->greeting(self::greetingFor($notifiable))
-            ->line("Tus grupos de {$this->department} ya vienen escritos en la relación de materias y suman {$this->hours} h; tu base es de {$this->base} h.")
+            ->line("Tus grupos de {$this->department} ya vienen escritos en la relación de materias y suman {$this->hours} h; tus horas frente a grupo son {$this->base} h.")
             ->line('Como pasan de lo que te toca, necesitamos que confirmes en «Oferta» que estás de acuerdo con tener esas horas. Solo es marcar la casilla y confirmar.')
             ->action('Confirmar mis horas', route('staffing.offer'));
     }

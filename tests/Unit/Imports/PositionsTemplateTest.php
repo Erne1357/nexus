@@ -37,6 +37,7 @@ it('normaliza el RFC, las horas y las fechas del SII', function () {
         'rfc' => 'PRUE012345AB1',
         'kind' => 'asignatura',
         'base_hours' => 12,
+        'category' => null,
         'valid_from' => '2026-08-01',
         'valid_to' => '2026-12-31',
     ]);

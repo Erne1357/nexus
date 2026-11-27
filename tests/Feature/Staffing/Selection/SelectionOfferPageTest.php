@@ -10,6 +10,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
+use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
@@ -195,13 +196,14 @@ it('después de terminar su carga ya no toma grupos aunque siga su media hora', 
 
 it('terminar mi carga fuera del margen pide la casilla y avisa del grupo sin salón', function () {
     $this->world->entryOf($this->uno)->update(['base_hours' => 2]);
+    TeacherPosition::query()->where('teacher_id', $this->uno->id)->delete(); // sin plazas en Nexus la banda sale del CSV (PL-01)
     $lab = $this->world->group('L', [[2, '09:00', '10:00']], space: RequiredSpace::Laboratorio);
     selectionDrawer($this->uno->user)->call('open', $lab->id)->call('take')->assertHasNoErrors();
 
     $page = Livewire::actingAs($this->uno->user)->test('staffing::pages.offer')
         ->set('showFinish', true)
         ->assertSee('Este grupo queda sin salón; lo asigna la jefatura')
-        ->assertSee('Es responsabilidad del docente cubrir sus horas de acuerdo con su base')
+        ->assertSee('Es responsabilidad del docente cubrir sus horas frente a grupo de acuerdo con su plaza')
         ->call('finish')
         ->assertHasErrors('acknowledged');
 

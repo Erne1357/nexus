@@ -13,7 +13,7 @@ use App\Modules\Imports\Sii\TeacherRoster;
 
 /**
  * Plazas del SII, de `docentes2.claves_plazas` (ver `PlazaKeys` para el tipo y las horas de cada clave). Una fila
- * por docente migrado y tipo de plaza, con las horas sumadas: la plantilla `positions` tiene por clave el docente,
+ * por docente migrado y tipo de plaza, con las horas sumadas y la clave de categoría (la primera, si hay varias; PL-01): la plantilla `positions` tiene por clave el docente,
  * el tipo y «desde», así que varias plazas de asignatura de un docente son una sola fila con la suma. Las de apoyo
  * cuentan como cualquier otra (confirmado el 6 de noviembre de 2026). Sin vigencia, porque el SII no la trae
  * (supuesto por confirmar: vigentes sin fecha de inicio ni de fin).
@@ -71,20 +71,24 @@ final class PositionsStep implements SiiStep
 
         /** @var array<string, array<string, int>> $hoursByTeacher horas por RFC del docente en Nexus y tipo de plaza */
         $hoursByTeacher = [];
+        /** @var array<string, array<string, string>> $categoriesByTeacher clave de categoría por RFC del docente y tipo de plaza (la primera, en asignatura y apoyo) */
+        $categoriesByTeacher = [];
         $incidents = [];
         $repeated = 0;
 
         foreach ($candidates as $teacher => $rows) {
             $repeated += count($rows) - 1;
             $chosen = $this->chosen($rows);
-            $hoursByTeacher[(string) $teacher] = $this->hoursByKind($chosen['row'], "{$file}:{$chosen['line']}", $incidents);
+            $categories = [];
+            $hoursByTeacher[(string) $teacher] = $this->hoursByKind($chosen['row'], "{$file}:{$chosen['line']}", $incidents, $categories);
+            $categoriesByTeacher[(string) $teacher] = $categories;
         }
 
         $rows = [];
         foreach ($hoursByTeacher as $teacher => $hoursByKind) {
             foreach (PositionKind::cases() as $kind) {
                 if (isset($hoursByKind[$kind->value])) {
-                    $rows[] = ['rfc' => $teacher, 'kind' => $kind->value, 'base_hours' => $hoursByKind[$kind->value], 'valid_from' => '', 'valid_to' => ''];
+                    $rows[] = ['rfc' => $teacher, 'kind' => $kind->value, 'base_hours' => $hoursByKind[$kind->value], 'category' => $categoriesByTeacher[$teacher][$kind->value] ?? '', 'valid_from' => '', 'valid_to' => ''];
                 }
             }
         }
@@ -124,9 +128,10 @@ final class PositionsStep implements SiiStep
      *
      * @param  array<string, string>  $row
      * @param  list<array{level: 'error'|'warning', ref: string, message: string}>  $incidents
+     * @param  array<string, string>  $categories  se llena con la clave de categoría de cada tipo que se migra (la primera, si hay varias)
      * @return array<string, int>
      */
-    private function hoursByKind(array $row, string $ref, array &$incidents): array
+    private function hoursByKind(array $row, string $ref, array &$incidents, array &$categories): array
     {
         $plazas = PlazaKeys::parse($row['claves_plazas']);
 
@@ -156,13 +161,14 @@ final class PositionsStep implements SiiStep
                 $incidents[] = $this->warning($ref, "El docente de esta línea trae dos plazas de {$kind->label()}: se migra una.");
             } else {
                 $hours[$kind->value] = ($hours[$kind->value] ?? 0) + $plaza['hours'];
+                $categories[$kind->value] ??= $plaza['category'];
             }
         }
 
         foreach ($hours as $value => $sum) {
             if ($sum > PositionKind::MAX_HOURS) {
                 $incidents[] = $this->warning($ref, 'Las plazas de '.PositionKind::from($value)->label()." de esta línea suman {$sum} horas, más de las ".PositionKind::MAX_HOURS.' de una plaza: no se migran.');
-                unset($hours[$value]);
+                unset($hours[$value], $categories[$value]);
             }
         }
 

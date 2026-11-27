@@ -17,7 +17,8 @@ use Illuminate\Validation\ValidationException;
  *
  * El tipo se reconoce por el nombre del SII, sin importar acentos ni mayúsculas (`TIEMPO COMPLETO`, `3/4`,
  * `MEDIO TIEMPO`, `ASIGNATURA`, `HONORARIOS`, `APOYO Y ASISTENCIA`). Las horas deben cuadrar con el tipo (S3, supuesto por confirmar)
- * y «hasta» no puede ser anterior a «desde». Un docente que no existe o está borrado es error.
+ * y «hasta» no puede ser anterior a «desde». La categoría (`E3817`, opcional) es la clave del SII sin horas ni número
+ * de plaza; si viene vacía no pisa la que ya tiene la plaza (PL-01). Un docente que no existe o está borrado es error.
  */
 class PositionsTemplate extends ImportTemplate
 {
@@ -43,6 +44,7 @@ class PositionsTemplate extends ImportTemplate
             'rfc' => 'RFC',
             'kind' => 'tipo de plaza',
             'base_hours' => 'horas base',
+            'category' => 'categoría',
             'valid_from' => 'desde',
             'valid_to' => 'hasta',
         ];
@@ -64,6 +66,7 @@ class PositionsTemplate extends ImportTemplate
             'rfc' => $this->rfcRules(),
             'kind' => ['required', Rule::enum(PositionKind::class)],
             'base_hours' => ['required', 'integer', 'min:0', 'max:'.PositionKind::MAX_HOURS],
+            'category' => ['nullable', 'regex:/^[A-Z]{1,2}\d{4,5}$/'],
             'valid_from' => ['nullable', 'date_format:Y-m-d'],
             'valid_to' => ['nullable', 'date_format:Y-m-d'],
         ];
@@ -88,6 +91,7 @@ class PositionsTemplate extends ImportTemplate
             is_float($row['base_hours']) && floor($row['base_hours']) === $row['base_hours'] => (int) $row['base_hours'],
             default => $row['base_hours'],
         };
+        $row['category'] = is_string($row['category']) ? mb_strtoupper($row['category']) : $row['category'];
         $row['valid_from'] = self::siiDate($row['valid_from']);
         $row['valid_to'] = self::siiDate($row['valid_to']);
 
@@ -132,7 +136,7 @@ class PositionsTemplate extends ImportTemplate
 
     protected function attributes(array $row, ImportContext $context): array
     {
-        return ['base_hours' => $row['base_hours'], 'valid_to' => $row['valid_to']];
+        return ['base_hours' => $row['base_hours'], 'category' => $row['category'], 'valid_to' => $row['valid_to']];
     }
 
     private function teacher(string $number): ?Teacher

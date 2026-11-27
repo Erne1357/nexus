@@ -7,6 +7,7 @@ use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Imports\Console\ExportDemoFiles;
+use App\Modules\Imports\Console\FillPositionCategoriesCommand;
 use App\Modules\Imports\Console\MigrateSii;
 use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Enums\ImportsPermission;
@@ -128,7 +129,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([ExportDemoFiles::class, MigrateSii::class]);
+            $this->commands([ExportDemoFiles::class, FillPositionCategoriesCommand::class, MigrateSii::class]);
         }
 
         // Como Navigation: se arma al arrancar, antes de la primera petición, para que Octane lo cree
