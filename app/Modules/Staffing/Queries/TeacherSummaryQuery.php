@@ -82,7 +82,7 @@ final class TeacherSummaryQuery
 
         return new TeacherSummary(
             identity: $this->own->identity($teacher),
-            account: ['username' => (string) $user->username, 'email' => $user->email],
+            account: ['username' => (string) $user->username, 'email' => $teacher->institutional_email],
             terms: [
                 'in_progress' => $inProgress === null ? null : ['id' => $inProgress->id, 'name' => $inProgress->name],
                 'planning' => $planningTerm === null ? null : ['id' => $planningTerm->id, 'name' => $planningTerm->name],
@@ -206,7 +206,7 @@ final class TeacherSummaryQuery
                 $today['state'] === 'none' => 'sin clases hoy',
                 $current !== null => 'ahora: '.$current['subject'].' hasta las '.self::endOf($current['time']),
                 $upcoming !== null => 'la siguiente a las '.self::startOf($upcoming['time']),
-                default => 'ya terminaron',
+                default => count($today['items']) === 1 ? 'ya terminó' : 'ya terminaron',
             },
             'in_progress' => $inProgress === null || $inLoad === null || ($same && $planLoad !== null) ? null : [
                 'term_name' => $inProgress->name,

@@ -51,6 +51,17 @@ beforeEach(function () {
 
 afterEach(fn () => Carbon::setTestNow());
 
+it('IN-01: «Tu acceso» lleva el correo institucional de su ficha, no el de su cuenta', function () {
+    $this->user->update(['email' => 'laura.personal@example.com']);
+    $this->teacher->update(['institutional_email' => 'laura.perez@cdjuarez.tecnm.mx']);
+
+    expect(tsSummary()->account['email'])->toBe('laura.perez@cdjuarez.tecnm.mx');
+
+    $this->teacher->update(['institutional_email' => null]);
+
+    expect(tsSummary()->account['email'])->toBeNull();
+});
+
 function tsSummary(?CarbonImmutable $at = null): ?TeacherSummary
 {
     if ($at !== null) {
@@ -120,6 +131,13 @@ it('Review Focus 1 con 1.83: sin plaza docente cuadra con Mi carga y dice lo mis
         ->and($summary->tiles['planning'])->toMatchArray(['no_plaza' => true, 'limit' => $mine['hours']['limit'], 'limit_label' => 'Sin plaza docente'])
         ->and($summary->tiles['remaining']['caption'])->toBe(TeacherHourLimit::NO_PLAZA_LABEL)
         ->and($noPlaza->id)->not->toBe($this->teacher->id);
+});
+
+it('con una sola clase hoy y ya pasada, la cifra dice «ya terminó»', function () {
+    tsGroup($this->running, 'A', [[4, '09:00', '10:00']]);
+
+    expect(tsSummary(CarbonImmutable::parse('2026-11-26 20:30', TZ))->tiles)
+        ->toMatchArray(['today_count' => 1, 'today_caption' => 'ya terminó']);
 });
 
 describe('hoy, con el reloj en jueves 26 de noviembre de 2026, 12:10', function () {
