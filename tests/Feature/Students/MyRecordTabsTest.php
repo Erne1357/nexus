@@ -15,7 +15,7 @@ use Livewire\Livewire;
 
 /*
 | «Mis datos» con pestañas (AC-15, supuesto por confirmar): «Mis datos», «Retícula» y «Kárdex» (del propio alumno,
-| solo lectura, con las cifras arriba; 1.42) y «Credencial». Solo el alumno entra, y solo ve lo suyo.
+| con las cifras arriba; 1.42) y «Credencial». Solo el alumno entra, y solo ve lo suyo.
 */
 
 beforeEach(function () {
@@ -50,7 +50,7 @@ it('AC-15: por omisión muestra «Mis datos» y las otras pestañas no pintan su
         ->assertDontSeeHtml('data-testid="my-credential"');
 });
 
-it('AC-15: «Retícula» muestra su retícula con las cifras arriba, solo lectura, y sin lo de otros ni el kárdex', function () {
+it('AC-15: «Retícula» muestra su retícula con las cifras arriba, interactiva (cadenas y barra de selección, 1.68), y sin lo de otros ni el kárdex', function () {
     Livewire::actingAs($this->user)->withQueryParams(['tab' => 'reticula'])->test('students::pages.my-record')
         ->assertSeeHtml('data-testid="my-reticula"')
         ->assertDontSeeHtml('data-testid="my-kardex"')
@@ -60,10 +60,12 @@ it('AC-15: «Retícula» muestra su retícula con las cifras arriba, solo lectur
         ->assertDontSeeHtml('>Puede seleccionar</span>')
         ->assertDontSee('Beto Ruiz')
         ->assertDontSee('21110002')
-        ->assertDontSeeHtml('x-data="studentGrid"')
-        ->assertDontSeeHtml('data-testid="chain-legend"')
-        ->assertDontSeeHtml('x-on:click="toggleSubject')
-        ->assertDontSeeHtml('aria-pressed');
+        ->assertSeeHtml('x-data="studentGrid"')
+        ->assertSeeHtml('data-testid="chain-legend"')
+        ->assertSeeHtml('data-testid="chain-legend-toggle"')
+        ->assertSeeHtml('Quitar resaltado')
+        ->assertSeeHtml('x-on:click="toggleSubject($el)"')
+        ->assertSeeHtml('aria-pressed="false"');
 });
 
 it('AC-15: «Kárdex» muestra su kárdex con las cifras arriba, sin la retícula y sin lo de otros', function () {

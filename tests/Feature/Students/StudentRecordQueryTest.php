@@ -13,6 +13,7 @@ use App\Modules\Students\Models\Student;
 use App\Modules\Students\Queries\GridCell;
 use App\Modules\Students\Queries\StudentRecord;
 use App\Modules\Students\Queries\StudentRecordQuery;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Arr;
 
 /*
@@ -255,4 +256,59 @@ it('el kárdex pone primero, como «Sin periodo», lo que el SII trae con un per
     expect(array_column($kardex, 'term'))->toBe(['20253', null])
         ->and(array_column($kardex, 'label'))->toBe(['Ago-Dic 2025', 'Sin periodo'])
         ->and(cellOf(recordOf($this->student), 'F')->standing)->toBe(SubjectStanding::Acreditada);
+});
+
+describe('especialidades activas y especialidad del SII (1.69)', function () {
+    beforeEach(function () {
+        $this->old = Specialty::factory()->for($this->plan)->create(['name' => 'Vieja', 'is_active' => false]);
+        $this->current = Specialty::factory()->for($this->plan)->create(['name' => 'Vigente']);
+        $this->oldSubject = Subject::factory()->create(['code' => 'V-2']);
+        $this->currentSubject = Subject::factory()->create(['code' => 'N-2']);
+        placeInPlan($this->plan, $this->oldSubject, 2, $this->old);
+        placeInPlan($this->plan, $this->currentSubject, 2, $this->current);
+    });
+
+    it('sin especialidad en el kárdex ni del SII, la retícula solo trae las especialidades activas (confirmado el 26 de noviembre de 2026)', function () {
+        $record = recordOf($this->student);
+
+        expect(cellOf($record, 'N')->specialtyId)->toBe($this->current->id)
+            ->and(fn () => cellOf($record, 'V'))->toThrow(RuntimeException::class)
+            ->and($record->specialties)->toBe([['id' => $this->current->id, 'name' => 'Vigente', 'subjects' => 1]]);
+    });
+
+    it('con la especialidad asignada por el SII muestra solo esa, aunque esté inactiva (supuesto por confirmar)', function () {
+        $this->student->update(['specialty_id' => $this->old->id]);
+        $record = recordOf($this->student->fresh());
+
+        expect(cellOf($record, 'V')->specialtyId)->toBe($this->old->id)
+            ->and(fn () => cellOf($record, 'N'))->toThrow(RuntimeException::class);
+    });
+
+    it('la especialidad del kárdex pesa más que la asignada por el SII', function () {
+        $this->student->update(['specialty_id' => $this->old->id]);
+        recordKardex($this->student, $this->currentSubject, 'cursando', '20261');
+        $record = recordOf($this->student->fresh());
+
+        expect(cellOf($record, 'N')->specialtyId)->toBe($this->current->id)
+            ->and(fn () => cellOf($record, 'V'))->toThrow(RuntimeException::class);
+    });
+
+    it('el avance guardado cuenta lo mismo: las materias de una especialidad inactiva no le faltan', function () {
+        app(RefreshStudentProgress::class)->handle($this->plan->id);
+        $pending = $this->student->progress()->firstOrFail()->subjects_pending;
+
+        expect($pending)->toContain($this->currentSubject->id)->not->toContain($this->oldSubject->id);
+
+        $this->student->update(['specialty_id' => $this->old->id]);
+        app(RefreshStudentProgress::class)->handle($this->plan->id);
+        $pending = $this->student->progress()->firstOrFail()->subjects_pending;
+
+        expect($pending)->toContain($this->oldSubject->id)->not->toContain($this->currentSubject->id);
+    });
+
+    it('no admite una especialidad de otro plan (llave compuesta)', function () {
+        $other = Specialty::factory()->for(StudyPlan::factory()->create())->create();
+
+        expect(fn () => $this->student->update(['specialty_id' => $other->id]))->toThrow(QueryException::class);
+    });
 });
