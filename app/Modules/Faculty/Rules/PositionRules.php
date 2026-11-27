@@ -14,23 +14,26 @@ use Illuminate\Validation\ValidationException;
  * - El tipo es un valor de PositionKind.
  * - Las horas base son las que admite el tipo (S3, supuesto por confirmar): tiempo completo 40, tres cuartos 30,
  *   medio tiempo 20, honorarios 0, y asignatura y apoyo de 1 a 40. Si el tipo las fija y no llegan, las toma de sí mismo.
+ * - La categoría (PL-01, CV17) es opcional: vacía (nula) o una de PositionCategories para el tipo. Una clave que la
+ *   plaza ya traía (importada, fuera del catálogo) se conserva mientras el tipo no cambie.
  * - La vigencia: fechas `Y-m-d` o vacías (sin límite); el último día cuenta, así que puede terminar el mismo día
  *   que empieza, pero no antes.
  */
 final class PositionRules
 {
     /** Lo que se edita y se registra en la bitácora. */
-    public const array FIELDS = ['kind', 'base_hours', 'valid_from', 'valid_to'];
+    public const array FIELDS = ['kind', 'category', 'base_hours', 'valid_from', 'valid_to'];
 
     /**
      * Los datos de una plaza ya normalizados y revisados.
      *
-     * @param  array{kind?: PositionKind|string|null, base_hours?: int|string|null, valid_from?: ?string, valid_to?: ?string}  $data
-     * @return array{kind: PositionKind, base_hours: int, valid_from: ?string, valid_to: ?string}
+     * @param  array{kind?: PositionKind|string|null, category?: ?string, base_hours?: int|string|null, valid_from?: ?string, valid_to?: ?string}  $data
+     * @param  array{kind?: ?string, category?: ?string}  $current  el tipo y la categoría que la plaza ya tiene (al cambiarla)
+     * @return array{kind: PositionKind, category: ?string, base_hours: int, valid_from: ?string, valid_to: ?string}
      *
      * @throws ValidationException
      */
-    public function normalize(array $data): array
+    public function normalize(array $data, array $current = []): array
     {
         $errors = [];
         $values = [];
@@ -53,6 +56,12 @@ final class PositionRules
 
         if (isset($values['kind'])) {
             try {
+                $values['category'] = $this->category($values['kind'], $data['category'] ?? null, $current);
+            } catch (ValidationException $exception) {
+                $errors += $exception->errors();
+            }
+
+            try {
                 $values['base_hours'] = $this->hours($values['kind'], $data['base_hours'] ?? null);
             } catch (ValidationException $exception) {
                 $errors += $exception->errors();
@@ -63,7 +72,7 @@ final class PositionRules
             throw ValidationException::withMessages($errors);
         }
 
-        return ['kind' => $values['kind'], 'base_hours' => $values['base_hours'], 'valid_from' => $values['valid_from'], 'valid_to' => $values['valid_to']];
+        return ['kind' => $values['kind'], 'category' => $values['category'], 'base_hours' => $values['base_hours'], 'valid_from' => $values['valid_from'], 'valid_to' => $values['valid_to']];
     }
 
     /**
@@ -94,6 +103,28 @@ final class PositionRules
     {
         return $kind instanceof PositionKind ? $kind : (PositionKind::tryFrom((string) $kind)
             ?? throw ValidationException::withMessages(['kind' => 'El tipo de plaza no es válido.']));
+    }
+
+    /**
+     * @param  array{kind?: ?string, category?: ?string}  $current
+     *
+     * @throws ValidationException
+     */
+    private function category(PositionKind $kind, ?string $category, array $current): ?string
+    {
+        $category = trim((string) $category);
+
+        if ($category === '') {
+            return null;
+        }
+
+        $legacy = ($current['kind'] ?? null) === $kind->value && ($current['category'] ?? null) === $category;
+
+        if (! $legacy && ! PositionCategories::allows($kind, $category)) {
+            throw ValidationException::withMessages(['category' => 'La categoría no corresponde al tipo de plaza.']);
+        }
+
+        return $category;
     }
 
     /**

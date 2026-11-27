@@ -1,7 +1,7 @@
 {{--
     Pestaña Carga de la ficha del docente (D-03, maqueta .impeccable/mocks/seleccion/ficha.html): dos semanas, el
     periodo en curso («Del SII» o «De Nexus» según su fuente) y el siguiente cuando ya tiene grupos en Nexus («De la
-    selección»), cada una con su cuadrícula (x-core::week-grid), las horas contra la base y el margen. Sin grupos del
+    selección»), cada una con su cuadrícula (x-core::week-grid), las horas frente a grupo con su banda (PL-01) y el aviso de HC-08. Sin grupos del
     siguiente periodo, un estado vacío. `$weekly` sale de TeacherWeeklyLoad. Se incluye con @include desde la ficha.
 --}}
 @php
@@ -25,7 +25,7 @@
         @php
             $nexus = $week['source'] === 'nexus';
             $groupCount = count($week['groups']);
-            $over = $week['hours'] > $week['base'] + $week['tolerance'];
+            $over = $week['over_band'];
         @endphp
         <section class="rounded-box border border-base-300 bg-base-100 p-4 md:p-5" aria-labelledby="h-load-{{ $key }}" data-testid="load-{{ $key }}">
             <header class="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
@@ -46,11 +46,21 @@
                 </div>
                 <div class="text-end" data-testid="load-hours-{{ $key }}">
                     <span class="font-mono text-2xl font-semibold tabular-nums {{ $over ? 'text-error' : 'text-success' }}">{{ $week['hours'] }}</span>
-                    <span class="text-neutral">h de base {{ $week['base'] }}@if ($week['tolerance'] > 0) (±{{ $week['tolerance'] }})@endif</span>
+                    <span class="text-neutral">h</span>
+                    <p class="text-sm text-neutral" data-testid="load-band-{{ $key }}">
+                        @if ($week['honorarios_cap'] !== null)
+                            Tope de honorarios: {{ $week['honorarios_cap'] }} h
+                        @else
+                            Frente a grupo: {{ $week['teaching'] }} h ({{ $week['band_from'] }} a {{ $week['band_to'] }})
+                        @endif
+                    </p>
                     <p class="text-xs font-semibold {{ $over ? 'text-error' : 'text-success' }}">
                         <x-icon :name="$over ? 'o-exclamation-triangle' : 'o-check-circle'" class="inline w-3.5 h-3.5" />
-                        {{ $over ? 'Rebasa su margen' : 'Dentro de su margen' }}
+                        {{ $over ? 'Pasa su banda' : 'Dentro de su banda' }}
                     </p>
+                    @if ($week['notice'])
+                        <p class="mt-1 max-w-sm text-xs text-error" data-testid="load-notice-{{ $key }}">{{ $week['notice'] }}</p>
+                    @endif
                 </div>
             </header>
 

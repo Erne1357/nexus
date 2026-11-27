@@ -875,3 +875,33 @@ describe('disponibilidad', function () {
             ->assertDontSee('Editar disponibilidad');
     });
 });
+
+describe('categoría de la plaza (PL-01, 1.76)', function () {
+    it('cambiar el tipo de una plaza con categoría importada la guarda y deja la categoría vacía', function () {
+        $plaza = TeacherPosition::factory()->for($this->ana)->tiempoCompleto()->create(['category' => 'E3817']);
+
+        $page = teacherRecord($this->jefe, $this->ana)->call('editPosition', $plaza->id)->assertSet('category', 'E3817')
+            ->set('kind', 'medio_tiempo')->assertSet('category', '')->call('savePosition')->assertHasNoErrors();
+
+        expect($plaza->fresh())->kind->value->toBe('medio_tiempo')->category->toBeNull()
+            ->and(lastToastOf($page))->title->toBe('Plaza actualizada');
+    });
+
+    it('guarda la categoría elegida y la ofrece por nombre', function () {
+        $plaza = TeacherPosition::factory()->for($this->ana)->tiempoCompleto()->create(['category' => null]);
+
+        teacherRecord($this->jefe, $this->ana)->call('editPosition', $plaza->id)
+            ->assertSee('Titular B')
+            ->set('category', 'E3815')->call('savePosition')->assertHasNoErrors();
+
+        expect($plaza->fresh()->category)->toBe('E3815');
+    });
+
+    it('una categoría de otro tipo se rechaza junto al campo', function () {
+        $plaza = TeacherPosition::factory()->for($this->ana)->tiempoCompleto()->create();
+
+        teacherRecord($this->jefe, $this->ana)->call('editPosition', $plaza->id)->set('category', 'E3519')->call('savePosition')->assertHasErrors(['category']);
+
+        expect($plaza->fresh()->category)->toBeNull();
+    });
+});
