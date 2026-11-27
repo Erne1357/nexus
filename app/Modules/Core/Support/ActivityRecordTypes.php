@@ -24,6 +24,8 @@ final class ActivityRecordTypes
         'LoginNotice' => 'Aviso del login',
         'LoginShortcut' => 'Atajo del login',
         'MailConnection' => 'Cuenta de envío del correo',
+        'PositionMailbox' => 'Buzón de puesto',
+        'HeldPositionMail' => 'Correo de puesto en espera',
         'Career' => 'Carrera',
         'CareerCampus' => 'Oferta de carrera por campus',
         'Department' => 'Departamento',

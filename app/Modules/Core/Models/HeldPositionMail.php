@@ -14,10 +14,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * El correo de un aviso de puesto que espera a que su puesto tenga buzón (CE-02): la notificación serializada, a quién
- * iba y el puesto. Solo se agrega y se marca liberado o fallido; no lleva `created_at` ni `updated_at`.
+ * El correo de un aviso de puesto que espera a que su puesto tenga buzón (CE-02): la notificación serializada y cifrada,
+ * a quién iba y el puesto. En espera: ni tomado para mandarse (`released_at`), ni fallido, ni descartado. Solo se agrega
+ * y se marca; no lleva `created_at` ni `updated_at`.
  */
-#[Fillable(['user_id', 'role', 'org_unit_id', 'career_id', 'campus_id', 'modality_id', 'kind', 'subject', 'notification', 'held_at', 'released_at', 'failed_at'])]
+#[Fillable(['notification_id', 'user_id', 'role', 'org_unit_id', 'career_id', 'campus_id', 'modality_id', 'academic_load', 'kind', 'subject', 'notification', 'held_at', 'released_at', 'attempts', 'failed_at', 'discarded_at'])]
 #[UseFactory(HeldPositionMailFactory::class)]
 class HeldPositionMail extends Model
 {
@@ -33,9 +34,12 @@ class HeldPositionMail extends Model
     {
         return [
             'role' => Role::class,
+            'academic_load' => 'boolean',
+            'attempts' => 'integer',
             'held_at' => 'immutable_datetime',
             'released_at' => 'immutable_datetime',
             'failed_at' => 'immutable_datetime',
+            'discarded_at' => 'immutable_datetime',
         ];
     }
 
@@ -48,13 +52,23 @@ class HeldPositionMail extends Model
     }
 
     /**
-     * Los que siguen en espera: ni liberados ni fallidos.
+     * Los que siguen en espera: ni tomados para mandarse, ni fallidos, ni descartados.
      *
      * @param  Builder<self>  $query
      */
     public function scopeWaiting(Builder $query): void
     {
-        $query->whereNull('released_at')->whereNull('failed_at');
+        $query->whereNull('released_at')->whereNull('failed_at')->whereNull('discarded_at');
+    }
+
+    /**
+     * Los que fallaron y no se han descartado.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeFailed(Builder $query): void
+    {
+        $query->whereNotNull('failed_at')->whereNull('discarded_at');
     }
 
     public function position(): PositionRef

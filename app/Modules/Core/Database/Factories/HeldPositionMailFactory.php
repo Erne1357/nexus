@@ -6,6 +6,7 @@ use App\Modules\Core\Models\HeldPositionMail;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
 
 /**
  * Un correo de puesto en espera, del jefe de una unidad cualquiera. La notificación no se puede volver a armar: sirve
@@ -22,6 +23,7 @@ class HeldPositionMailFactory extends Factory
     public function definition(): array
     {
         return [
+            'notification_id' => fn (): string => (string) Str::uuid7(),
             'user_id' => User::factory(),
             'role' => 'jefe_departamento',
             'org_unit_id' => null,
@@ -33,5 +35,10 @@ class HeldPositionMailFactory extends Factory
             'notification' => 'N;',
             'held_at' => now(),
         ];
+    }
+
+    public function failed(int $attempts = 3): static
+    {
+        return $this->state(['failed_at' => now(), 'attempts' => $attempts]);
     }
 }

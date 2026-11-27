@@ -9,6 +9,7 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Notifications\PositionRef;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
  * Los buzones de puesto (CE-02) y sus correos en espera: a qué buzón va el correo de un puesto, la tabla de la pantalla
@@ -115,6 +116,45 @@ final class PositionMailboxQuery
         }
 
         return $rows;
+    }
+
+    /**
+     * Los correos de puesto que esperan o que fallaron, uno por renglón, para «Reintentar» y «Descartar»: primero los
+     * fallidos (el más reciente arriba) y luego los que esperan (el más viejo arriba), cada uno con el nombre de su puesto
+     * (`label`), su alcance (`chips`) y el buzón que hoy lo recibiría (`mailbox`). Los que ya se tomaron para mandarse y
+     * los descartados no salen.
+     *
+     * @return LengthAwarePaginator<int, array{id: string, held: HeldPositionMail, label: string, chips: list<array{label: string, value: string}>, mailbox: ?PositionMailbox}>
+     */
+    public function heldForTable(int $perPage = 10): LengthAwarePaginator
+    {
+        $page = HeldPositionMail::query()
+            ->whereNull('released_at')
+            ->whereNull('discarded_at')
+            ->orderByRaw('failed_at is null')
+            ->orderByDesc('failed_at')
+            ->orderBy('held_at')
+            ->orderBy('id')
+            ->paginate($perPage, pageName: 'correos');
+
+        $items = $page->getCollection()->values();
+        $labels = $this->describePositions($items->map(fn (HeldPositionMail $held): PositionRef => $held->position())->all());
+
+        return $page->setCollection($items->map(fn (HeldPositionMail $held, int $index): array => [
+            'id' => $held->getKey(),
+            'held' => $held,
+            'label' => $labels[$index]->title,
+            'chips' => $labels[$index]->chips,
+            'mailbox' => $this->mailboxFor($held->position()),
+        ]));
+    }
+
+    /**
+     * El correo en espera que se reintenta o descarta, por el id que llega del cliente.
+     */
+    public function findHeldOrFail(string $id): HeldPositionMail
+    {
+        return KeyLookup::findOrFail(HeldPositionMail::query(), $id);
     }
 
     /**

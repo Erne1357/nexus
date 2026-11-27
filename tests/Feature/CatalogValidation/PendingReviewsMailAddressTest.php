@@ -96,8 +96,13 @@ describe('CE-02: el buzón de la jefatura', function () {
             ->and(HeldPositionMail::query()->sole())->org_unit_id->toBe($this->sis->id)->kind->toBe('CatalogReviewsPending');
     })->with(['apertura', 'recordatorio']);
 
-    it('al capturar el buzón sale el correo que esperaba, con lo que falta', function () {
+    it('de punta a punta: el aviso sale de la cola, espera cifrado y, al capturar el buzón, sale con sus modelos restaurados y lo que falta', function () {
         noticeHeads('apertura');
+
+        $held = HeldPositionMail::query()->sole();
+
+        expect($held->notification)->not->toContain('Sistemas y Computación')->not->toContain('CatalogReviewsPending')
+            ->and($held->subject)->toBe('Tienes catálogos por validar');
 
         app(SavePositionMailbox::class)->handle(['role' => 'jefe_departamento', 'org_unit_id' => $this->sis->id, 'email' => 'jefatura_syc@cdjuarez.tecnm.mx']);
 
@@ -105,7 +110,9 @@ describe('CE-02: el buzón de la jefatura', function () {
 
         expect(mailedTo())->toBe(['jefatura_syc@cdjuarez.tecnm.mx'])
             ->and($sent->getSubject())->toBe('Tienes catálogos por validar')
-            ->and(HeldPositionMail::query()->sole()->released_at)->not->toBeNull();
+            ->and($sent->getHtmlBody())->toContain('En Sistemas y Computación te falta validar')->toContain('Docentes')
+            ->and($held->fresh()->released_at)->not->toBeNull()
+            ->and($this->jefe->notifications()->count())->toBe(1);
     });
 });
 

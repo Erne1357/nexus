@@ -231,6 +231,10 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 Cache::store(config('health.cache_store'))->put(HeartbeatCheck::SCHEDULER_KEY, now()->timestamp, 600);
                 dispatch(new RecordQueueHeartbeat);
             })->everyMinute()->name('health-heartbeat');
+
+            // CE-02: barre cada 15 minutos los correos de puesto que esperan y ya tienen buzón (los que esperaban por la carga
+            // oculta, MN-05, o por un reintento).
+            $schedule->job(new ReleaseHeldPositionMailsJob)->everyFifteenMinutes()->name('release-held-position-mails');
         });
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);

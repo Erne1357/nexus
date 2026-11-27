@@ -43,17 +43,12 @@ use Illuminate\Support\Str;
  * oculta la carga académica, el correo no sale (AcademicLoadNotice, MN-05).
  *
  * CE-02 (confirmado el 26 de noviembre de 2026): los avisos a la coordinación de una carrera y a la jefatura de otro
- * departamento compiten al puesto (PositionNotice): su correo va al buzón del coordinador de esa carrera en la modalidad
- * de la carga o al de la jefatura (o del jefe de proyecto docente) de ese departamento, y, sin buzón, espera; la campana
- * llega igual. `$audienceId` es el id de esa carrera o de ese departamento; un aviso en cola de antes no lo trae y sigue
- * a la persona. El aviso al docente es de persona.
+ * departamento compiten al puesto (PositionNotice): su correo va al buzón del nombramiento por el que lo recibe cada quien
+ * y, sin buzón, espera; la campana llega igual. El aviso al docente es de persona.
  */
 final class LoadRepublished extends NexusNotification implements AcademicLoadNotice, PositionNotice, RoutesMailAddress, ShouldQueue
 {
     use Queueable;
-
-    /** CE-02: la carrera (audiencia Career) o el departamento (audiencia Department) del aviso. No promovida, con valor por omisión, para leer los avisos en cola de antes. */
-    private ?string $audienceId = null;
 
     public static function typeKey(): string
     {
@@ -69,7 +64,6 @@ final class LoadRepublished extends NexusNotification implements AcademicLoadNot
      * @param  string  $recipientLabel  el nombre del docente, la clave de la carrera o el nombre del otro departamento
      * @param  list<array{kind: string, group: array<string, mixed>, changes?: array<string, mixed>}>  $entries  lo que le cambió
      * @param  array<string, string>  $parameters
-     * @param  ?string  $audienceId  el id de la carrera o del departamento del aviso (CE-02)
      */
     public function __construct(
         private readonly AcademicLoad $load,
@@ -80,9 +74,7 @@ final class LoadRepublished extends NexusNotification implements AcademicLoadNot
         private readonly array $entries,
         private readonly string $route,
         private readonly array $parameters,
-        ?string $audienceId = null,
     ) {
-        $this->audienceId = $audienceId;
         $this->afterCommit();
     }
 
@@ -100,22 +92,11 @@ final class LoadRepublished extends NexusNotification implements AcademicLoadNot
     }
 
     /**
-     * CE-02: el coordinador de la carrera o la jefatura del departamento, en la modalidad de la carga, con el puesto con
-     * que se mandó; null para el docente.
+     * CE-02: el puesto de la coordinación o la jefatura que lo recibe, con el alcance de su nombramiento; null para el docente.
      */
     public function position(): ?PositionRef
     {
-        $role = $this->addressedRole();
-
-        if ($role === null || $this->audienceId === null) {
-            return null;
-        }
-
-        return match ($this->audience) {
-            RepublicationAudience::Teacher => null,
-            RepublicationAudience::Career => PositionRef::of($role, career: $this->audienceId, modality: $this->load->modality_id),
-            RepublicationAudience::Department => PositionRef::of($role, unit: $this->audienceId, modality: $this->load->modality_id),
-        };
+        return $this->audience === RepublicationAudience::Teacher ? null : $this->holderPosition();
     }
 
     /**

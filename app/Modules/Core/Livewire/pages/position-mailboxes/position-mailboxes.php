@@ -1,6 +1,8 @@
 <?php
 
 use App\Modules\Core\Actions\DeactivatePositionMailbox;
+use App\Modules\Core\Actions\DiscardHeldPositionMail;
+use App\Modules\Core\Actions\RetryHeldPositionMail;
 use App\Modules\Core\Actions\SavePositionMailbox;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\PositionMailbox;
@@ -13,6 +15,7 @@ use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithPagination;
 use Mary\Traits\Toast;
 
 /**
@@ -20,15 +23,16 @@ use Mary\Traits\Toast;
  * `core.mail.manage_mailboxes`, candados): a qué buzón institucional va el correo de cada puesto. Arriba, si hay, los
  * correos que esperan porque su puesto no tiene buzón, agrupados por puesto, cada grupo con «Capturar buzón» (abre el
  * cajón con ese puesto ya elegido); abajo, la tabla de buzones con su puesto y alcance, el correo, cuántos correos en
- * espera recibiría y su estado, con «Editar» y, en «Acciones», «Desactivar» con confirmación. El cajón pide el puesto,
- * solo el alcance que el puesto admite (vacío es «todas») y el correo institucional.
+ * espera recibiría y su estado, con «Editar» y, en «Acciones», «Desactivar» con confirmación; al final, los correos de
+ * puesto que esperan o fallaron, uno por renglón, con «Reintentar» (los fallidos) y «Descartar» (HeldPositionMailPolicy).
+ * El cajón pide el puesto, solo el alcance que el puesto admite (vacío es «todas») y el correo institucional.
  *
  * Lee con PositionMailboxQuery, autoriza con PositionMailboxPolicy en mount() y en cada acción, valida la forma y llama a
  * SavePositionMailbox o DeactivatePositionMailbox, que hacen cumplir las reglas (PositionMailboxRules).
  */
 new #[Title('Buzones de puesto')] class extends Component
 {
-    use Toast;
+    use Toast, WithPagination;
 
     /** Búsqueda por correo o puesto; se recuerda en la sesión del usuario. */
     #[Session]
@@ -68,6 +72,7 @@ new #[Title('Buzones de puesto')] class extends Component
 
         return [
             'rows' => $mailboxes->forTable($this->search, $waiting),
+            'held' => $mailboxes->heldForTable(),
             'unattended' => array_values(array_filter($waiting, fn (array $group): bool => $group['mailbox'] === null)),
             'canManage' => Gate::allows('create', PositionMailbox::class),
             'roles' => $mailboxes->roleOptions(),
@@ -166,6 +171,32 @@ new #[Title('Buzones de puesto')] class extends Component
         $deactivate->handle($mailbox, auth()->user());
 
         $this->success('Buzón desactivado', e("{$mailbox->email}. Los correos nuevos de su puesto esperan hasta que tenga buzón."));
+    }
+
+    /**
+     * «Reintentar» un correo de puesto que falló: vuelve a la espera y sale si su puesto ya tiene buzón.
+     */
+    public function retry(string $id, PositionMailboxQuery $mailboxes, RetryHeldPositionMail $retry): void
+    {
+        $held = $mailboxes->findHeldOrFail($id);
+        $this->authorize('retry', $held);
+
+        $retry->handle($held, auth()->user());
+
+        $this->success('Correo de vuelta en la espera', e((string) ($held->subject ?? $held->kind).'. Sale en cuanto su puesto tenga buzón.'));
+    }
+
+    /**
+     * «Descartar» un correo de puesto que espera o que falló: ya no se manda; la campana de quien lo recibió no cambia.
+     */
+    public function discard(string $id, PositionMailboxQuery $mailboxes, DiscardHeldPositionMail $discard): void
+    {
+        $held = $mailboxes->findHeldOrFail($id);
+        $this->authorize('discard', $held);
+
+        $discard->handle($held, auth()->user());
+
+        $this->success('Correo descartado', e((string) ($held->subject ?? $held->kind).'. Ya no se manda.'));
     }
 
     /**

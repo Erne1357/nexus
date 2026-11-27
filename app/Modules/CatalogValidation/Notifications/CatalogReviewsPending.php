@@ -9,7 +9,6 @@ use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\HeadMailAddressQuery;
 use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NexusNotification;
@@ -39,10 +38,9 @@ use Illuminate\Notifications\Messages\MailMessage;
  * correo (RoutesMailAddress). Sale de la cola, después del commit; la campana se guarda en el momento
  * (`viaConnections`, conexión `sync`).
  *
- * CE-02 (confirmado el 26 de noviembre de 2026): validar compete a la jefatura, así que el aviso que se manda al puesto
- * (NotifyHolders) es de puesto (PositionNotice): su correo va al buzón de la jefatura del departamento dueño o de
- * Servicios Escolares (la unidad con clave SCHOOL_SERVICES del Organigrama) y, si todavía no tiene buzón, espera; la
- * campana llega igual. Sin puesto (mandado a una persona), sigue la regla de CV11.
+ * CE-02 (confirmado el 26 de noviembre de 2026): validar compete a la jefatura, así que el aviso que se manda a un puesto
+ * (NotifyHolders) es de puesto (PositionNotice): su correo va al buzón del nombramiento por el que el jefe valida (su
+ * unidad) y, si todavía no tiene buzón, espera; la campana llega igual. Sin puesto, sigue la regla de CV11.
  */
 final class CatalogReviewsPending extends NexusNotification implements PositionNotice, RoutesMailAddress, ShouldQueue
 {
@@ -106,14 +104,11 @@ final class CatalogReviewsPending extends NexusNotification implements PositionN
     }
 
     /**
-     * CE-02: la jefatura del departamento dueño o de Servicios Escolares, con el puesto con que se mandó.
+     * CE-02: el puesto de quien lo recibe, con el alcance de su nombramiento.
      */
     public function position(): ?PositionRef
     {
-        $role = $this->addressedRole();
-        $unit = $this->owner->isSchoolServices() ? app(OrgTree::class)->idOf(OrgTree::SCHOOL_SERVICES) : $this->owner->departmentId;
-
-        return $role === null || $unit === null ? null : PositionRef::of($role, unit: $unit);
+        return $this->holderPosition();
     }
 
     /**

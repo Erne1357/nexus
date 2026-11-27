@@ -136,6 +136,63 @@
         @endif
     </div>
 
+    @if ($held->total() > 0)
+        <section class="mt-6 overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="held-title" data-testid="held-mails">
+            <header class="border-b border-base-300 px-4 py-3">
+                <h2 id="held-title" class="font-semibold">Correos de puesto en espera o con falla</h2>
+                <p class="text-sm text-neutral">Uno por aviso. Un correo que falló varias veces deja de intentarse solo: reinténtalo o descártalo. Descartar no quita la campana de quien lo recibió.</p>
+            </header>
+
+            <ul class="divide-y divide-base-300">
+                @foreach ($held as $row)
+                    @php $mail = $row['held']; @endphp
+                    <li wire:key="held-{{ $row['id'] }}" class="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+                        <div class="min-w-0 flex-1 basis-72">
+                            <p class="font-semibold">{{ $mail->subject ?? \App\Modules\Core\Support\MailKinds::label($mail->kind) }}</p>
+                            <p class="text-sm text-neutral">{{ $row['label'] }}@if ($row['chips'] !== []) · {{ $chipsText($row['chips']) }}@endif</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 text-sm text-neutral">
+                            @if ($mail->failed_at !== null)
+                                <x-core::status-badge tone="error" label="Falló" />
+                                <span><span class="font-mono tabular-nums text-base-content">{{ $mail->attempts }}</span> {{ $mail->attempts === 1 ? 'intento' : 'intentos' }}</span>
+                            @else
+                                <x-core::status-badge tone="warning" :label="$row['mailbox'] === null ? 'Sin buzón' : 'Por salir'" icon="o-clock" />
+                            @endif
+                            <span>desde el <span class="font-mono tabular-nums">{{ $mail->held_at->timezone(config('app.timezone'))->format('d/m/Y H:i') }}</span></span>
+                        </div>
+                        <div class="flex gap-1 max-md:w-full">
+                            @can('retry', $mail)
+                                <x-button label="Reintentar" icon="o-arrow-path" class="btn-ghost btn-sm max-md:h-11 max-md:flex-1" wire:click="retry('{{ $mail->id }}')" spinner="retry('{{ $mail->id }}')" data-testid="retry-held" />
+                            @endcan
+                            @can('discard', $mail)
+                                <x-button
+                                    label="Descartar"
+                                    icon="o-trash"
+                                    class="btn-ghost btn-sm text-error max-md:h-11 max-md:flex-1"
+                                    wire:click="discard('{{ $mail->id }}')"
+                                    x-confirm="Ya no se mandará. La campana de quien lo recibió se queda igual."
+                                    data-confirm-title="¿Descartar este correo de puesto?"
+                                    data-confirm-button="Descartar"
+                                    data-confirm-tone="error"
+                                    spinner="discard('{{ $mail->id }}')"
+                                    data-testid="discard-held"
+                                />
+                            @else
+                                <span class="tooltip tooltip-left" data-tip="Solo el administrador descarta correos de puesto.">
+                                    <x-button label="Descartar" icon="o-trash" class="btn-ghost btn-sm" disabled />
+                                </span>
+                            @endcan
+                        </div>
+                    </li>
+                @endforeach
+            </ul>
+
+            @if ($held->hasPages())
+                <div class="border-t border-base-300 px-4 py-2.5">{{ $held->onEachSide(1)->links(data: ['scrollTo' => false]) }}</div>
+            @endif
+        </section>
+    @endif
+
     <p class="mt-4 flex items-start gap-2.5 rounded-box border border-base-300 bg-base-100 px-4 py-3 text-sm" data-testid="mailboxes-note">
         <x-icon name="o-information-circle" class="mt-0.5 h-5 w-5 shrink-0 text-neutral" aria-hidden="true" />
         <span>Un buzón vale para el alcance que fija; lo que dejas vacío es «todas». Si a un puesto le sirven varios, gana el más específico. Los avisos de persona (contraseña, invitación, avisos al docente) siguen yendo al correo institucional de cada quien.</span>

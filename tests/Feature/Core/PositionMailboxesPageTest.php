@@ -1,13 +1,16 @@
 <?php
 
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Jobs\ReleaseHeldPositionMailsJob;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\HeldPositionMail;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\PositionMailbox;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\PositionRef;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | «Buzones de puesto» (CE-02, tarea 1.63), en Configuración: solo el admin la ve y la usa (`core.mail.view_mailboxes`,
@@ -114,6 +117,31 @@ describe('el admin', function () {
         expect($mailbox->fresh()->is_active)->toBeTrue();
     });
 
+    it('CE-02: lista los correos que esperan o fallaron; reintenta un fallido y descarta uno en espera, con bitácora', function () {
+        Queue::fake();
+        $failed = HeldPositionMail::factory()->failed()->create(['org_unit_id' => $this->unit->id, 'subject' => 'Correo que falló']);
+        $waiting = HeldPositionMail::factory()->create(['org_unit_id' => $this->unit->id, 'subject' => 'Correo que espera']);
+        HeldPositionMail::factory()->create(['subject' => 'Correo ya tomado', 'released_at' => now()]);
+
+        $page = Livewire::test('core::pages.position-mailboxes')
+            ->assertSeeInOrder(['Correos de puesto en espera o con falla', 'Correo que falló', 'Falló', 'Correo que espera', 'Sin buzón'])
+            ->assertDontSee('Correo ya tomado')
+            ->call('retry', $failed->id);
+
+        expect($failed->fresh())->failed_at->toBeNull()->attempts->toBe(0)->released_at->toBeNull()
+            ->and(lastToastOf($page)['title'])->toBe('Correo de vuelta en la espera')
+            ->and(Activity::query()->where('event', 'position-mail-retried')->sole()->causer_id)->toBe($this->admin->id);
+        Queue::assertPushed(ReleaseHeldPositionMailsJob::class);
+
+        $page->call('discard', $waiting->id);
+
+        expect($waiting->fresh()->discarded_at)->not->toBeNull()
+            ->and(HeldPositionMail::query()->whereKey($waiting->id)->exists())->toBeTrue()
+            ->and(Activity::query()->where('event', 'position-mail-discarded')->sole()->subject_id)->toBe($waiting->id);
+
+        $page->call('retry', $waiting->id)->assertForbidden();
+    });
+
     it('CE-02: un id que no existe o que no es uuid no se encuentra', function () {
         Livewire::test('core::pages.position-mailboxes')->call('edit', 'no-es-uuid')->assertNotFound();
     });
@@ -142,19 +170,26 @@ describe('cualquier otro puesto', function () {
 
     it('CF-03: cada acción responde 403 aunque se llame directo sobre una página que abrió el admin', function (string $method, array $arguments) {
         $mailbox = PositionMailbox::factory()->create(['org_unit_id' => $this->unit->id]);
+        $failed = HeldPositionMail::factory()->failed()->create();
+        $waiting = HeldPositionMail::factory()->create();
         $jefe = User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => $this->unit->id])->create();
         $page = Livewire::actingAs($this->admin)->test('core::pages.position-mailboxes');
+        $ids = ['mailbox' => $mailbox->id, 'failed' => $failed->id, 'waiting' => $waiting->id];
 
         $this->actingAs($jefe);
-        $page->call($method, ...array_map(fn (mixed $argument): mixed => $argument === 'mailbox' ? $mailbox->id : $argument, $arguments))->assertForbidden();
+        $page->call($method, ...array_map(fn (mixed $argument): mixed => $ids[$argument] ?? $argument, $arguments))->assertForbidden();
 
-        expect($mailbox->fresh())->is_active->toBeTrue()->email->toBe($mailbox->email);
+        expect($mailbox->fresh())->is_active->toBeTrue()->email->toBe($mailbox->email)
+            ->and($failed->fresh()->failed_at)->not->toBeNull()
+            ->and($waiting->fresh()->discarded_at)->toBeNull();
     })->with([
         'agregar' => ['create', []],
         'capturar' => ['capture', ['jefe_departamento|*|*|*|*']],
         'editar' => ['edit', ['mailbox']],
         'desactivar' => ['deactivate', ['mailbox']],
         'guardar' => ['save', []],
+        'reintentar' => ['retry', ['failed']],
+        'descartar' => ['discard', ['waiting']],
     ]);
 
     it('CF-03: un admin desactivado no la ve, y el invitado va al acceso', function () {

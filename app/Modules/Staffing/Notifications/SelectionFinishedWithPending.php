@@ -13,15 +13,11 @@ use Illuminate\Notifications\Messages\MailMessage;
  * al horario de esa selección terminada (`staffing.offer?seleccion=<id>`), que abren con `staffing.selection.view`
  * aunque no sean docentes y aunque el admin tenga oculta la carga académica; ahí asignan o quitan docentes.
  *
- * CE-02 (confirmado el 26 de noviembre de 2026): compete al puesto (PositionNotice): su correo va al buzón de la
- * jefatura o del jefe de proyecto docente del departamento de la selección (`$departmentId`) en su modalidad y, sin
- * buzón, espera; la campana llega igual. Un aviso en cola de antes no trae el departamento y sigue a la persona.
+ * CE-02 (confirmado el 26 de noviembre de 2026): compete al puesto (PositionNotice): su correo va al buzón del
+ * nombramiento por el que lo recibe el jefe o el JPD y, sin buzón, espera; la campana llega igual.
  */
 final class SelectionFinishedWithPending extends SelectionNotice implements PositionNotice
 {
-    /** CE-02: el departamento de la selección. No promovida, con valor por omisión, para leer los avisos en cola de antes. */
-    private ?string $departmentId = null;
-
     /**
      * @param  list<string>  $teachers
      */
@@ -31,9 +27,11 @@ final class SelectionFinishedWithPending extends SelectionNotice implements Posi
         private readonly string $department,
         private readonly string $selectionId,
         private readonly array $teachers,
-        ?string $departmentId = null,
-    ) {
-        $this->departmentId = $departmentId;
+    ) {}
+
+    public static function typeKey(): string
+    {
+        return 'selection-finished-with-pending';
     }
 
     /**
@@ -45,18 +43,11 @@ final class SelectionFinishedWithPending extends SelectionNotice implements Posi
     }
 
     /**
-     * CE-02: la jefatura o el jefe de proyecto docente del departamento de la selección, en su modalidad.
+     * CE-02: el puesto de quien lo recibe, con el alcance de su nombramiento.
      */
     public function position(): ?PositionRef
     {
-        $role = $this->addressedRole();
-
-        return $role === null || $this->departmentId === null ? null : PositionRef::of($role, unit: $this->departmentId, modality: $this->modalityId);
-    }
-
-    public static function typeKey(): string
-    {
-        return 'selection-finished-with-pending';
+        return $this->holderPosition();
     }
 
     public static function typeLabel(): string
