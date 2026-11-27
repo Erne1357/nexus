@@ -81,6 +81,7 @@ final class ActivityEvents
         'capacity_updated' => 'Capacidad del grupo',
         'session_placed' => 'Sesión acomodada',
         'session_updated' => 'Sesión cambiada',
+        'room_dropped_no_loans' => 'Salón quitado (préstamos no disponibles)',
         'session_removed' => 'Sesión quitada',
         'session_room_assigned' => 'Salón de la sesión',
         'sessions_replaced' => 'Horario escrito',
