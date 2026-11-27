@@ -1,5 +1,5 @@
 {{--
-    Ficha del alumno (DESIGN.md, "Retícula del alumno"): encabezado con sus datos y cifras, y dos pestañas. La
+    Ficha del alumno (DESIGN.md, "Retícula del alumno"): encabezado con sus datos y, en las pestañas de retícula, kárdex y credencial, sus cifras; cuatro pestañas, la primera y por omisión «Resumen» (1.67, DESIGN.md «Resumen del alumno»). La
     retícula va en columnas por semestre, como la del SII, con las piezas de Core (core::semester-grid): una sola
     cuadrícula con mosaicos de tamaño fijo, el tronco común arriba y una banda por especialidad; en celular los
     semestres se apilan. Cada materia lleva el relleno, el borde y el icono de su estado, y el estado en texto para
@@ -33,6 +33,7 @@
         </div>
     </div>
 
+    @if ($tab !== 'resumen')
     <div class="grid grid-cols-2 overflow-hidden rounded-box border border-base-300 bg-base-100 desktop:grid-cols-4">
         @foreach ([
             ['Créditos aprobados', $record->creditsApproved, $record->totalCredits],
@@ -49,14 +50,19 @@
             </div>
         @endforeach
     </div>
+    @endif
 
     <div role="tablist" class="tabs tabs-border">
-        <button type="button" role="tab" @class(['tab', 'tab-active font-bold' => $tab === 'reticula']) aria-selected="{{ $tab === 'reticula' ? 'true' : 'false' }}" wire:click="$set('tab', 'reticula')">Retícula</button>
+        <button type="button" role="tab" @class(['tab', 'tab-active font-bold' => $tab === 'resumen']) aria-selected="{{ $tab === 'resumen' ? 'true' : 'false' }}" wire:click="$set('tab', 'resumen')" data-testid="tab-resumen">Resumen</button>
+        <button type="button" role="tab" @class(['tab', 'tab-active font-bold' => $tab === 'reticula']) aria-selected="{{ $tab === 'reticula' ? 'true' : 'false' }}" wire:click="$set('tab', 'reticula')" data-testid="tab-reticula">Retícula</button>
         <button type="button" role="tab" @class(['tab', 'tab-active font-bold' => $tab === 'kardex']) aria-selected="{{ $tab === 'kardex' ? 'true' : 'false' }}" wire:click="$set('tab', 'kardex')" data-testid="tab-kardex">Kárdex</button>
         <button type="button" role="tab" @class(['tab', 'tab-active font-bold' => $tab === 'credencial']) aria-selected="{{ $tab === 'credencial' ? 'true' : 'false' }}" wire:click="$set('tab', 'credencial')" data-testid="tab-credencial">Credencial</button>
     </div>
 
-    @if ($tab === 'credencial' && $credential !== null)
+    @if ($tab === 'resumen')
+        {{-- 1.67: el tablero en tercera persona, sin «Tu acceso»; la identidad ya va arriba y las cifras son las del tablero. --}}
+        @livewire('students::components.student-summary', ['studentId' => $studentId], 'student-summary-'.$studentId)
+    @elseif ($tab === 'credencial' && $credential !== null)
         {{-- CO-10 (maqueta B): una cara a la vez con el interruptor Frente/Reverso; al lado, la foto con «Cambiar foto» y el historial de solicitudes. --}}
         <div class="grid items-start gap-6 desktop:grid-cols-[minmax(0,1fr)_20rem]" data-testid="credential-tab">
             <x-students::credential-card :credential="$credential" mode="staff" />
@@ -120,7 +126,7 @@
                 @endif
             </x-drawer>
         @endif
-    @elseif ($tab !== 'kardex')
+    @elseif ($tab === 'reticula')
         <x-students::reticula :record="$record" />
     @else
         <x-students::kardex :record="$record" />

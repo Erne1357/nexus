@@ -17,8 +17,8 @@ use Illuminate\Support\Collection;
  * La ficha de un alumno (tarea 1.6): su retícula por semestre con el estado de cada materia como lo nombra el
  * SII (SubjectStanding), sus especialidades, las cadenas de seriación, sus cifras y su kárdex por periodo. El avance se calcula al
  * leer con PlanGrid, desde su kardex y su semestre, para que la ficha no espere al siguiente recálculo de
- * `student_progress` (reglas-de-negocio.md, "Retícula del alumno"). Una vez elegida la especialidad, no muestra
- * las materias de las otras. Aparte lista las materias de su plan que esperan semestre en «Por validar» (D18), que
+ * `student_progress` (reglas-de-negocio.md, "Retícula del alumno"). Una vez elegida la especialidad (por su kárdex o,
+ * si no, la que le asignó el SII), no muestra las materias de las otras; sin ella, solo las de las especialidades activas. Aparte lista las materias de su plan que esperan semestre en «Por validar» (D18), que
  * cuentan en sus cifras pero no están en la retícula.
  */
 final class StudentRecordQuery
@@ -41,7 +41,7 @@ final class StudentRecordQuery
         $records = $student->kardexRecords()->with(['subject' => fn (BelongsTo $subject) => $subject->withTrashed()])->get();
         $approved = $records->where('result', KardexResult::Aprobada)->pluck('subject_id')->unique()->values()->all();
         $taking = $records->where('result', KardexResult::Cursando)->pluck('subject_id')->unique()->values()->all();
-        $progress = $grid->progressFor($approved, $taking, $student->current_semester);
+        $progress = $grid->progressFor($approved, $taking, $student->current_semester, $student->specialty_id);
 
         $shown = array_keys(array_intersect_key($grid->credits, array_flip([...$approved, ...$progress['subjects_pending']])));
         $available = array_flip($progress['subjects_available']);
@@ -104,7 +104,7 @@ final class StudentRecordQuery
         return new StudentRecord(
             student: $student,
             creditsApproved: $progress['credits_approved'],
-            totalCredits: $grid->totalFor([...$approved, ...$taking]),
+            totalCredits: $grid->totalFor([...$approved, ...$taking], $student->specialty_id),
             subjectsApproved: $progress['subjects_approved'],
             subjectsInGrid: count($shown) + count(array_intersect_key($grid->unplaced, $passed)),
             taking: count(array_filter($cells, fn (GridCell $cell): bool => $cell->standing === SubjectStanding::Cursando)),
@@ -119,6 +119,7 @@ final class StudentRecordQuery
             chains: $chains,
             kardex: $this->kardex($records),
             siiCodes: $siiCodes,
+            availableIds: array_map('strval', array_keys($available)),
             unplaced: array_map(fn (string $subjectId): array => [
                 'id' => $subjectId,
                 'code' => $subjects[$subjectId]->code,
@@ -180,16 +181,15 @@ final class StudentRecordQuery
     }
 
     /**
-     * Por periodo, del más antiguo al más reciente. Lo que no tiene periodo (la historia del SII trae periodos que no
-     * existen) va primero, como «Sin periodo»: igual que al decidir el estado de la materia (SubjectStanding), se
-     * toma como lo más antiguo.
+     * Por periodo, del más reciente al más antiguo; dentro de cada uno, por código de materia. Lo que no tiene
+     * periodo (la historia del SII trae periodos que no existen) va al final, como «Sin periodo».
      *
      * @param  Collection<int, KardexRecord>  $records
      * @return list<array{term: string|null, label: string, records: list<KardexRecord>}>
      */
     private function kardex(Collection $records): array
     {
-        return $records->sortBy([fn (KardexRecord $a, KardexRecord $b): int => [$a->term_code !== null, $a->term_code] <=> [$b->term_code !== null, $b->term_code], fn (KardexRecord $a, KardexRecord $b): int => strcmp($a->subject->code, $b->subject->code)])
+        return $records->sortBy([fn (KardexRecord $a, KardexRecord $b): int => [$b->term_code !== null, $b->term_code] <=> [$a->term_code !== null, $a->term_code], fn (KardexRecord $a, KardexRecord $b): int => strcmp($a->subject->code, $b->subject->code)])
             ->groupBy(fn (KardexRecord $row): string => $row->term_code ?? '')
             ->map(fn (Collection $rows, string $term): array => ['term' => $term === '' ? null : $term, 'label' => $term === '' ? 'Sin periodo' : self::termLabel($term), 'records' => $rows->values()->all()])
             ->values()

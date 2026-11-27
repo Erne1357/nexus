@@ -13,15 +13,17 @@
     $fallbackPhoto = Vite::asset('resources/images/login/edificio-itcj.webp');
     $hare = Vite::asset('resources/images/liebre-512.png');
     $hasShortcuts = $shortcuts !== [];
+    $slideCount = count($notices) + 1; // la diapositiva oficial (LG-03) más los avisos
+    $pageTitle = 'Iniciar sesión · Nexus — Sistema Integral de Información del ITCJ';
 @endphp
 
-<x-core::layouts.guest title="Iniciar sesión" bare>
+<x-core::layouts.guest title="Iniciar sesión" :page-title="$pageTitle" bare>
     @push('head')
         @vite('resources/js/login.js')
     @endpush
 
     <div
-        x-data="nexusLogin({ total: {{ count($notices) }} })"
+        x-data="nexusLogin({ total: {{ $slideCount }} })"
         class="grid min-h-svh lg:grid-cols-[minmax(0,1fr)_clamp(460px,42vw,720px)]"
         style="--hare: url('{{ $hare }}')"
     >
@@ -193,6 +195,14 @@
                 </div>
             </div>
 
+            {{-- Pie del panel: el aviso de privacidad del TecNM (AC-23), siempre a la vista; fuera de la credencial para que el giro de los
+                 atajos no lo esconda, y en otra pestaña para no perder lo escrito --}}
+            <p class="mt-5 flex justify-center lg:mt-[clamp(18px,3vh,28px)]">
+                <a href="{{ route('privacy-notice') }}" target="_blank" rel="noopener" data-testid="login-privacy-notice" class="inline-flex min-h-11 items-center gap-1.5 px-2 text-[13.5px] text-neutral underline decoration-base-300 underline-offset-[3px] hover:text-base-content hover:decoration-current">
+                    <x-icon name="o-shield-check" class="h-4 w-4" />Aviso de privacidad<span class="sr-only"> (se abre en otra pestaña)</span>
+                </a>
+            </p>
+
             {{-- La banda a la que llega la credencial al entrar, con la forma de core::components.band (LoginScreenTest compara sus medidas) --}}
             <template x-ref="band">
                 <div aria-hidden="true" class="fixed inset-x-0 top-0 text-sm/[1.45]">
@@ -240,14 +250,33 @@
             x-on:focusout="hold($el.contains($event.relatedTarget))"
         >
             <div class="grid lg:absolute lg:inset-0 lg:block" aria-live="off" x-ref="slides">
-                @forelse ($notices as $index => $notice)
+                {{-- LG-03: la diapositiva oficial, siempre la primera; no es un aviso --}}
+                <article
+                    x-show="current === 0"
+                    x-transition.opacity.duration.700ms
+                    role="group"
+                    aria-roledescription="diapositiva"
+                    aria-label="1 de {{ $slideCount }}"
+                    data-testid="login-official-slide"
+                    class="col-start-1 row-start-1 flex flex-col lg:absolute lg:inset-0"
+                >
+                    <img src="{{ $fallbackPhoto }}" alt="Edificio del Instituto Tecnológico de Ciudad Juárez" class="aspect-[16/11] w-full object-cover lg:absolute lg:inset-0 lg:aspect-auto lg:h-full" />
+                    <div class="border-t-[3px] border-accent bg-primary px-5 pt-4 pb-5 text-primary-content lg:absolute lg:top-[clamp(24px,3.4vw,56px)] lg:left-[clamp(24px,3.4vw,56px)] lg:max-w-[min(calc(100%-2*clamp(24px,3.4vw,56px)),620px)] lg:rounded-[12px] lg:px-[clamp(20px,2vw,32px)] lg:pt-[clamp(16px,1.6vw,24px)] lg:pb-[clamp(18px,1.8vw,28px)] lg:shadow-[0_2px_4px_rgb(0_0_0/0.08),0_18px_40px_-18px_rgb(0_0_0/0.42)]">
+                        <p class="flex flex-col gap-2.5 lg:gap-3">
+                            <span class="sr-only">Nexus — Sistema Integral de Información del ITCJ</span>
+                            <x-core::login.mark reuse class="w-[min(60%,230px)] lg:w-[clamp(180px,17vw,300px)]" />
+                            <span aria-hidden="true" class="text-[clamp(17px,4.6vw,21px)] leading-[1.2] font-bold tracking-[-0.01em] text-balance lg:text-[clamp(18px,1.6vw,26px)]">Sistema Integral de Información del ITCJ</span>
+                        </p>
+                    </div>
+                </article>
+                @foreach ($notices as $index => $notice)
                     <article
-                        x-show="current === {{ $index }}"
-                        @if ($index > 0) x-cloak @endif
+                        x-show="current === {{ $index + 1 }}"
+                        x-cloak
                         x-transition.opacity.duration.700ms
                         role="group"
                         aria-roledescription="aviso"
-                        aria-label="{{ $index + 1 }} de {{ count($notices) }}"
+                        aria-label="{{ $index + 2 }} de {{ $slideCount }}"
                         class="col-start-1 row-start-1 flex flex-col lg:absolute lg:inset-0"
                     >
                         @if ($notice['image_url'])
@@ -273,22 +302,20 @@
                             </h3>
                         </div>
                     </article>
-                @empty
-                    <img src="{{ $fallbackPhoto }}" alt="" class="aspect-[16/11] w-full object-cover lg:absolute lg:inset-0 lg:aspect-auto lg:h-full" />
-                @endforelse
+                @endforeach
             </div>
 
-            @if (count($notices) > 1)
+            @if ($slideCount > 1)
                 <div
                     class="mb-3.5 ml-3 inline-flex items-center gap-0.5 rounded-full px-2.5 py-1 lg:absolute lg:top-[calc(clamp(24px,3.4vw,56px)+clamp(60px,4.6vw,70px))] lg:right-[clamp(24px,3.4vw,56px)] lg:z-10 lg:m-0 lg:bg-base-200/60 lg:shadow-[0_2px_4px_rgb(0_0_0/0.08),0_18px_40px_-18px_rgb(0_0_0/0.42)] lg:backdrop-blur-md"
                 >
-                    @foreach ($notices as $index => $notice)
+                    @for ($index = 0; $index < $slideCount; $index++)
                         <button
                             type="button"
                             class="group grid h-9 place-items-center transition-[width] duration-300"
                             x-bind:class="current === {{ $index }} ? 'w-[46px]' : 'w-6'"
                             x-bind:aria-current="current === {{ $index }}"
-                            aria-label="Aviso {{ $index + 1 }} de {{ count($notices) }}"
+                            aria-label="Diapositiva {{ $index + 1 }} de {{ $slideCount }}"
                             x-on:click="go({{ $index }})"
                         >
                             <i
@@ -296,7 +323,7 @@
                                 x-bind:class="current === {{ $index }} ? 'w-[34px] bg-base-300' : 'w-2 bg-neutral group-hover:bg-primary'"
                             ><span data-progress class="block h-full w-full origin-left scale-x-0 bg-primary"></span></i>
                         </button>
-                    @endforeach
+                    @endfor
                 </div>
             @endif
 

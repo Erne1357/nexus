@@ -139,13 +139,15 @@ describe('CV11: por correo (D3)', function () {
         });
     });
 
-    it('CV11: sin correo institucional el aviso va solo a la campana', function (?string $email) {
+    it('CE-02: el aviso a la jefatura es de puesto: lleva el correo aunque el jefe no tenga correo institucional, y espera al buzón', function (?string $email) {
         $this->jefe->update(['email' => $email]);
         Notification::fake();
 
         app(NotifyPendingReviews::class)->handle($this->term);
 
-        Notification::assertSentTo($this->jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $notice, array $channels) => $channels === ['database']);
+        Notification::assertSentTo($this->jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $notice, array $channels) => $channels === ['database', 'mail']
+            && $notice->position()?->orgUnitId === $this->sis->id
+            && $this->jefe->routeNotificationFor('mail', $notice) === null);
     })->with(['sin correo' => null, 'de otro dominio' => 'ana@itcj.edu.mx']);
 
     it('el correo sale de la cola después del commit y la campana en el momento', function () {

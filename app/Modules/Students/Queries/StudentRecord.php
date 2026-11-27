@@ -25,6 +25,7 @@ final readonly class StudentRecord
      * @param  list<array{index: int, name: string, size: int}>  $chains  cadenas de seriación, por su primera materia
      * @param  list<array{term: string|null, label: string, records: list<KardexRecord>}>  $kardex  primero lo que no tiene periodo y luego del periodo más antiguo al más reciente
      * @param  list<array{id: string, code: string, name: string, credits: int, accredited: bool}>  $unplaced  las materias de su plan que esperan semestre en «Por validar» (D18), por su renglón del SII y luego por clave, y si las acreditó
+     * @param  list<string>  $availableIds  materias que su avance ya le deja cursar (las que cuentan en `$selectable`, junto con su estado)
      * @param  array<string, string>  $siiCodes  materia → su clave del SII en el plan del alumno, solo si difiere de la de Nexus (D8-bis)
      */
     public function __construct(
@@ -43,6 +44,7 @@ final readonly class StudentRecord
         public array $kardex,
         public array $unplaced = [],
         public array $siiCodes = [],
+        public array $availableIds = [],
     ) {}
 
     /**

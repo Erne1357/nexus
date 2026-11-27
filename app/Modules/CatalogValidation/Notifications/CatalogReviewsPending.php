@@ -13,6 +13,8 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
+use App\Modules\Core\Notifications\PositionNotice;
+use App\Modules\Core\Notifications\PositionRef;
 use App\Modules\Core\Notifications\RoutesMailAddress;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Support\StageTimeline;
@@ -35,8 +37,12 @@ use Illuminate\Notifications\Messages\MailMessage;
  * (HeadMailAddressQuery; CV11, confirmado el 15 de noviembre de 2026). La misma dirección decide el canal y recibe el
  * correo (RoutesMailAddress). Sale de la cola, después del commit; la campana se guarda en el momento
  * (`viaConnections`, conexión `sync`).
+ *
+ * CE-02 (confirmado el 26 de noviembre de 2026): validar compete a la jefatura, así que el aviso que se manda a un puesto
+ * (NotifyHolders) es de puesto (PositionNotice): su correo va al buzón del nombramiento por el que el jefe valida (su
+ * unidad) y, si todavía no tiene buzón, espera; la campana llega igual. Sin puesto, sigue la regla de CV11.
  */
-final class CatalogReviewsPending extends NexusNotification implements RoutesMailAddress, ShouldQueue
+final class CatalogReviewsPending extends NexusNotification implements PositionNotice, RoutesMailAddress, ShouldQueue
 {
     use Queueable;
 
@@ -93,7 +99,16 @@ final class CatalogReviewsPending extends NexusNotification implements RoutesMai
      */
     public function via(object $notifiable): array
     {
-        return $notifiable instanceof User && $this->mailAddressFor($notifiable) !== null ? ['database', 'mail'] : ['database'];
+        return $this->positionChannels()
+            ?? ($notifiable instanceof User && $this->mailAddressFor($notifiable) !== null ? ['database', 'mail'] : ['database']);
+    }
+
+    /**
+     * CE-02: el puesto de quien lo recibe, con el alcance de su nombramiento.
+     */
+    public function position(): ?PositionRef
+    {
+        return $this->holderPosition();
     }
 
     /**

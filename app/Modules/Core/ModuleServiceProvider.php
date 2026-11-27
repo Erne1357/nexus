@@ -7,6 +7,7 @@ use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Settings\SettingDefinition;
+use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -216,6 +217,19 @@ abstract class ModuleServiceProvider extends ServiceProvider
      * @return array<string, array<string, Permission>>
      */
     public function activityProtectedProperties(): array
+    {
+        return [];
+    }
+
+    /**
+     * CE-01: las excepciones declaradas que dejan a un aviso del módulo ir a un correo personal, `clase => id de la regla`
+     * (`SelectionTeacherNotice::class => 'SEL-15'`). La clase tiene que implementar AllowsPersonalMail; sus hijas
+     * heredan la excepción. Core las junta en PersonalMailExceptions, que la guardia consulta, y una prueba de
+     * arquitectura fija la lista completa: una excepción nueva es una regla nueva en reglas-de-negocio.md.
+     *
+     * @return array<class-string<Notification>, string>
+     */
+    public function personalMailExceptions(): array
     {
         return [];
     }

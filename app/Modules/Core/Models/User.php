@@ -6,7 +6,10 @@ use App\Modules\Core\Database\Factories\UserFactory;
 use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\StaffType;
+use App\Modules\Core\Notifications\PersonMailAddresses;
+use App\Modules\Core\Notifications\PositionNotice;
 use App\Modules\Core\Notifications\RoutesMailAddress;
+use App\Modules\Core\Queries\PositionMailboxQuery;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -28,7 +31,9 @@ use Illuminate\Notifications\Notification;
  * `deactivated_by` dicen cuándo y quién dio de baja la cuenta en el panel (DeactivateUser, CF-05): mientras estén, solo
  * el admin la reactiva (CF-09).
  * `photo_path` es la foto vigente del personal en el disco `staff_photos` y `photo_updated_at` cuándo se puso (CO-03; solo
- * SetStaffPhoto y RemoveStaffPhoto las escriben). Su correo de avisos es `email`, salvo que la notificación elija otro (RoutesMailAddress, CV11).
+ * SetStaffPhoto y RemoveStaffPhoto las escriben). `privacy_notice_accepted_at` y `privacy_notice_version` dicen cuándo y qué
+ * versión del aviso de privacidad aceptó (AC-22; solo AcceptPrivacyNotice las escribe). Su correo de avisos es su correo
+ * institucional (PersonMailAddresses, CE-01), salvo que la notificación elija otro (RoutesMailAddress, CV11).
  */
 #[Fillable(['username', 'name', 'email', 'password', 'password_origin', 'is_active', 'must_change_password', 'last_login_at'])]
 #[Hidden(['password', 'remember_token'])]
@@ -53,6 +58,7 @@ class User extends Authenticatable
             'access_invited_at' => 'immutable_datetime',
             'deactivated_at' => 'immutable_datetime',
             'photo_updated_at' => 'immutable_datetime',
+            'privacy_notice_accepted_at' => 'immutable_datetime',
             'last_role' => Role::class,
             'staff_type' => StaffType::class,
             'authz_version' => 'integer',
@@ -70,11 +76,17 @@ class User extends Authenticatable
     }
 
     /**
-     * A qué correo le llega una notificación: al que ella elige si implementa RoutesMailAddress (null: a ninguno); si
-     * no, a `email`, como en Laravel.
+     * A qué correo le llega una notificación: si es un aviso de puesto (PositionNotice con puesto, CE-02), al buzón del
+     * puesto (null si todavía no tiene: el correo espera, HoldPositionMail); si elige su dirección (RoutesMailAddress), a
+     * esa (null: a ninguno); si no, a su correo institucional (CE-01: `email` solo si es institucional, la ficha de
+     * docente o el del alumno), o a ninguno. La guardia (GuardMailRecipient) revisa al salir que sea institucional.
      */
     public function routeNotificationForMail(?Notification $notification = null): ?string
     {
-        return $notification instanceof RoutesMailAddress ? $notification->mailAddressFor($this) : $this->email;
+        if ($notification instanceof PositionNotice && ($position = $notification->position()) !== null) {
+            return app(PositionMailboxQuery::class)->addressFor($position);
+        }
+
+        return $notification instanceof RoutesMailAddress ? $notification->mailAddressFor($this) : app(PersonMailAddresses::class)->for($this);
     }
 }

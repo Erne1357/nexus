@@ -41,17 +41,21 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Enums\StageStatus;
 use App\Modules\Core\Enums\UserAccess;
+use App\Modules\Core\Events\PositionMailboxSaved;
 use App\Modules\Core\Events\SettingsUpdated;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Health\Checks\HeartbeatCheck;
 use App\Modules\Core\Http\Controllers\HealthEndpoint;
 use App\Modules\Core\Http\Middleware\EnsureAcademicLoadIsVisible;
 use App\Modules\Core\Jobs\RecordQueueHeartbeat;
+use App\Modules\Core\Jobs\ReleaseHeldPositionMailsJob;
 use App\Modules\Core\Listeners\ForgetAcademicLoadVisibility;
 use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetRoleAccess;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
+use App\Modules\Core\Listeners\GuardMailRecipient;
 use App\Modules\Core\Listeners\HoldAcademicLoadMail;
+use App\Modules\Core\Listeners\HoldPositionMail;
 use App\Modules\Core\Listeners\LogFailedQueuedMail;
 use App\Modules\Core\Listeners\LogSentMail;
 use App\Modules\Core\Listeners\StampActingAs;
@@ -65,6 +69,7 @@ use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\PermissionSet;
+use App\Modules\Core\Models\PositionMailbox;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
@@ -73,12 +78,16 @@ use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Notifications\AccessInvitation;
+use App\Modules\Core\Notifications\PersonalMailExceptions;
+use App\Modules\Core\Notifications\PersonMailAddresses;
 use App\Modules\Core\Policies\ActivityPolicy;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Support\ActivityAttributes;
 use App\Modules\Core\Support\ActivityProtectedProperties;
+use App\Modules\Core\Support\HomePanels;
 use App\Modules\Core\Support\QueueJobScope;
 use App\Modules\Core\View\Components\Drawer;
 use App\Modules\Core\View\DrawerIds;
@@ -143,6 +152,18 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // Singleton a propósito: las fuentes de fotos se registran una vez al arrancar (boot) y son closures sin estado;
         // nada de lo que guarda cambia por petición, así que es seguro con Octane.
         $this->app->singleton(CredentialPhotos::class);
+
+        // Singleton por lo mismo: los paneles de Resumen por puesto (HomePanels) los registran los módulos en boot().
+        $this->app->singleton(HomePanels::class);
+
+        // Singleton por lo mismo: las fuentes del correo institucional de la persona (CE-01) se registran una vez al
+        // arrancar (boot de Faculty y Students) y son closures sin estado.
+        $this->app->singleton(PersonMailAddresses::class);
+
+        // Singleton porque es inmutable: las excepciones de correo personal que declaran los módulos (CE-01).
+        $this->app->singleton(PersonalMailExceptions::class, fn (Application $app): PersonalMailExceptions => PersonalMailExceptions::fromModules(
+            $app->getProviders(ModuleServiceProvider::class),
+        ));
 
         // `scoped` por lo mismo: memoriza los snapshots de nombramientos de la petición en curso.
         $this->app->scoped(AuthorizationSnapshots::class, fn (Application $app): AuthorizationSnapshots => new AuthorizationSnapshots($app['cache.store']));
@@ -220,12 +241,22 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 Cache::store(config('health.cache_store'))->put(HeartbeatCheck::SCHEDULER_KEY, now()->timestamp, 600);
                 dispatch(new RecordQueueHeartbeat);
             })->everyMinute()->name('health-heartbeat');
+
+            // CE-02: barre cada 15 minutos los correos de puesto que esperan y ya tienen buzón (los que esperaban por la carga
+            // oculta, MN-05, o por un reintento).
+            $schedule->job(new ReleaseHeldPositionMailsJob)->everyFifteenMinutes()->name('release-held-position-mails');
         });
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
         Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetAcademicLoadVisibility::class);
         Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetRoleAccess::class);
         Event::listen(NotificationSending::class, HoldAcademicLoadMail::class);
+        // CE-02: el correo de un puesto sin buzón espera; va después de MN-05 y antes de la guardia de CE-01.
+        Event::listen(NotificationSending::class, HoldPositionMail::class);
+        // CE-01: la guardia va al final de los listeners de NotificationSending, cuando lo retenido ya no llega a ella.
+        Event::listen(NotificationSending::class, GuardMailRecipient::class);
+        // CE-02: un buzón capturado o reactivado libera en la cola los correos de su puesto que esperaban.
+        Event::listen(PositionMailboxSaved::class, fn (): mixed => ReleaseHeldPositionMailsJob::dispatch());
         Event::listen(Login::class, ForgetActiveRole::class);
         Activity::creating(StampActingAs::class);
 
@@ -296,7 +327,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
             LoginNotice::class => ['title' => 'Título', 'link_url' => 'Enlace', 'image_path' => 'Imagen'],
             LoginShortcut::class => ['kind' => ['Tipo', LoginShortcutKind::class]],
             PermissionSet::class => ['name' => 'Nombre del puesto', 'description' => 'Descripción'],
-            User::class => ['name' => 'Nombre', 'is_active' => 'Activo'],
+            User::class => ['name' => 'Nombre', 'is_active' => 'Activo', 'version' => 'Versión del aviso de privacidad'],
         ];
     }
 
@@ -307,6 +338,14 @@ final class CoreServiceProvider extends ModuleServiceProvider
     public function activityProtectedProperties(): array
     {
         return ['deactivated' => ['note' => CorePermission::UserDeactivate]];
+    }
+
+    /**
+     * SEL-13 (CE-01): la invitación de acceso de la cola de una orden de selección y su reenvío pueden ir al personal.
+     */
+    public function personalMailExceptions(): array
+    {
+        return [AccessInvitation::class => 'SEL-13'];
     }
 
     public function navigation(): array
@@ -344,6 +383,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
             // 1.22-G Correos y colas
             new NavigationItem('Correos y colas', 'core.mail-and-queues', 'o-envelope', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
                 ability: 'viewAny', arguments: [MailLog::class]),
+            new NavigationItem('Buzones de puesto', 'core.position-mailboxes', 'o-inbox-stack', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                ability: 'viewAny', arguments: [PositionMailbox::class]),
         ];
     }
 

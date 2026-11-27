@@ -5,6 +5,8 @@ namespace App\Modules\Staffing\Notifications;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AcademicLoadNotice;
 use App\Modules\Core\Notifications\NotificationMessage;
+use App\Modules\Core\Notifications\PositionNotice;
+use App\Modules\Core\Notifications\PositionRef;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Str;
 
@@ -14,8 +16,12 @@ use Illuminate\Support\Str;
  * visto bueno y se le avisa al elegir). Dice qué grupo se mueve, de dónde a dónde y por qué solicitud; lleva al editor
  * de horarios con el grupo, porque la solicitud es de otra carrera y su pantalla no la muestra. Es un aviso de la carga (AcademicLoadNotice, MN-05): mientras
  * está oculta, el correo no sale.
+ *
+ * CE-02 (confirmado el 26 de noviembre de 2026): compete a la coordinación (PositionNotice): su correo va al buzón del
+ * nombramiento por el que lo recibe cada quien (su carrera, su modalidad y su campus, si lo fija) y, sin buzón, espera;
+ * la campana llega igual.
  */
-final class ChangeAlternativeMovesCareerGroup extends ChangeAlternativeNotice implements AcademicLoadNotice
+final class ChangeAlternativeMovesCareerGroup extends ChangeAlternativeNotice implements AcademicLoadNotice, PositionNotice
 {
     /**
      * @param  array{group_id: string, label: string, subject: ?string, career: ?string, campus: ?string, from: string, to: string}  $group  el grupo que se mueve
@@ -34,6 +40,22 @@ final class ChangeAlternativeMovesCareerGroup extends ChangeAlternativeNotice im
     public static function typeKey(): string
     {
         return 'change-alternative-moves-career-group';
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function via(object $notifiable): array
+    {
+        return $this->positionChannels() ?? parent::via($notifiable);
+    }
+
+    /**
+     * CE-02: el puesto de quien lo recibe, con el alcance de su nombramiento.
+     */
+    public function position(): ?PositionRef
+    {
+        return $this->holderPosition();
     }
 
     public static function typeLabel(): string

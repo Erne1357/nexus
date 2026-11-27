@@ -33,7 +33,7 @@ beforeEach(function () {
     $this->student = Student::factory()->create(['control_number' => '21111182', 'name' => 'Ana López Ruiz', 'status' => StudentStatus::Activo, ...$attributes]);
     $this->other = Student::factory()->create(['control_number' => '22110005', 'name' => 'Beto Soto', 'status' => StudentStatus::Activo, ...$attributes]);
     app(SyncStudentAccounts::class)->handle(['21111182' => '4821', '22110005' => '1357']);
-    $this->user = $this->student->fresh()->user;
+    $this->user = settledStudentUser($this->student->fresh()->user);
 });
 
 /**

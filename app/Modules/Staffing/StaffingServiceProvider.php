@@ -73,6 +73,7 @@ use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Models\TeacherTermLoad;
+use App\Modules\Staffing\Notifications\SelectionTeacherNotice;
 use App\Modules\Staffing\Policies\ChangeRequestPolicy;
 use App\Modules\Staffing\Policies\SelectionPolicy;
 use App\Modules\Staffing\Queries\ChosenAlternativePlacementsQuery;
@@ -216,6 +217,14 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     /**
      * @return list<class-string>
      */
+    /**
+     * SEL-15 (CE-01): los avisos de la orden de selección al docente caen a su correo personal si no tiene institucional.
+     */
+    public function personalMailExceptions(): array
+    {
+        return [SelectionTeacherNotice::class => 'SEL-15'];
+    }
+
     public function permissions(): array
     {
         return [StaffingPermission::class];

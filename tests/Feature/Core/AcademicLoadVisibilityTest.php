@@ -414,7 +414,7 @@ describe('MN-05: las rutas', function () {
     });
 
     it('oculta, un aviso de Mi carga se ve en la campana y sale por correo, y los de la carga siguen retenidos', function () {
-        $this->docente->forceFill(['email' => 'docente@itcj.edu.mx'])->save();
+        $this->docente->forceFill(['email' => 'docente@cdjuarez.tecnm.mx'])->save();
         setAcademicLoadVisible(false);
         $this->docente->notify(new HiddenLoadNotice('Mira la oferta', 'staffing.offer'));
         $this->docente->notify(new HiddenLoadNotice('Tu horario publicado', 'published.index'));
@@ -544,8 +544,8 @@ describe('MN-05: la campana', function () {
     });
 
     it('oculta, sus avisos no salen por correo, a nadie; la campana los guarda igual y vuelven al mostrarla', function () {
-        $this->docente->forceFill(['email' => 'docente@itcj.edu.mx'])->save();
-        $this->admin->forceFill(['email' => 'admin@itcj.edu.mx'])->save();
+        $this->docente->forceFill(['email' => 'docente@cdjuarez.tecnm.mx'])->save();
+        $this->admin->forceFill(['email' => 'admin@cdjuarez.tecnm.mx'])->save();
         setAcademicLoadVisible(false);
 
         $this->docente->notify(new HiddenLoadMailNotice);
@@ -557,7 +557,7 @@ describe('MN-05: la campana', function () {
         setAcademicLoadVisible(true);
         $this->docente->notify(new HiddenLoadMailNotice);
 
-        expect(MailLog::query()->pluck('to')->all())->toBe(['docente@itcj.edu.mx']);
+        expect(MailLog::query()->pluck('to')->all())->toBe(['docente@cdjuarez.tecnm.mx']);
     });
 
     it('los avisos de la carga que salen por correo llevan la marca de Core', function () {

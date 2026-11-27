@@ -41,6 +41,7 @@ it('el coordinador abre la ficha de un alumno desde el listado y pasa al kárdex
         ->navigate('/students')
         ->assertSee('Daniela Ortiz Mendoza')
         ->click('@show-24111234')
+        ->click('@tab-reticula')
         ->assertSee('Cálculo Integral')
         ->assertSee('Puede seleccionarla')
         ->assertSee('1EA')
@@ -63,7 +64,7 @@ it('al tocar una materia resalta su cadena y la barra de selección dice qué pi
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
-        ->navigate('/students/'.$student->id)
+        ->navigate('/students/'.$student->id.'?tab=reticula')
         ->assertScript("document.querySelector('[data-testid=selection-bar]').offsetHeight", 0)
         ->assertScript("document.querySelector('[data-testid=chain-info]').textContent.trim()", '')
         ->click('[data-subject="ACF-0902"]')
@@ -73,7 +74,7 @@ it('al tocar una materia resalta su cadena y la barra de selección dice qué pi
         ->assertScript($onChain('ACF-0901'), true);
 
     // Tocar la pestaña en que ya está vuelve a pintar la página, pero no pierde el resaltado.
-    $page->click('[role=tab]:not([data-testid^=tab-])')
+    $page->click('@tab-reticula')
         ->assertScript($focused, true);
 
     // Con el menú abierto, Esc cierra el menú y no quita el resaltado: Esc cierra solo la capa de arriba.
@@ -111,7 +112,7 @@ it('a 1440 px todos los mosaicos miden lo mismo, los de un renglón se alinean e
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
-        ->navigate('/students/'.$student->id)
+        ->navigate('/students/'.$student->id.'?tab=reticula')
         ->resize(1440, 900)
         ->assertSee('Aprendizaje Profundo')
         ->assertScript("new Set([...document.querySelectorAll('[data-subject]')].map((tile) => { const box = tile.getBoundingClientRect(); return Math.round(box.width) + 'x' + Math.round(box.height); })).size", 1)
@@ -146,7 +147,7 @@ it('la retícula de nueve semestres cabe sin desplazarse desde 1366 px; más ang
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
-        ->navigate('/students/'.$student->id)
+        ->navigate('/students/'.$student->id.'?tab=reticula')
         ->assertSee('Cálculo Integral');
 
     $page->resize(1366, 900)
@@ -169,7 +170,7 @@ it('la retícula del alumno con nueve semestres no desborda la página en 390, 7
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
-        ->navigate('/students/'.$student->id)
+        ->navigate('/students/'.$student->id.'?tab=reticula')
         ->assertSee('Cálculo Integral');
 
     foreach ([390, 768, 1440] as $width) {
@@ -215,7 +216,7 @@ it('en celular la leyenda de cadenas va plegada y se abre con un toque; en escri
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
-        ->navigate('/students/'.$student->id)
+        ->navigate('/students/'.$student->id.'?tab=reticula')
         ->resize(390, 900)
         ->assertSeeIn($toggle, 'Cadenas de seriación (')
         ->assertScript($hidden($chip), true)
