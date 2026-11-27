@@ -35,6 +35,8 @@ function campusPlaceTables(): array
         'historical_groups' => 'dónde se dio el grupo del historial por materia (aula del SII o campus del grupo publicado; nulo si no se sabe)',
         'import_batches' => 'el campus del archivo importado, si lo tiene',
         'role_assignments' => 'el límite de un nombramiento con campus (M5, M9): su lugar de trabajo, no el de la carga',
+        'position_mailboxes' => 'el alcance del puesto dueño del buzón (CE-02): el mismo límite del nombramiento, no el de la carga',
+        'held_position_mails' => 'el alcance del puesto al que iba el correo en espera (CE-02), copiado del nombramiento',
         'catalog_reviews' => 'siempre nulo (CHECK `catalog_reviews_campus_check`): las revisiones son del departamento',
         'department_heads' => 'tabla vieja de solo lectura, reemplazada por role_assignments (ADR-0018)',
         'forecast_evaluations' => 'el campus que se evaluó en la precisión de la proyección (nulo = todos los campus, DM-25)',
