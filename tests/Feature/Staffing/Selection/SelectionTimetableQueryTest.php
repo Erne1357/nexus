@@ -44,7 +44,7 @@ it('marca lo suyo, sus horas y lo que le choca con lo que ya tiene (HC-01)', fun
     $timetable = $this->query->forTeacher($this->world->selection, $this->teacher, CarbonImmutable::now());
     $cells = collect($timetable['cells'])->flatten(1)->keyBy('group_id');
 
-    expect($cells[$mine->id])->toMatchArray(['mine' => true, 'teacher' => 'Docente Uno', 'room' => 'A1', 'clashes' => false])
+    expect($cells[$mine->id])->toMatchArray(['mine' => true, 'teacher' => null, 'taken' => true, 'room' => 'A1', 'clashes' => false])
         ->and($cells[$clash->id]['clashes'])->toBeTrue()
         ->and($cells[$clash->id]['clash_with'])->toBe($mine->subject->code.' A')
         ->and($cells[$free->id]['clashes'])->toBeFalse()

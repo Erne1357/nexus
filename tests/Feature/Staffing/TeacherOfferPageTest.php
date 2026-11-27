@@ -84,7 +84,8 @@ it('HC-17: muestra todos los grupos del departamento en todos los campus con su 
         ->assertOk()
         ->assertSee('Semestre 1')
         ->assertSee('Semestre 3')
-        ->assertSeeInOrder(['1-A', 'Ma Vi', '11:00–13:00', 'Óscar Nájera'])
+        ->assertSeeInOrder(['1-A', 'Ma Vi', '11:00–13:00', 'Asignado'])
+        ->assertDontSee('Óscar Nájera')
         ->assertSee('Sin docente')
         ->assertSee('C1')
         ->assertSee('C2');

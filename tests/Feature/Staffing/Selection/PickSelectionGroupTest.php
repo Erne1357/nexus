@@ -58,13 +58,13 @@ it('fuera de su turno no puede tomar grupos', function () {
         ->and(GroupTeacherAssignment::query()->count())->toBe(0);
 });
 
-it('Review Focus 1: dos docentes del mismo turno toman el mismo grupo, uno gana y el otro recibe «Ya lo tomó»', function () {
+it('Review Focus 1: dos docentes del mismo turno toman el mismo grupo, uno gana y el otro recibe «Este grupo ya fue asignado.»', function () {
     $peer = $this->world->teacher(base: 5, position: 2, entry: ['slot_index' => 0], name: 'Docente Par');
 
     pickSelectionGroupFor($this->teacher, $this->group, $this->room);
     $errors = pickSelectionErrors(fn () => pickSelectionGroupFor($peer, $this->group, $this->room));
 
-    expect($errors['group'])->toBe(['Ya lo tomó Docente Uno'])
+    expect($errors['group'])->toBe(['Este grupo ya fue asignado.'])
         ->and($this->group->fresh()->teacher_id)->toBe($this->teacher->id)
         ->and(GroupTeacherAssignment::query()->current()->where('group_id', $this->group->id)->sole()->teacher_id)->toBe($this->teacher->id);
 });

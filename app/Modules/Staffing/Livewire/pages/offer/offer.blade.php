@@ -111,7 +111,7 @@
                                             'flex min-w-0 flex-col gap-1.5 rounded-field border px-3 py-2.5 text-left hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-primary',
                                             'border-info/40 bg-info/5' => $group['is_mine'],
                                             'border-base-300 bg-base-100' => ! $group['is_mine'],
-                                            'border-dashed' => $group['teacher_name'] === null,
+                                            'border-dashed' => ! $group['taken'],
                                         ])>
                                         <span class="flex items-center gap-2">
                                             <b class="font-mono text-base">{{ $group['code'] }}</b>
@@ -132,8 +132,8 @@
                                         <span class="truncate text-sm">
                                             @if ($group['is_mine'])
                                                 <b>Tú</b>
-                                            @elseif ($group['teacher_name'])
-                                                {{ $group['teacher_name'] }}
+                                            @elseif ($group['taken'])
+                                                <span class="badge badge-neutral badge-sm font-semibold" data-testid="offer-taken">Asignado</span>
                                             @else
                                                 <span class="font-semibold text-warning">Sin docente</span>
                                             @endif

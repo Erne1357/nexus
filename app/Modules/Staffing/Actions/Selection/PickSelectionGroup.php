@@ -32,7 +32,7 @@ use Illuminate\Validation\ValidationException;
  * En una transacción, en este orden: el candado consultivo de la selección (las elecciones de una selección van de una
  * en una, también las de quienes comparten turno), su turno, la carga en compartido y el grupo bloqueado (el orden de
  * LoadEditability, como AssignTeacher). El grupo es de una carga incluida, no está cancelado y no tiene docente: si ya
- * lo tiene, «Ya lo tomó {nombre}». HC-01 y HC-09 del validador son duros; HC-08 no veta (SEL-05: la banda de ±2 con la
+ * lo tiene, «Este grupo ya fue asignado.». HC-01 y HC-09 del validador son duros; HC-08 no veta (SEL-05: la banda de ±2 con la
  * casilla lo reemplaza al terminar). El salón debe ser elegible (SEL-01 a SEL-04, SelectionRoomOptionsQuery); sin
  * salón, solo si no hay ninguno elegible (supuesto por confirmar), y el jefe se lo asigna. Escribe con
  * RecordTeacherAssignment, con el motivo «Orden de selección, turno N», y pone el salón en todas las sesiones no
@@ -109,9 +109,7 @@ final class PickSelectionGroup
         }
 
         if ($group->teacher_id !== null) {
-            $name = Teacher::withTrashed()->whereKey($group->teacher_id)->value('name') ?? 'otro docente';
-
-            throw ValidationException::withMessages(['group' => "Ya lo tomó {$name}"]);
+            throw ValidationException::withMessages(['group' => 'Este grupo ya fue asignado.']);
         }
     }
 
