@@ -236,7 +236,7 @@ final class AdvanceSelections
         // Quienes asignan docente en el departamento son el jefe y el JPD (el admin no entra por serlo).
         $holders = $this->recipients->holders(StaffingPermission::TeacherAssign, Target::of(modality: $selection->modality_id, unit: $selection->department_id));
         $names = $pending->map(fn (SelectionEntry $entry): string => $entry->teacher?->name ?? $entry->csv_name ?? 'Sin nombre')->all();
-        $notice = new SelectionFinishedWithPending($selection->term_id, $selection->modality_id, $selection->department()->value('name') ?? '', (string) $selection->getKey(), $names);
+        $notice = new SelectionFinishedWithPending($selection->term_id, $selection->modality_id, $selection->department()->value('name') ?? '', (string) $selection->getKey(), $names, $selection->department_id);
 
         return [$advanced, $this->notifyHolders->handle($holders, $notice)->count()];
     }

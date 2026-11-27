@@ -3,6 +3,8 @@
 namespace App\Modules\Staffing\Notifications;
 
 use App\Modules\Core\Notifications\NotificationMessage;
+use App\Modules\Core\Notifications\PositionNotice;
+use App\Modules\Core\Notifications\PositionRef;
 use Illuminate\Notifications\Messages\MailMessage;
 
 /**
@@ -10,9 +12,16 @@ use Illuminate\Notifications\Messages\MailMessage;
  * decisión 8: lo que siga sin resolver lo asignan a mano), por la campana y por correo, con la lista de pendientes. Lleva
  * al horario de esa selección terminada (`staffing.offer?seleccion=<id>`), que abren con `staffing.selection.view`
  * aunque no sean docentes y aunque el admin tenga oculta la carga académica; ahí asignan o quitan docentes.
+ *
+ * CE-02 (confirmado el 26 de noviembre de 2026): compete al puesto (PositionNotice): su correo va al buzón de la
+ * jefatura o del jefe de proyecto docente del departamento de la selección (`$departmentId`) en su modalidad y, sin
+ * buzón, espera; la campana llega igual. Un aviso en cola de antes no trae el departamento y sigue a la persona.
  */
-final class SelectionFinishedWithPending extends SelectionNotice
+final class SelectionFinishedWithPending extends SelectionNotice implements PositionNotice
 {
+    /** CE-02: el departamento de la selección. No promovida, con valor por omisión, para leer los avisos en cola de antes. */
+    private ?string $departmentId = null;
+
     /**
      * @param  list<string>  $teachers
      */
@@ -22,7 +31,28 @@ final class SelectionFinishedWithPending extends SelectionNotice
         private readonly string $department,
         private readonly string $selectionId,
         private readonly array $teachers,
-    ) {}
+        ?string $departmentId = null,
+    ) {
+        $this->departmentId = $departmentId;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function via(object $notifiable): array
+    {
+        return $this->positionChannels() ?? parent::via($notifiable);
+    }
+
+    /**
+     * CE-02: la jefatura o el jefe de proyecto docente del departamento de la selección, en su modalidad.
+     */
+    public function position(): ?PositionRef
+    {
+        $role = $this->addressedRole();
+
+        return $role === null || $this->departmentId === null ? null : PositionRef::of($role, unit: $this->departmentId, modality: $this->modalityId);
+    }
 
     public static function typeKey(): string
     {

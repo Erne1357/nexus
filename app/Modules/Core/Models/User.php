@@ -7,7 +7,9 @@ use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\StaffType;
 use App\Modules\Core\Notifications\PersonMailAddresses;
+use App\Modules\Core\Notifications\PositionNotice;
 use App\Modules\Core\Notifications\RoutesMailAddress;
+use App\Modules\Core\Queries\PositionMailboxQuery;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -72,12 +74,17 @@ class User extends Authenticatable
     }
 
     /**
-     * A qué correo le llega una notificación: al que ella elige si implementa RoutesMailAddress (null: a ninguno); si
-     * no, a su correo institucional (CE-01: `email` solo si es institucional, la ficha de docente o el del alumno), o a
-     * ninguno. La guardia (GuardMailRecipient) revisa al salir que la dirección sea institucional.
+     * A qué correo le llega una notificación: si es un aviso de puesto (PositionNotice con puesto, CE-02), al buzón del
+     * puesto (null si todavía no tiene: el correo espera, HoldPositionMail); si elige su dirección (RoutesMailAddress), a
+     * esa (null: a ninguno); si no, a su correo institucional (CE-01: `email` solo si es institucional, la ficha de
+     * docente o el del alumno), o a ninguno. La guardia (GuardMailRecipient) revisa al salir que sea institucional.
      */
     public function routeNotificationForMail(?Notification $notification = null): ?string
     {
+        if ($notification instanceof PositionNotice && ($position = $notification->position()) !== null) {
+            return app(PositionMailboxQuery::class)->addressFor($position);
+        }
+
         return $notification instanceof RoutesMailAddress ? $notification->mailAddressFor($this) : app(PersonMailAddresses::class)->for($this);
     }
 }

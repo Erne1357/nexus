@@ -59,7 +59,7 @@ final class NotifyRepublication
 
         $load->loadMissing(['term', 'modality', 'department']);
         $payload = SnapshotPayload::normalize($snapshot->payload);
-        $notify = fn (RepublicationAudience $audience, string $label, array $entries, string $route, array $parameters): LoadRepublished => new LoadRepublished($load, $version, $snapshot->reason, $audience, $label, $entries, $route, $parameters);
+        $notify = fn (RepublicationAudience $audience, string $label, array $entries, string $route, array $parameters, ?string $audienceId = null): LoadRepublished => new LoadRepublished($load, $version, $snapshot->reason, $audience, $label, $entries, $route, $parameters, $audienceId);
 
         return $this->teachers($load, $diff, $payload, $notify)
             + $this->coordinators($load, $version, $diff, $payload, $notify)
@@ -129,7 +129,7 @@ final class NotifyRepublication
                 : ['published.index', $this->published($load)];
             $holders = $this->recipients->holders(AcademicLoadPermission::ProposalSubmit, Target::of(modality: $load->modality_id, career: (string) $id));
 
-            $sent += $this->notifyHolders->handle($holders, $notify(RepublicationAudience::Career, $career['career']['code'], $career['entries'], $route, $parameters))->count();
+            $sent += $this->notifyHolders->handle($holders, $notify(RepublicationAudience::Career, $career['career']['code'], $career['entries'], $route, $parameters, (string) $id))->count();
         }
 
         return $sent;
@@ -147,7 +147,7 @@ final class NotifyRepublication
         foreach ($affected as $id => $department) {
             $holders = $this->recipients->holders(AcademicLoadPermission::AgreementDecide, Target::of(modality: $load->modality_id, unit: (string) $id));
 
-            $sent += $this->notifyHolders->handle($holders, $notify(RepublicationAudience::Department, (string) ($names[$id] ?? 'otro departamento'), $department['entries'], 'published.index', $this->published($load)))->count();
+            $sent += $this->notifyHolders->handle($holders, $notify(RepublicationAudience::Department, (string) ($names[$id] ?? 'otro departamento'), $department['entries'], 'published.index', $this->published($load), (string) $id))->count();
         }
 
         return $sent;

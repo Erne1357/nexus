@@ -5,6 +5,8 @@ namespace App\Modules\Staffing\Notifications;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AcademicLoadNotice;
 use App\Modules\Core\Notifications\NotificationMessage;
+use App\Modules\Core\Notifications\PositionNotice;
+use App\Modules\Core\Notifications\PositionRef;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Str;
 
@@ -14,11 +16,15 @@ use Illuminate\Support\Str;
  * visto bueno y se le avisa al elegir). Dice qué grupo se mueve, de dónde a dónde y por qué solicitud; lleva al editor
  * de horarios con el grupo, porque la solicitud es de otra carrera y su pantalla no la muestra. Es un aviso de la carga (AcademicLoadNotice, MN-05): mientras
  * está oculta, el correo no sale.
+ *
+ * CE-02 (confirmado el 26 de noviembre de 2026): compete a la coordinación (PositionNotice): su correo va al buzón del
+ * coordinador de la carrera dueña del grupo, en su campus y su modalidad, y, sin buzón, espera; la campana llega igual.
+ * `career_id` y `campus_id` del grupo dicen el puesto; un aviso en cola de antes no los trae y sigue a la persona.
  */
-final class ChangeAlternativeMovesCareerGroup extends ChangeAlternativeNotice implements AcademicLoadNotice
+final class ChangeAlternativeMovesCareerGroup extends ChangeAlternativeNotice implements AcademicLoadNotice, PositionNotice
 {
     /**
-     * @param  array{group_id: string, label: string, subject: ?string, career: ?string, campus: ?string, from: string, to: string}  $group  el grupo que se mueve
+     * @param  array{group_id: string, label: string, subject: ?string, career: ?string, campus: ?string, career_id?: ?string, campus_id?: ?string, from: string, to: string}  $group  el grupo que se mueve
      * @param  string  $requested  el grupo de la solicitud («SCD-1015 · 5A»)
      */
     public function __construct(
@@ -34,6 +40,25 @@ final class ChangeAlternativeMovesCareerGroup extends ChangeAlternativeNotice im
     public static function typeKey(): string
     {
         return 'change-alternative-moves-career-group';
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function via(object $notifiable): array
+    {
+        return $this->positionChannels() ?? parent::via($notifiable);
+    }
+
+    /**
+     * CE-02: el coordinador de la carrera dueña del grupo, en el campus del grupo y la modalidad del aviso.
+     */
+    public function position(): ?PositionRef
+    {
+        $role = $this->addressedRole();
+        $career = $this->group['career_id'] ?? null;
+
+        return $role === null || $career === null ? null : PositionRef::of($role, career: $career, campus: $this->group['campus_id'] ?? null, modality: $this->modalityId);
     }
 
     public static function typeLabel(): string

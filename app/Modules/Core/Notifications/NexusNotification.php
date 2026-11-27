@@ -22,11 +22,18 @@ use Illuminate\Support\Str;
  *
  * Laravel clona la notificación para cada destinatario y canal antes de darle llave; __clone le da a cada
  * copia un UUIDv7 propio (ADR-0014), en lugar del UUIDv4 que pondría Laravel.
+ *
+ * Un aviso de puesto (PositionNotice, CE-02) manda un solo correo al buzón del puesto aunque lo reciban varias personas
+ * que lo ocupan: NotifyHolders marca las demás copias con sharesPositionMail() y esas solo van a la campana
+ * (positionChannels()).
  */
 abstract class NexusNotification extends Notification
 {
     /** Protegida, no privada: SerializesModels omite las propiedades privadas de una clase padre si el aviso se encola. */
     protected ?Role $addressedRole = null;
+
+    /** CE-02: otra copia de este aviso ya lleva el correo al buzón del mismo puesto. */
+    protected bool $positionMailShared = false;
 
     abstract public function message(object $notifiable): NotificationMessage;
 
@@ -76,6 +83,37 @@ abstract class NexusNotification extends Notification
     public function addressedRole(): ?Role
     {
         return $this->addressedRole;
+    }
+
+    /**
+     * CE-02: esta copia no lleva correo, porque otra copia del mismo aviso ya lo lleva al buzón del mismo puesto.
+     */
+    public function sharesPositionMail(): static
+    {
+        $this->positionMailShared = true;
+
+        return $this;
+    }
+
+    public function positionMailShared(): bool
+    {
+        return $this->positionMailShared;
+    }
+
+    /**
+     * CE-02: los canales de un aviso de puesto (PositionNotice con puesto): la campana y el correo al buzón, aunque el
+     * puesto todavía no tenga buzón (el correo espera, HoldPositionMail), o solo la campana si otra copia lleva el
+     * correo. Null si esta instancia no es de un puesto: la notificación decide como siempre.
+     *
+     * @return list<string>|null
+     */
+    protected function positionChannels(): ?array
+    {
+        if (! $this instanceof PositionNotice || $this->position() === null) {
+            return null;
+        }
+
+        return $this->positionMailShared ? ['database'] : ['database', 'mail'];
     }
 
     /**

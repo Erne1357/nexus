@@ -39,18 +39,21 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Enums\StageStatus;
 use App\Modules\Core\Enums\UserAccess;
+use App\Modules\Core\Events\PositionMailboxSaved;
 use App\Modules\Core\Events\SettingsUpdated;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Health\Checks\HeartbeatCheck;
 use App\Modules\Core\Http\Controllers\HealthEndpoint;
 use App\Modules\Core\Http\Middleware\EnsureAcademicLoadIsVisible;
 use App\Modules\Core\Jobs\RecordQueueHeartbeat;
+use App\Modules\Core\Jobs\ReleaseHeldPositionMailsJob;
 use App\Modules\Core\Listeners\ForgetAcademicLoadVisibility;
 use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetRoleAccess;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
 use App\Modules\Core\Listeners\GuardMailRecipient;
 use App\Modules\Core\Listeners\HoldAcademicLoadMail;
+use App\Modules\Core\Listeners\HoldPositionMail;
 use App\Modules\Core\Listeners\LogFailedQueuedMail;
 use App\Modules\Core\Listeners\LogSentMail;
 use App\Modules\Core\Listeners\StampActingAs;
@@ -64,6 +67,7 @@ use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\PermissionSet;
+use App\Modules\Core\Models\PositionMailbox;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
@@ -226,8 +230,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetAcademicLoadVisibility::class);
         Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetRoleAccess::class);
         Event::listen(NotificationSending::class, HoldAcademicLoadMail::class);
+        // CE-02: el correo de un puesto sin buzón espera; va después de MN-05 y antes de la guardia de CE-01.
+        Event::listen(NotificationSending::class, HoldPositionMail::class);
         // CE-01: la guardia va al final de los listeners de NotificationSending, cuando lo retenido ya no llega a ella.
         Event::listen(NotificationSending::class, GuardMailRecipient::class);
+        // CE-02: un buzón capturado o reactivado libera en la cola los correos de su puesto que esperaban.
+        Event::listen(PositionMailboxSaved::class, fn (): mixed => ReleaseHeldPositionMailsJob::dispatch());
         Event::listen(Login::class, ForgetActiveRole::class);
         Activity::creating(StampActingAs::class);
 
@@ -346,6 +354,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
             // 1.22-G Correos y colas
             new NavigationItem('Correos y colas', 'core.mail-and-queues', 'o-envelope', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
                 ability: 'viewAny', arguments: [MailLog::class]),
+            new NavigationItem('Buzones de puesto', 'core.position-mailboxes', 'o-inbox-stack', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                ability: 'viewAny', arguments: [PositionMailbox::class]),
         ];
     }
 

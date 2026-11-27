@@ -69,6 +69,8 @@ enum CorePermission: string implements Permission
     case SettingUpdate = 'core.setting.update';
     case MailView = 'core.mail.view';
     case MailConnect = 'core.mail.connect';
+    case MailViewMailboxes = 'core.mail.view_mailboxes';
+    case MailManageMailboxes = 'core.mail.manage_mailboxes';
     case QueueView = 'core.queue.view';
     case QueueManage = 'core.queue.manage';
     case NavigationViewUnavailable = 'core.navigation.view_unavailable';
@@ -121,6 +123,8 @@ enum CorePermission: string implements Permission
             self::SettingUpdate => 'Cambiar los parámetros',
             self::MailView => 'Ver el registro de correos y las invitaciones pendientes',
             self::MailConnect => 'Conectar, desconectar y probar la cuenta de envío del correo',
+            self::MailViewMailboxes => 'Ver los buzones de puesto y los correos en espera (CE-02)',
+            self::MailManageMailboxes => 'Capturar, cambiar y desactivar los buzones de puesto (CE-02)',
             self::QueueView => 'Ver las colas y los trabajos fallidos',
             self::QueueManage => 'Reintentar y descartar trabajos fallidos',
             self::NavigationViewUnavailable => 'Ver en el menú las pantallas no disponibles en el periodo (MN-02)',

@@ -89,6 +89,8 @@ final class NotifyChangeRequest
                 'subject' => $group->subject?->name,
                 'career' => $group->ownerCareer?->code,
                 'campus' => $group->campus?->code,
+                'career_id' => $group->owner_career_id,
+                'campus_id' => $group->campus_id,
                 'from' => ChangeAlternatives::line(ChangeAlternatives::live($group)),
                 'to' => ChangeAlternatives::line($entries[$group->id]['sessions']),
             ], ChangeAlternatives::label($requested), $letter, $request->term_id, $request->modality_id));

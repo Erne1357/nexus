@@ -9,10 +9,13 @@ use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\HeadMailAddressQuery;
 use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
+use App\Modules\Core\Notifications\PositionNotice;
+use App\Modules\Core\Notifications\PositionRef;
 use App\Modules\Core\Notifications\RoutesMailAddress;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Support\StageTimeline;
@@ -35,8 +38,13 @@ use Illuminate\Notifications\Messages\MailMessage;
  * (HeadMailAddressQuery; CV11, confirmado el 15 de noviembre de 2026). La misma dirección decide el canal y recibe el
  * correo (RoutesMailAddress). Sale de la cola, después del commit; la campana se guarda en el momento
  * (`viaConnections`, conexión `sync`).
+ *
+ * CE-02 (confirmado el 26 de noviembre de 2026): validar compete a la jefatura, así que el aviso que se manda al puesto
+ * (NotifyHolders) es de puesto (PositionNotice): su correo va al buzón de la jefatura del departamento dueño o de
+ * Servicios Escolares (la unidad con clave SCHOOL_SERVICES del Organigrama) y, si todavía no tiene buzón, espera; la
+ * campana llega igual. Sin puesto (mandado a una persona), sigue la regla de CV11.
  */
-final class CatalogReviewsPending extends NexusNotification implements RoutesMailAddress, ShouldQueue
+final class CatalogReviewsPending extends NexusNotification implements PositionNotice, RoutesMailAddress, ShouldQueue
 {
     use Queueable;
 
@@ -93,7 +101,19 @@ final class CatalogReviewsPending extends NexusNotification implements RoutesMai
      */
     public function via(object $notifiable): array
     {
-        return $notifiable instanceof User && $this->mailAddressFor($notifiable) !== null ? ['database', 'mail'] : ['database'];
+        return $this->positionChannels()
+            ?? ($notifiable instanceof User && $this->mailAddressFor($notifiable) !== null ? ['database', 'mail'] : ['database']);
+    }
+
+    /**
+     * CE-02: la jefatura del departamento dueño o de Servicios Escolares, con el puesto con que se mandó.
+     */
+    public function position(): ?PositionRef
+    {
+        $role = $this->addressedRole();
+        $unit = $this->owner->isSchoolServices() ? app(OrgTree::class)->idOf(OrgTree::SCHOOL_SERVICES) : $this->owner->departmentId;
+
+        return $role === null || $unit === null ? null : PositionRef::of($role, unit: $unit);
     }
 
     /**
