@@ -10,7 +10,11 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Rules\CatalogReviewRules;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Actions\UpdateRoom;
+use App\Modules\Faculty\Actions\AddPosition;
+use App\Modules\Faculty\Actions\UpdatePosition;
 use App\Modules\Faculty\Actions\UpdateTeacher;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherPosition;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +27,11 @@ use Illuminate\Validation\ValidationException;
  * con la Action de actualización del módulo dueño, que hace cumplir sus reglas y sus vetos (desactivar una materia que
  * los alumnos necesitan, por ejemplo) y deja su propia bitácora y su evento. Lo demás del docente se corrige en
  * Faculty; darlo de baja o agregarlo son DischargeReviewTeacher y AddReviewTeacher. Dar de alta sigue siendo del admin.
+ *
+ * CV17 (confirmado el 26 de noviembre de 2026): de un docente el jefe corrige casi todo, con UpdateTeacher (nombre,
+ * grado, correo, correo institucional y fecha de ingreso) y con AddPosition y UpdatePosition (`positions`: plazas con
+ * su tipo, horas y vigencia; una con `id` se cambia, una sin `id` se agrega y cerrarla es ponerle fin de vigencia), todo
+ * con la bitácora de esas Actions. El RFC no se cambia: se ignora.
  * Quién puede lo decide CatalogReviewPolicy::correct antes de llamarla (y, en docentes,
  * TeacherPolicy::updateInstitutionalEmail).
  *
@@ -47,6 +56,8 @@ final class CorrectRecord
         private readonly UpdateStudyPlan $updateStudyPlan,
         private readonly UpdateRoom $updateRoom,
         private readonly UpdateTeacher $updateTeacher,
+        private readonly AddPosition $addPosition,
+        private readonly UpdatePosition $updatePosition,
     ) {}
 
     /**
@@ -57,10 +68,12 @@ final class CorrectRecord
     public function handle(CatalogReview $review, Model $record, array $data, User $actor): Model
     {
         $data = $review->catalog === Catalog::Teachers
-            ? Arr::only($data, ['institutional_email'])
+            ? Arr::only($data, [...UpdateTeacher::FIELDS, 'positions'])
             : Arr::except($data, self::lockedFields($review->catalog));
 
-        return DB::transaction(function () use ($review, $record, $data, $actor): Model {
+        $positions = $review->catalog === Catalog::Teachers ? Arr::pull($data, 'positions') : null;
+
+        return DB::transaction(function () use ($review, $record, $data, $positions, $actor): Model {
             $review->setRawAttributes($review->newQuery()->lockForUpdate()->findOrFail($review->getKey())->getAttributes(), sync: true);
 
             $this->rules->ensureOpen($review);
@@ -75,8 +88,13 @@ final class CorrectRecord
                 Catalog::Careers => $this->updateCareer->handle($record, $data),
                 Catalog::StudyPlans => $this->updateStudyPlan->handle($record, $data),
                 Catalog::Rooms => $this->updateRoom->handle($record, $data),
-                Catalog::Teachers => $this->updateTeacher->handle($record, $data),
+                Catalog::Teachers => $this->updateTeacher->handle($record, $data, $actor),
             };
+
+            if ($record instanceof Teacher && $positions !== null && $this->correctPositions($record, $positions)) {
+                // Sin cambios en el docente pero con plazas nuevas: el modelo lo dice para que la revisión pase a en revisión.
+                $record->wasChanged() || $record->touch();
+            }
 
             $this->markRecords->handle($review, [$record->getKey()], $actor);
 
@@ -86,6 +104,64 @@ final class CorrectRecord
 
             return $record;
         });
+    }
+
+    /**
+     * Aplica las plazas que llegan (CV16) y dice si algo cambió. Una con `id` que no cambia no se toca, así una plaza
+     * importada que ya no cumple PositionRules no estorba. Los errores salen en `positions.<fila>.<campo>`.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     *
+     * @throws ValidationException
+     */
+    private function correctPositions(Teacher $teacher, array $rows): bool
+    {
+        $current = $teacher->positions()->get()->keyBy(fn (TeacherPosition $position): string => (string) $position->getKey());
+        $changed = false;
+        $errors = [];
+
+        foreach (array_values($rows) as $index => $row) {
+            $id = $row['id'] ?? null;
+            $values = Arr::only($row, ['kind', 'base_hours', 'valid_from', 'valid_to']);
+
+            try {
+                if ($id === null || $id === '') {
+                    $this->addPosition->handle($teacher, $values);
+                    $changed = true;
+
+                    continue;
+                }
+
+                $position = $current->get((string) $id)
+                    ?? throw ValidationException::withMessages(['position' => 'Esa plaza no es de este docente.']);
+
+                if (! $this->samePosition($position, $values)) {
+                    $this->updatePosition->handle($position, $values);
+                    $changed = true;
+                }
+            } catch (ValidationException $exception) {
+                foreach ($exception->errors() as $field => $messages) {
+                    $errors["positions.{$index}.{$field}"] = $messages;
+                }
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        return $changed;
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     */
+    private function samePosition(TeacherPosition $position, array $values): bool
+    {
+        return (string) ($values['kind'] ?? '') === $position->kind->value
+            && (string) ($values['base_hours'] ?? '') === (string) $position->base_hours
+            && (string) ($values['valid_from'] ?? '') === (string) $position->valid_from?->toDateString()
+            && (string) ($values['valid_to'] ?? '') === (string) $position->valid_to?->toDateString();
     }
 
     /**
