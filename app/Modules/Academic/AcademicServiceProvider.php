@@ -3,6 +3,7 @@
 namespace App\Modules\Academic;
 
 use App\Modules\Academic\Authorization\AcademicScopeLabels;
+use App\Modules\Academic\Console\MarkCurrentSpecialtiesCommand;
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\Academic\Enums\AcademicPermission;
@@ -69,6 +70,15 @@ final class AcademicServiceProvider extends ModuleServiceProvider
     public function adminOnly(): array
     {
         return [AcademicPermission::CareerDelete, AcademicPermission::DepartmentDelete];
+    }
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([MarkCurrentSpecialtiesCommand::class]);
+        }
     }
 
     /**

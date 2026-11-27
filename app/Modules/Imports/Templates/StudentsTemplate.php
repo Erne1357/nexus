@@ -3,6 +3,7 @@
 namespace App\Modules\Imports\Templates;
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
@@ -32,7 +33,8 @@ use Illuminate\Support\Str;
  * el 5 de noviembre de 2026; lo de «EAD» y las mayúsculas, supuesto por confirmar). Como los demás campos, un
  * cambio no los pisa con vacío. `active` (el SII lo da por estatus: inscritos y bajas temporales cuentan como activos)
  * hace nacer inactivo al alumno que el archivo marca así; un cambio nunca activa ni desactiva, solo avisa (D11, confirmado
- * el 5 de noviembre de 2026; el campo, supuesto por confirmar).
+ * el 5 de noviembre de 2026; el campo, supuesto por confirmar). `specialty` (opcional) es la clave de la especialidad que el SII
+ * le asignó, dentro de su plan (1.69); una que el plan no tiene deja un aviso y el alumno sin ella.
  */
 class StudentsTemplate extends ImportTemplate
 {
@@ -49,6 +51,9 @@ class StudentsTemplate extends ImportTemplate
 
     /** @var array<string, string|null> id de campus por clave, en esta corrida */
     private array $campuses = [];
+
+    /** @var array<string, string|null> id de especialidad por plan y clave, en esta corrida */
+    private array $specialties = [];
 
     /** @var array<string, string|null> id de modalidad por clave, en esta corrida */
     private array $modalities = [];
@@ -99,6 +104,7 @@ class StudentsTemplate extends ImportTemplate
             'modality' => 'modalidad',
             'status_reason' => 'motivo del SII',
             'active' => 'activo',
+            'specialty' => 'especialidad',
         ];
     }
 
@@ -130,6 +136,7 @@ class StudentsTemplate extends ImportTemplate
             'modality' => ['nullable', 'string'],
             'status_reason' => ['nullable', 'string', 'max:10'],
             'active' => ['nullable', 'boolean'],
+            'specialty' => ['nullable', 'string', 'max:30'],
         ];
     }
 
@@ -153,6 +160,8 @@ class StudentsTemplate extends ImportTemplate
         $reason = self::asText($row['status_reason']);
         $row['status_reason'] = is_string($reason) ? Str::upper($reason) : $reason;
         $row['active'] = self::activeFlag($row['active']);
+        $specialty = self::asText($row['specialty'] ?? null);
+        $row['specialty'] = is_string($specialty) ? $specialty : null;
 
         return $row;
     }
@@ -163,6 +172,7 @@ class StudentsTemplate extends ImportTemplate
      */
     public function apply(array $row, ImportContext $context): Model
     {
+        $this->clearStaleSpecialty($row);
         $student = parent::apply($row, $context);
 
         if ($row['status'] !== null && StudentStatus::tryFrom($row['status']) === null && $student->getAttribute('status') !== null) {
@@ -170,6 +180,27 @@ class StudentsTemplate extends ImportTemplate
         }
 
         return $student;
+    }
+
+    /**
+     * Si el alumno ya existe y cambia de plan, su especialidad asignada era del plan anterior y la llave compuesta
+     * (plan, especialidad) no la admitiría: se limpia antes de guardar (1.69). `attributes()` pone la del plan nuevo si
+     * el archivo la trae y el plan la tiene; si no, queda nula. Sin cambio de plan no se toca.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function clearStaleSpecialty(array $row): void
+    {
+        $plan = $this->plan($row['study_plan']);
+
+        if ($plan === null) {
+            return;
+        }
+
+        Student::query()->where('control_number', $row['control_number'])
+            ->where('study_plan_id', '<>', $plan->id)
+            ->whereNotNull('specialty_id')
+            ->update(['specialty_id' => null]);
     }
 
     public function afterApply(ImportContext $context): void
@@ -208,6 +239,10 @@ class StudentsTemplate extends ImportTemplate
             $issues = $issues->withWarning('status', "El estatus «{$row['status']}» no está en Nexus: el alumno queda sin estatus.");
         }
 
+        if ($row['specialty'] !== null && $plan !== null && $this->specialtyId($plan, $row['specialty']) === null) {
+            $issues = $issues->withWarning('specialty', "La especialidad {$row['specialty']} no existe en el plan {$row['study_plan']}: el alumno queda sin la que le asignó el SII.");
+        }
+
         return $this->checkModality($row, $issues);
     }
 
@@ -243,6 +278,7 @@ class StudentsTemplate extends ImportTemplate
             'current_semester' => $row['semester'],
             'status' => StudentStatus::tryFrom((string) $row['status']),
             'status_reason' => $row['status_reason'],
+            'specialty_id' => $row['specialty'] === null ? null : ($this->plan($row['study_plan']) === null ? null : $this->specialtyId($this->plan($row['study_plan']), $row['specialty'])),
             'is_active' => $row['active'] ?? true,
         ];
     }
@@ -288,6 +324,17 @@ class StudentsTemplate extends ImportTemplate
     private function plan(string $code): ?StudyPlan
     {
         return array_key_exists($code, $this->plans) ? $this->plans[$code] : $this->plans[$code] = StudyPlan::query()->where('code', $code)->first(['id', 'career_id']);
+    }
+
+    /**
+     * La especialidad asignada por el SII, por su clave dentro del plan (1.69); null si ese plan no la tiene. Un cambio
+     * no la pisa con vacío, como los demás campos. Una especialidad nunca cruza de plan: la llave foránea es compuesta.
+     */
+    private function specialtyId(StudyPlan $plan, string $code): ?string
+    {
+        $key = $plan->id.'|'.$code;
+
+        return array_key_exists($key, $this->specialties) ? $this->specialties[$key] : $this->specialties[$key] = Specialty::query()->where('study_plan_id', $plan->id)->where('code', $code)->value('id');
     }
 
     private function campus(string $code): ?string

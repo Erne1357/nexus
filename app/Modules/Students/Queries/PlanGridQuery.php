@@ -4,6 +4,7 @@ namespace App\Modules\Students\Queries;
 
 use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Enums\SubjectKind;
+use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\StudyPlanSubjectPending;
@@ -78,6 +79,12 @@ final class PlanGridQuery
             ->map(fn (mixed $subjectCredits): int => (int) $subjectCredits)
             ->all();
 
-        return new PlanGrid($credits, $seriation, $specialtyOf, $semesterOf, $creditShare, $totalCredits === null ? null : (int) $totalCredits, $unplaced);
+        $inactive = Specialty::withTrashed()
+            ->where('study_plan_id', $studyPlanId)
+            ->where(fn ($query) => $query->where('is_active', false)->orWhereNotNull('deleted_at'))
+            ->pluck('id')
+            ->all();
+
+        return new PlanGrid($credits, $seriation, $specialtyOf, $semesterOf, $creditShare, $totalCredits === null ? null : (int) $totalCredits, $unplaced, $inactive);
     }
 }

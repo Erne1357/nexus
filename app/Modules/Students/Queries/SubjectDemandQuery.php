@@ -92,7 +92,7 @@ final class SubjectDemandQuery
     private function countWithSpecialty(string $subjectId, string $studyPlanId): int
     {
         $grid = $this->grids->forPlan($studyPlanId);
-        $students = $this->candidates($subjectId, [$studyPlanId])->pluck('id');
+        $students = $this->candidates($subjectId, [$studyPlanId])->pluck('specialty_id', 'id');
 
         if ($students->isEmpty()) {
             return 0;
@@ -107,11 +107,12 @@ final class SubjectDemandQuery
             ->get(['student_id', 'subject_id', 'result'])
             ->groupBy('student_id');
 
-        return $students->filter(function (string $student) use ($grid, $kardex, $subjectId): bool {
+        return $students->filter(function (?string $assigned, string $student) use ($grid, $kardex, $subjectId): bool {
             $records = $kardex->get($student, collect());
             $progress = $grid->progressFor(
                 $records->where('result', KardexResult::Aprobada->value)->pluck('subject_id')->all(),
                 $records->where('result', KardexResult::Cursando->value)->pluck('subject_id')->all(),
+                assignedSpecialty: $assigned,
             );
 
             return in_array($subjectId, $progress['subjects_pending'], true);
