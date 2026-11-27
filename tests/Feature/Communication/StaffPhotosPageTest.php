@@ -7,6 +7,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Support\StaffPhotos;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -55,6 +56,20 @@ it('CO-03: una foto que no es imagen da un error junto al campo', function () {
         ->assertHasErrors('photo');
 
     expect($this->ana->fresh()->photo_path)->toBeNull();
+});
+
+it('CO-03: si el disco lanza al crear la carpeta, la pantalla avisa en vez de dar 500 y no deja archivos', function () {
+    throwingDisk('staff_photos', ['put']);
+
+    Livewire::actingAs($this->head)->test('communication::pages.staff-photos')
+        ->call('openPhoto', $this->ana->id)
+        ->set('photo', UploadedFile::fake()->image('ana.jpg', 700, 900))
+        ->call('savePhoto')
+        ->assertHasErrors(['photo' => PhotoNotSaved::MESSAGE])
+        ->assertSee(PhotoNotSaved::MESSAGE);
+
+    expect($this->ana->fresh()->photo_path)->toBeNull()
+        ->and(Storage::disk('staff_photos')->allFiles())->toBe([]);
 });
 
 it('CO-03: si el disco no deja escribir, la pantalla avisa y no guarda ni registra nada', function () {
@@ -139,4 +154,14 @@ it('CO-03: otro jefe no ve la pantalla ni entra a la ruta', function () {
 
 it('CO-03: la ruta de Comunicación la ve su jefa y aparece en su menú', function () {
     $this->actingAs($this->head)->get(route('communication.staff-photos'))->assertOk()->assertSee('Fotos del personal');
+});
+
+it('CO-03: con el montaje roto, mostrar la miniatura del personal no da 500: cuenta como sin foto', function () {
+    $this->ana->forceFill(['photo_path' => "{$this->ana->id}/20270101000000.jpg", 'photo_updated_at' => now()])->save();
+    throwingDisk('staff_photos', ['exists']);
+    $photos = app(StaffPhotos::class);
+
+    expect($photos->thumbDataUrl($this->ana))->toBeNull()
+        ->and($photos->stream($this->ana))->toBeNull()
+        ->and($photos->stream($this->ana, true))->toBeNull();
 });

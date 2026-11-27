@@ -257,6 +257,16 @@ it('CO-06: si el disco no deja escribir, no hay bitácora ni evento, la foto vig
     'archivar falla' => [['move']],
 ]);
 
+it('CO-06: si el disco lanza al escribir o archivar, es un error de validación y la foto vigente sigue', function (string $method) {
+    Storage::disk('student_photos')->put('2021/21111182.jpg', 'foto-vieja');
+    throwingDisk('student_photos', [$method]);
+
+    expect(fn () => app(SetStudentPhoto::class)->handle($this->student, studentImage(), $this->by))
+        ->toThrow(ValidationException::class, PhotoNotSaved::MESSAGE);
+
+    expect(Storage::disk('student_photos')->allFiles())->toBe(['2021/21111182.jpg']);
+})->with(['put', 'move']);
+
 it('CO-06: en un lote, una foto que el disco no deja guardar es «no guardada» y no se aplica', function () {
     Storage::disk('student_photos')->put('2021/21111182.jpg', 'foto-vieja');
     failingDisk('student_photos', ['put']);
@@ -281,4 +291,16 @@ it('CO-06: en un lote, una foto que el disco no deja guardar es «no guardada» 
         ->and($row['message'])->toBe(PhotoNotSaved::MESSAGE)
         ->and($batch->fresh()->applied)->toBe(0)
         ->and(PhotoOutcome::NoGuardada->label())->toBe('No se pudo guardar');
+});
+
+it('CO-06: con el montaje roto, mostrar la foto de la credencial no da 500: cuenta como sin foto', function () {
+    throwingDisk('student_photos', ['exists', 'directories']);
+    $photos = app(StudentPhotos::class);
+
+    expect($photos->locate('21111182'))->toBeNull()
+        ->and($photos->read('21111182'))->toBeNull()
+        ->and($photos->version('21111182'))->toBeNull()
+        ->and($photos->modifiedAt('21111182'))->toBeNull()
+        ->and($photos->stream('21111182', []))->toBeNull()
+        ->and($photos->controlNumbersWithPhoto())->toBe([]);
 });

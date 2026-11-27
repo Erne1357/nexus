@@ -8,6 +8,7 @@ use App\Modules\Core\Support\PhotoNormalizer;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
+use League\Flysystem\FilesystemException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -59,19 +60,21 @@ final class StudentPhotos
             return null;
         }
 
-        foreach (self::EXTENSIONS as $extension) {
-            foreach (array_unique([$name, mb_strtoupper($name), mb_strtolower($name)]) as $candidate) {
-                $path = "{$folder}/{$candidate}.{$extension}";
+        return $this->guard(function () use ($folder, $name): ?string {
+            foreach (self::EXTENSIONS as $extension) {
+                foreach (array_unique([$name, mb_strtoupper($name), mb_strtolower($name)]) as $candidate) {
+                    $path = "{$folder}/{$candidate}.{$extension}";
 
-                if ($this->disk()->exists($path)) {
-                    $size = $this->disk()->size($path);
+                    if ($this->disk()->exists($path)) {
+                        $size = $this->disk()->size($path);
 
-                    return $size > 0 && $size <= self::MAX_BYTES ? $path : null;
+                        return $size > 0 && $size <= self::MAX_BYTES ? $path : null;
+                    }
                 }
             }
-        }
 
-        return null;
+            return null;
+        });
     }
 
     /**
@@ -94,16 +97,112 @@ final class StudentPhotos
 
         $path = "{$folder}/{$name}.jpg";
         $temporary = "{$folder}/{$name}-nuevo.tmp";
+        $moved = [];
 
+        try {
+            $this->write($photos['normal'], $folder, $name, $path, $temporary, $moved);
+        } catch (FilesystemException $e) {
+            // Crear la carpeta, escribir o mover puede lanzar aunque el disco tenga `throw => false`.
+            $this->restore($moved, $temporary);
+
+            throw new PhotoNotSaved($e->getMessage(), $e);
+        }
+
+        return $path;
+    }
+
+    /**
+     * Los números de control (en minúsculas) que tienen un archivo de foto, para filtrar «Con foto» y «Sin foto». Mira las
+     * carpetas de año, no `_anteriores`.
+     *
+     * @return list<string>
+     */
+    public function controlNumbersWithPhoto(): array
+    {
+        $numbers = [];
+
+        $this->guard(function () use (&$numbers): void {
+            foreach ($this->disk()->directories() as $folder) {
+                if (preg_match('/^\d{4}$/', $folder) !== 1) {
+                    continue;
+                }
+
+                foreach ($this->disk()->files($folder) as $file) {
+                    if (in_array(strtolower(pathinfo($file, PATHINFO_EXTENSION)), self::EXTENSIONS, true)) {
+                        $numbers[mb_strtolower(pathinfo($file, PATHINFO_FILENAME))] = true;
+                    }
+                }
+            }
+        });
+
+        return array_keys($numbers);
+    }
+
+    /**
+     * Cuándo se guardó la foto vigente del número de control, o null si no hay.
+     */
+    public function modifiedAt(string $controlNumber): ?CarbonImmutable
+    {
+        $path = $this->locate($controlNumber);
+
+        return $path === null ? null : $this->guard(fn (): CarbonImmutable => CarbonImmutable::createFromTimestamp($this->disk()->lastModified($path)));
+    }
+
+    /**
+     * Una marca que cambia cuando cambia la foto (para la URL de la foto propia), o null si no hay foto.
+     */
+    public function version(string $controlNumber): ?string
+    {
+        $path = $this->locate($controlNumber);
+
+        return $path === null ? null : $this->guard(fn (): string => substr(hash('sha256', $path.'|'.$this->disk()->lastModified($path).'|'.$this->disk()->size($path)), 0, 16));
+    }
+
+    /**
+     * El contenido y el tipo de la foto del número de control, o null si no hay.
+     *
+     * @return array{bytes: string, mime: string}|null
+     */
+    public function read(string $controlNumber): ?array
+    {
+        $path = $this->locate($controlNumber);
+        $bytes = $path === null ? null : $this->guard(fn () => $this->disk()->get($path));
+
+        if ($path === null || $bytes === null || $bytes === '') {
+            return null;
+        }
+
+        return ['bytes' => $bytes, 'mime' => self::mimeOf($path)];
+    }
+
+    /**
+     * La foto como respuesta en flujo (sin cargarla entera en memoria), con las cabeceras dadas, o null si no hay.
+     *
+     * @param  array<string, string>  $headers
+     */
+    public function stream(string $controlNumber, array $headers): ?StreamedResponse
+    {
+        $path = $this->locate($controlNumber);
+
+        return $path === null ? null : $this->guard(fn (): StreamedResponse => $this->disk()->response($path, null, ['Content-Type' => self::mimeOf($path), ...$headers]));
+    }
+
+    /**
+     * @param  array<string, string>  $moved
+     *
+     * @throws PhotoNotSaved
+     * @throws FilesystemException
+     */
+    private function write(string $bytes, string $folder, string $name, string $path, string $temporary, array &$moved): void
+    {
         // Primero la foto nueva con un nombre provisional: si el disco no deja escribir, la vigente ni se toca.
-        if (! $this->disk()->put($temporary, $photos['normal'])) {
+        if (! $this->disk()->put($temporary, $bytes)) {
             $this->disk()->delete($temporary);
 
             throw new PhotoNotSaved($temporary);
         }
 
         $stamp = now();
-        $moved = [];
         foreach ($this->existing($folder, $name) as $current) {
             $extension = pathinfo($current, PATHINFO_EXTENSION);
             while ($this->disk()->exists($archived = self::ARCHIVE."/{$folder}/{$name}-{$stamp->format('YmdHis')}.{$extension}")) {
@@ -123,82 +222,6 @@ final class StudentPhotos
 
             throw new PhotoNotSaved($path);
         }
-
-        return $path;
-    }
-
-    /**
-     * Los números de control (en minúsculas) que tienen un archivo de foto, para filtrar «Con foto» y «Sin foto». Mira las
-     * carpetas de año, no `_anteriores`.
-     *
-     * @return list<string>
-     */
-    public function controlNumbersWithPhoto(): array
-    {
-        $numbers = [];
-
-        foreach ($this->disk()->directories() as $folder) {
-            if (preg_match('/^\d{4}$/', $folder) !== 1) {
-                continue;
-            }
-
-            foreach ($this->disk()->files($folder) as $file) {
-                if (in_array(strtolower(pathinfo($file, PATHINFO_EXTENSION)), self::EXTENSIONS, true)) {
-                    $numbers[mb_strtolower(pathinfo($file, PATHINFO_FILENAME))] = true;
-                }
-            }
-        }
-
-        return array_keys($numbers);
-    }
-
-    /**
-     * Cuándo se guardó la foto vigente del número de control, o null si no hay.
-     */
-    public function modifiedAt(string $controlNumber): ?CarbonImmutable
-    {
-        $path = $this->locate($controlNumber);
-
-        return $path === null ? null : CarbonImmutable::createFromTimestamp($this->disk()->lastModified($path));
-    }
-
-    /**
-     * Una marca que cambia cuando cambia la foto (para la URL de la foto propia), o null si no hay foto.
-     */
-    public function version(string $controlNumber): ?string
-    {
-        $path = $this->locate($controlNumber);
-
-        return $path === null ? null : substr(hash('sha256', $path.'|'.$this->disk()->lastModified($path).'|'.$this->disk()->size($path)), 0, 16);
-    }
-
-    /**
-     * El contenido y el tipo de la foto del número de control, o null si no hay.
-     *
-     * @return array{bytes: string, mime: string}|null
-     */
-    public function read(string $controlNumber): ?array
-    {
-        $path = $this->locate($controlNumber);
-        $bytes = $path === null ? null : $this->disk()->get($path);
-
-        if ($path === null || $bytes === null || $bytes === '') {
-            return null;
-        }
-
-        return ['bytes' => $bytes, 'mime' => self::mimeOf($path)];
-    }
-
-    /**
-     * La foto como respuesta en flujo (sin cargarla entera en memoria), con las cabeceras dadas, o null si no hay.
-     *
-     * @param  array<string, string>  $headers
-     */
-    public function stream(string $controlNumber, array $headers): ?StreamedResponse
-    {
-        $path = $this->locate($controlNumber);
-
-        return $path === null ? null : $this->disk()->response($path, null, ['Content-Type' => self::mimeOf($path), ...$headers]);
     }
 
     /**
@@ -208,11 +231,20 @@ final class StudentPhotos
      */
     private function restore(array $moved, string $temporary): void
     {
+        // Un fallo no debe dejar sin devolver las demás: un try por cada movimiento y otro para la provisional.
         foreach (array_reverse($moved, true) as $archived => $original) {
-            $this->disk()->move($archived, $original);
+            try {
+                $this->disk()->move($archived, $original);
+            } catch (FilesystemException $e) {
+                report($e);
+            }
         }
 
-        $this->disk()->delete($temporary);
+        try {
+            $this->disk()->delete($temporary);
+        } catch (FilesystemException $e) {
+            report($e);
+        }
     }
 
     /**
@@ -238,6 +270,20 @@ final class StudentPhotos
     private static function mimeOf(string $path): string
     {
         return self::MIME[strtolower(pathinfo($path, PATHINFO_EXTENSION))];
+    }
+
+    /**
+     * Una lectura que falla por el disco (montaje roto) se reporta y cuenta como «sin foto», nunca como 500.
+     */
+    private function guard(\Closure $read): mixed
+    {
+        try {
+            return $read();
+        } catch (FilesystemException $e) {
+            report($e);
+
+            return null;
+        }
     }
 
     private function disk(): Filesystem

@@ -454,6 +454,7 @@ Códigos de salida del deployer (también en `inbox/fallidos/<paquete>.log` y en
 | No llegan los correos | Configuración → Correos y colas: la tarjeta «Cuenta de envío» dice si faltan variables, si no hay cuenta, si venció o el último error de Microsoft; los correos que fallaron están en la pestaña Colas. Ver «Correo saliente (Microsoft 365)». Sin internet no sale correo |
 | Disco lleno | `docker system df`; borra paquetes viejos de `inbox/hechos/` y `inbox/omitidos/`; baja `DEPLOY_KEEP_RELEASES`; revisa el tamaño de `BACKUP_DIR` |
 | Sesiones cerradas de repente | Cambió `APP_KEY`, se perdió el volumen `valkey-data`, o hubo un rollback con `--restore` |
+| Las fotos del personal no aparecen o no se guardan («No se pudo guardar la foto») | Dentro del contenedor: `nexus compose exec app-<color> ls -ld storage/app/fotos-personal`. Si el número de enlaces es 0 o dice «No such file or directory», la carpeta del host se borró o se volvió a crear después de arrancar y el montaje apunta a un directorio borrado: reinicia `nexus compose restart app-<color> queue`. La carpeta debe existir **antes** de desplegar, con dueño uid 1000. Lo mismo para `storage/app/fotos` (fotos de alumnos). El detalle del error queda en el registro (`UnableToCreateDirectory` con la ruta) |
 
 ## Mostrar la prueba de concepto
 
