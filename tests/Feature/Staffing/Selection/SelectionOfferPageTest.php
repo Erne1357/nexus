@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Actions\UpdateSetting;
 use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Settings\SettingRegistry;
@@ -383,4 +384,21 @@ it('SEL-05: la lista de la orden muestra a los docentes pero no qué grupos tom�
     $page = Livewire::actingAs($this->dos->user)->test('staffing::pages.offer')->call('$set', 'showOrder', true);
     preg_match('/data-testid="selection-order">.*/s', $page->html(), $order);
     expect($order[0])->toContain('Docente Uno')->not->toContain($this->group->subject->name)->not->toContain($this->group->subject->code);
+});
+
+it('SEL-05 (alcance): el jefe de otro campus ve «Asignado» en el horario y no el nombre; el de otro departamento no ve la selección', function () {
+    selectionDrawer($this->uno->user)->call('open', $this->group->id)->call('take');
+    $otherCampus = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id, 'campus_id' => Campus::factory()->create()->id])->create();
+    $otherDepartment = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => Department::factory()->create()->id])->create();
+
+    $page = Livewire::actingAs($otherCampus)->test('staffing::pages.offer');
+    preg_match('/data-testid="selection-card-'.$this->group->id.'".*?<\/button>/s', $page->html(), $card);
+    expect($card[0])->toContain('Asignado')->not->toContain('Docente Uno')->not->toContain('Asignar a');
+
+    $drawer = selectionDrawer($otherCampus)->call('open', $this->group->id);
+    $drawer->assertSee('Este grupo ya fue asignado')->assertDontSee('Docente Uno', escape: false)->assertDontSee($this->uno->id)->assertDontSee('Quitar docente');
+    expect(json_encode($drawer->snapshot))->not->toContain($this->uno->id);
+
+    Livewire::actingAs($otherDepartment)->test('staffing::pages.offer')->assertForbidden();
+    selectionDrawer($otherDepartment)->assertForbidden();
 });
