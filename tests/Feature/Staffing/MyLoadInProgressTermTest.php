@@ -178,6 +178,18 @@ it('PL-02: en el horario del SII una tutoría ocupa su día con «no cuenta en t
         ->assertSeeHtml('data-testid="no-teacher-hours-'.$sii->id.'"');
 });
 
+it('un grupo paralelo del SII (el mismo grupo para otra carrera) no se cuenta otra vez: ni grupo ni horas de más', function () {
+    mlTermSii(mlTermSessions());
+    $otherPlan = Subject::factory()->create(['department_id' => $this->dept->id, 'name' => 'Fundamentos de Programación', 'theory_hours' => 4, 'practice_hours' => 0]);
+    mlTermSii(mlTermSessions(), ['subject_id' => $otherPlan->id, 'parallel_of' => 'AED-1285 C']);
+
+    $data = app(MyLoadQuery::class)->forTeacher($this->me, $this->running);
+
+    expect($data['groups'])->toHaveCount(1)
+        ->and($data['hours']['assigned'])->toBe(4)
+        ->and($data['days'][1]['blocks'])->toHaveCount(1);
+});
+
 it('con grupos de Nexus en el periodo en curso usa esos y no el SII', function () {
     mlTermNexus($this->running, 'N1', $this->me);
     mlTermSii(mlTermSessions());

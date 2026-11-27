@@ -36,7 +36,7 @@ use App\Modules\Scheduling\Validation\State\StateTeacher;
 final class TeacherHourLimit
 {
     /**
-     * @return array{base_hours: int, teaching_hours: int, band_from: int, band_to: int, external_hours: int, assigned_hours: int, tolerance: int, honorarios_cap: ?int, band_limit: int, allowance_hours: ?int, limit: int, remaining_hours: int, over_band: bool, accepted: bool, hard: bool, groups: array<string, int>, administrative_hours: ?int, administrative_cap: ?int, administrative_excess: int, plaza_hours: int, extra_hours: int, with_honorarios_max: ?int, honorarios_excess: int}|null
+     * @return array{base_hours: int, teaching_hours: int, band_from: int, band_to: int, external_hours: int, assigned_hours: int, tolerance: int, honorarios_cap: ?int, band_limit: int, allowance_hours: ?int, limit: int, remaining_hours: int, over_band: bool, accepted: bool, hard: bool, groups: array<string, int>, administrative_hours: ?int, administrative_cap: ?int, administrative_excess: int, plaza_hours: int, extra_hours: int, with_honorarios_max: ?int, honorarios_excess: int, no_plaza: bool}|null
      */
     public static function of(ScheduleState $state, string $teacherId, ?string $exceptGroupId = null): ?array
     {
@@ -68,7 +68,7 @@ final class TeacherHourLimit
         $withHonorarios = max(1, (int) $state->setting('staffing.max_hours_with_honorarios', TeachingHours::MAX_WITH_HONORARIOS));
         // PL-04: horas de su plaza (las de Nexus o, sin plazas, las que corresponden a su renglón del CSV) y horas extra.
         $plaza = $teacher->baseHours > 0 ? $teacher->baseHours : ($teaching > 0 ? TeachingHours::plazaFromTeaching($teaching) : 0);
-        $noPlaza = $plaza === 0 && $teaching === 0;
+        $noPlaza = self::isNoPlaza($teacher->baseHours, $teaching);
         $honorariosCap = $teacher->isHonorarios && $cap !== null ? (int) $cap : null;
         $bandLimit = $teacher->engineLimit ?? $honorariosCap ?? $bandTo + $tolerance;
         $limit = $teacher->engineLimit ?? max($bandLimit, $teacher->allowanceHours ?? $bandLimit);
@@ -100,7 +100,21 @@ final class TeacherHourLimit
             'extra_hours' => $extra,
             'with_honorarios_max' => $noPlaza ? null : $withHonorarios,
             'honorarios_excess' => $honorariosExcess,
+            // Quien tiene una plaza de honorarios ya es de honorarios: no es «sin plaza docente» aunque su base sea 0.
+            'no_plaza' => $noPlaza && ! $teacher->isHonorarios,
         ];
+    }
+
+    /** PL-04 (tarea 1.83): lo que dicen las pantallas de quien no tiene plaza docente en vez de su banda. */
+    public const string NO_PLAZA_LABEL = TeachingHours::NO_PLAZA_LABEL;
+
+    /**
+     * PL-04: sin plaza docente en Nexus y sin horas frente a grupo del CSV, todas sus horas son extra (honorarios). Es el
+     * único criterio de «sin plaza docente»: la cuenta de arriba (`no_plaza`) y las filas de «Carga por docente» lo usan.
+     */
+    public static function isNoPlaza(int $baseHours, int $teachingHours): bool
+    {
+        return $baseHours <= 0 && $teachingHours <= 0;
     }
 
     /**
@@ -139,6 +153,7 @@ final class TeacherHourLimit
             'extra_hours' => 0,
             'with_honorarios_max' => null,
             'honorarios_excess' => 0,
+            'no_plaza' => false,
         ];
     }
 
