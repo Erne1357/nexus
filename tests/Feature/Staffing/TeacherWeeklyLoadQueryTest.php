@@ -87,3 +87,19 @@ it('parte la semana por departamento: adscripción primero, los demás con su je
 it('la semana del SII no se parte por departamento', function () {
     expect(app(TeacherWeeklyLoad::class)->forTeacher($this->teacher)['current']['departments'])->toBe([]);
 });
+
+it('1.59: un grupo sin sesiones de otro departamento aparece en su sección y las horas son las de la materia, como en el encabezado', function () {
+    $other = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
+    $subject = Subject::factory()->create(['department_id' => $other->id, 'theory_hours' => 3, 'practice_hours' => 2]);
+    $theirs = Group::factory()->create(['term_id' => $this->next->id, 'campus_id' => $this->campus->id, 'subject_id' => $subject->id, 'department_id' => $other->id, 'code' => 'A', 'teacher_id' => $this->teacher->id]);
+    GroupSession::factory()->on(3, '09:00', '10:00')->create(['group_id' => $theirs->id, 'room_id' => $this->room->id]);
+    $bare = Group::factory()->create(['term_id' => $this->next->id, 'campus_id' => $this->campus->id, 'subject_id' => $subject->id, 'department_id' => $other->id, 'code' => 'B', 'teacher_id' => $this->teacher->id]);
+
+    $week = app(TeacherWeeklyLoad::class)->forTeacher($this->teacher)['next'];
+    $section = collect($week['departments'])->firstWhere('name', 'Ciencias Básicas');
+
+    expect(array_column($section['groups'], 'code'))->toEqualCanonicalizing(['A', 'B'])
+        ->and($section['hours'])->toBe(10)
+        ->and(array_sum(array_column($week['departments'], 'hours')))->toBe($week['hours'])
+        ->and($bare->sessions()->count())->toBe(0);
+});

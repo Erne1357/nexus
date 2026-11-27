@@ -6,6 +6,7 @@ use App\Modules\Core\Actions\UpdateSetting;
 use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Settings\SettingRegistry;
@@ -241,5 +242,21 @@ describe('menú y visibilidad', function () {
 
         $this->actingAs($this->jefe)->get(route('staffing.current-load'))->assertForbidden();
         $this->actingAs(User::factory()->admin()->create())->get(route('staffing.current-load'))->assertOk();
+    });
+});
+
+describe('revisión del riel', function () {
+    it('el cajón se vuelve a montar al cambiar de periodo, modalidad o departamento: su llave los lleva', function () {
+        currentLoadPage($this->jefe)
+            ->assertSeeHtml('wire:key="drawer-'.$this->world->term->id.'-'.modalityOf('PRES')->id.'-'.$this->world->department->id.'"');
+    });
+
+    it('SEL-18: cada petición vuelve a autorizar la carga del departamento: si su nombramiento pasa a otro departamento, 403', function () {
+        $page = currentLoadPage($this->jefe)->assertOk();
+
+        RoleAssignment::query()->where('user_id', $this->jefe->id)->update(['org_unit_id' => Department::factory()->create(['code' => 'CB'])->id]);
+        app(Actor::class)->refresh();
+
+        $page->call('refreshed')->assertForbidden();
     });
 });

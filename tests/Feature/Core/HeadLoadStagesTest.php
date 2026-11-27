@@ -137,14 +137,14 @@ describe('MN-06: las etapas de cada pantalla', function () {
 
         expect(headStagesMenuOf($this->jefe))->toBe($expected);
     })->with([
-        'borrador' => [LoadStatus::Draft, ['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio']],
-        'propuesta' => [LoadStatus::Proposed, ['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio']],
-        'asignación' => [LoadStatus::Staffing, ['Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga']],
+        'borrador' => [LoadStatus::Draft, ['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Versiones publicadas', 'Horarios publicados']],
+        'propuesta' => [LoadStatus::Proposed, ['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Versiones publicadas', 'Horarios publicados']],
+        'asignación' => [LoadStatus::Staffing, ['Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Versiones publicadas', 'Horarios publicados']],
         'cerrada' => [LoadStatus::Closed, ['Carga actual', 'Solicitudes de cambio', 'Cierre de la carga', 'Versiones publicadas', 'Horarios publicados']],
     ]);
 
     it('MN-06: el JPD también ve solo las de su etapa', function () {
-        expect(headStagesMenuOf($this->jpd))->toBe(['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio']);
+        expect(headStagesMenuOf($this->jpd))->toBe(['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Versiones publicadas', 'Horarios publicados']);
 
         headStagesMove($this->load, LoadStatus::Closed);
 
@@ -185,7 +185,7 @@ describe('MN-06: las etapas de cada pantalla', function () {
         $this->actingAs($this->jefe)->get(route('staffing.assign'))->assertOk();
         $this->get(route('scheduling.editor'))->assertOk();
         $this->get(route('staffing.closing'))->assertForbidden();
-        $this->get(route('academic-load.versions'))->assertForbidden();
+        $this->get(route('academic-load.versions'))->assertOk();
         $this->get(route('solver.runs'))->assertForbidden();
 
         app(Actor::class)->refresh();
@@ -217,18 +217,26 @@ describe('MN-06: las etapas de cada pantalla', function () {
         Event::fake()->assertListening(LoadTransitioned::class, ForgetLoadStagesOnTransition::class);
     });
 
-    it('MN-06: con la carga visible, la consulta pública de horarios sigue abriendo para el jefe fuera de su etapa, aunque no salga en su menú (supuesto por confirmar)', function () {
-        expect(headStagesMenuOf($this->jefe))->not->toContain('Horarios publicados');
+    it('MN-04 y MN-06: Horarios publicados y Versiones publicadas salen en el menú y abren en toda etapa de la carga del jefe, con exportes (confirmado el 12 de noviembre de 2026)', function (LoadStatus $status) {
+        headStagesMove($this->load, $status);
 
-        $this->get(route('published.index'))->assertOk();
-    });
+        expect(headStagesMenuOf($this->jpd))->toContain('Versiones publicadas', 'Horarios publicados')
+            ->and(headStagesMenuOf($this->jefe))->toContain('Versiones publicadas', 'Horarios publicados');
+
+        foreach (['published.export', 'published.index', 'academic-load.versions'] as $route) {
+            expect(app(AcademicLoadVisibility::class)->closesFor(app(Actor::class), $route))->toBeFalse($route);
+        }
+
+        $this->actingAs($this->jefe)->get(route('published.index'))->assertOk();
+        $this->get(route('academic-load.versions'))->assertOk();
+    })->with([LoadStatus::Draft, LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Closed]);
 });
 
 describe('MN-06: con la carga oculta', function () {
     beforeEach(fn () => headStagesSet(AcademicLoadVisibility::SETTING, false));
 
     it('el jefe y el JPD siguen viendo y abriendo las pantallas de su etapa, sin la marca del admin', function () {
-        expect(headStagesMenuOf($this->jefe))->toBe(['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio'])
+        expect(headStagesMenuOf($this->jefe))->toBe(['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Versiones publicadas', 'Horarios publicados'])
             ->and(headStagesMenuOf($this->jpd))->toContain('Asignación docente');
 
         $this->actingAs($this->jefe);
@@ -242,8 +250,8 @@ describe('MN-06: con la carga oculta', function () {
         $this->get(route('solver.runs'))->assertForbidden();
     });
 
-    it('la consulta pública abre para el jefe solo si su carga está en publicación; al invitado le sigue respondiendo 404', function () {
-        $this->actingAs($this->jefe)->get(route('published.index'))->assertNotFound();
+    it('MN-04: la consulta pública abre para el jefe en toda etapa, con la carga oculta; al invitado le sigue respondiendo 404', function () {
+        $this->actingAs($this->jefe)->get(route('published.index'))->assertOk();
 
         headStagesMove($this->load, LoadStatus::Closed);
 
@@ -349,5 +357,20 @@ describe('MN-06: la campana', function () {
 
         app(Actor::class)->refresh();
         expect(app(Actor::class)->loadTerm()?->is($previous))->toBeTrue();
+    });
+
+    it('un aviso sin periodo se abre con el periodo de carga que eligió el jefe, el mismo con que la campana lo contó', function () {
+        $previous = Term::factory()->create(['code' => '20263', 'name' => 'Ago-Dic 2026']);
+        AcademicLoad::factory()->for($previous)->inStatus(LoadStatus::Closed)->create(['department_id' => $this->sistemas->id]);
+        $this->jefe->notify((new HeadStageNotice('Cierra el elegido', 'staffing.closing'))->addressedTo(Role::JefeDepartamento));
+
+        $this->actingAs($this->jefe);
+        session()->put(Actor::ACTIVE_TERM, $previous->id);
+        app(Actor::class)->refresh();
+
+        Livewire::test('core::components.bell')
+            ->assertSee('Cierra el elegido')
+            ->call('open', $this->jefe->notifications()->where('data->title', 'Cierra el elegido')->value('id'))
+            ->assertRedirect(route('staffing.closing'));
     });
 });
