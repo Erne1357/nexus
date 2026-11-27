@@ -390,7 +390,7 @@ it('MN-01: el admin ve Académico con la validación, Carga académica por etapa
     ])->and(navigationGroupsFor($admin, NavigationArea::CargaAcademica))->toBe([
         'propuesta' => ['Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección'],
         'horarios' => ['Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor'],
-        'asignacion' => ['Asignación docente', 'Carga por docente', 'Solicitudes de cambio'],
+        'asignacion' => ['Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio'],
         'cierre_publicacion' => ['Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados'],
     ])
         ->and(navigationGroupsFor($admin, NavigationArea::Administracion))->toBe([
@@ -548,7 +548,7 @@ describe('menú', function () {
             ->and($page->querySelector('#nexus-menu [data-menu-flip="icon"]'))->toBe($home);
     });
 
-    it('en Inicio, Inicio lleva aria-current y la columna muestra la primera área sin marcar su icono', function () {
+    it('MN-07: en Inicio, Inicio lleva aria-current y no hay columna de ninguna área ni icono marcado', function () {
         $this->actingAs(User::factory()->admin()->create());
 
         $page = domOf(Livewire::test('core::components.navigation', ['route' => 'home']));
@@ -557,8 +557,22 @@ describe('menú', function () {
         expect($current)->toHaveCount(1)
             ->and($current->item(0)->hasAttribute('data-menu-home'))->toBeTrue()
             ->and($current->item(0)->getAttribute('aria-current'))->toBe('page')
-            ->and($page->querySelector('#nexus-menu [role="group"][data-current]')->getAttribute('data-menu-area'))->toBe('academico')
+            ->and($page->querySelector('#nexus-menu [role="group"][data-current]'))->toBeNull()
+            ->and($page->querySelector('#nexus-menu[data-bare]'))->not->toBeNull()
             ->and($page->querySelector('#nexus-menu [data-menu-flip="icon"][data-area-current]'))->toBeNull();
+    });
+
+    it('MN-07: el Inicio reserva solo la franja de iconos; otra pantalla conserva su columna', function () {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $home = $this->get('/')->assertOk()->getContent();
+        $other = $this->get(route('core.campuses'))->assertOk()->getContent();
+
+        expect($home)->toContain('[--shown-w:64px]')->not->toContain('[--shown-w:var(--menu-w)]')
+            ->and($home)->toContain('[--column-display:none]')->not->toContain('data-current=""')
+            ->and($other)->toContain('[--shown-w:var(--menu-w)]')->not->toContain('[--shown-w:64px]')
+            ->and($other)->toContain('[--column-display:flex]')
+            ->and(domOf($other)->querySelector('#nexus-menu [role="group"][data-current]'))->not->toBeNull();
     });
 
     it('fuera de Inicio, se marca el icono del área de la pantalla y solo ese', function () {
@@ -623,7 +637,7 @@ describe('menú', function () {
             ->and(menuRowsIn($page, 'carga_academica'))->toBe([
                 'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección',
                 'Horarios', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor',
-                'Asignación', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio',
+                'Asignación', 'Carga actual', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio',
                 'Cierre y publicación', 'Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados',
             ])
             ->and(array_map(fn (Element $heading): string => $heading->getAttribute('data-menu-group'), iterator_to_array($page->querySelectorAll('[data-menu-area="administracion"] [data-menu-group]'))))

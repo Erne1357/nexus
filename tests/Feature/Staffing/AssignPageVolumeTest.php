@@ -82,7 +82,7 @@ describe('ranking completo', function () {
 
     it('dice en qué orden va el ranking, en la barra de la vista por materia y junto al ranking', function () {
         volumeAssignPage($this->jefe)
-            ->assertSeeText('Orden: horas base › historial y perfil › evaluación')
+            ->assertSeeText('Orden: horas base › historial y experiencia académica › evaluación')
             ->call('toggleRanking', $this->group->id)
             ->assertSeeHtml('data-testid="ranking-order"');
     });

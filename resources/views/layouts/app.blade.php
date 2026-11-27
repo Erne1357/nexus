@@ -6,7 +6,7 @@
 
     <body> lleva el estado del shell, que cambia el componente Alpine nexusShell (resources/js/app.js):
     data-menu="closed|open". También declara la geometría por ancho, que la banda, el menú y el
-    contenido leen: --shell-top (banda y franja), --menu-w (el menú cerrado), --panel-w (el menú
+    contenido leen: --shell-top (banda y franja), --menu-w (el menú cerrado), --shown-w (lo que de él se ve: en Inicio, MN-07, solo la franja), --panel-w (el menú
     abierto) y --panel-clip (la cortina recogida). Escritorio desde 1200 px, tableta desde 768 px.
 --}}
 <!DOCTYPE html>
@@ -28,7 +28,7 @@
             x-data="nexusShell"
             x-on:keydown.window="onKeydown($event)"
             data-menu="closed"
-            class="min-h-screen bg-base-200 font-sans text-base-content antialiased [--menu-w:288px] [--panel-clip:inset(0_calc(100%_-_var(--menu-w))_0_0)] [--panel-w:min(1480px,calc(100vw_-_80px))] [--shell-top:67px] max-desktop:[--menu-w:64px] max-desktop:[--panel-w:calc(100vw_-_48px)] max-md:[--menu-w:0px] max-md:[--panel-clip:inset(0_0_100%_0)] max-md:[--panel-w:100vw] max-md:[--shell-top:59px]"
+            class="min-h-screen bg-base-200 font-sans text-base-content antialiased [--menu-w:288px] {{ request()->routeIs('home') ? '[--shown-w:64px] max-md:[--shown-w:0px]' : '[--shown-w:var(--menu-w)]' }} [--panel-clip:inset(0_calc(100%_-_var(--shown-w))_0_0)] [--panel-w:min(1480px,calc(100vw_-_80px))] [--shell-top:67px] max-desktop:[--menu-w:64px] max-desktop:[--panel-w:calc(100vw_-_48px)] max-md:[--menu-w:0px] max-md:[--panel-clip:inset(0_0_100%_0)] max-md:[--panel-w:100vw] max-md:[--shell-top:59px]"
         >
             <livewire:core::components.band :title="$title ?? null" />
 
@@ -39,7 +39,7 @@
             <main
                 id="nexus-content"
                 @class([
-                    'ms-(--menu-w) border-s border-base-300 max-md:border-s-0',
+                    'ms-(--shown-w) border-s border-base-300 max-md:border-s-0',
                     'min-h-[calc(100vh_-_var(--shell-top))] max-w-[calc(1680px_+_4rem)] px-8 pt-6.5 pb-10 max-desktop:px-6 max-desktop:pt-6 max-md:px-4 max-md:pt-[18px] max-md:pb-8' => ! ($fullBleed ?? false),
                     'relative h-[calc(100dvh_-_var(--shell-top))] overflow-hidden' => $fullBleed ?? false,
                 ])

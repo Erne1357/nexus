@@ -39,7 +39,7 @@ use Illuminate\Database\Query\JoinClause;
  * objetivo de GroupPolicy (`editSessions`, `assignRoom`, `manageQuotas`), y, si no lo acomoda solo porque su puesto es
  * de otro campus, los campus donde sí (`edit_campuses`, MS6). Cada grupo lleva su campus (`campus`, el del filtro), para su etiqueta.
  * Nadie puede nada de eso con un grupo de
- * contexto, ni si el grupo está cancelado o su carga no está en propuesta, asignación o ajustes: `editBlockedReason` dice
+ * contexto, ni si el grupo está cancelado o su carga no está en borrador, propuesta, asignación, ajustes o re-análisis: `editBlockedReason` dice
  * por qué, con el mensaje de LoadEditability::blockedReasons(), la misma regla que aplican las Actions. Además, las
  * violaciones del validador por grupo y, las que nombran una sesión, por sesión (una validación de todos los grupos de
  * cada modalidad con la foto del periodo y esa modalidad, M1); solo los grupos y sesiones que tienen alguna. Cada

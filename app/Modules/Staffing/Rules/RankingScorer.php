@@ -6,7 +6,7 @@ use App\Modules\Faculty\Enums\QualificationLevel;
 
 /**
  * Ordena a los candidatos de un grupo (reglas-de-negocio.md, «Ranking docente (desempate)»). Puntaje = grupos
- * impartidos × peso + peso del perfil (preferente o apto, no ambos) + evaluación × peso; sin evaluación son 0
+ * impartidos × peso + peso de la experiencia académica (preferente o apto, no ambos) + evaluación × peso; sin evaluación son 0
  * puntos. Orden: los que pasan su banda de horas (HC-08) después de los demás y los marcados (choque, no disponible)
  * después de todos; dentro de cada bloque, horas base de mayor a menor;
  * puntaje de mayor a menor; posición del periodo anterior (los que no tienen, al final); nombre sin importar

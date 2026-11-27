@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::middleware('auth')->name('staffing.')->group(function () {
+    Route::livewire('/staffing/carga-actual', 'staffing::pages.current-load')->name('current-load');
     Route::livewire('/staffing/assign', 'staffing::pages.assign')->name('assign');
     Route::livewire('/carga-por-docente', 'staffing::pages.teacher-loads')->name('teacher-loads');
     Route::livewire('/staffing/change-requests', 'staffing::pages.change-requests')->name('change-requests');

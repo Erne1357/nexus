@@ -27,7 +27,9 @@ use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Queries\RoomClaimQuery;
 use App\Modules\CatalogValidation\Rules\CatalogReviewRules;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\LoadStages;
 use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Enums\RoomType;
@@ -35,10 +37,13 @@ use App\Modules\Facilities\Queries\BuildingQuery;
 use App\Modules\Facilities\Queries\RoomQuery;
 use App\Modules\Facilities\Rules\RoomRules;
 use App\Modules\Faculty\Enums\FacultyPermission;
+use App\Modules\Faculty\Enums\PositionKind;
+use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Queries\TeacherAccessQuery;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
+use App\Modules\Faculty\Rules\PositionCategories;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Model;
@@ -46,6 +51,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -190,6 +196,21 @@ new #[Title('Validación de catálogos')] class extends Component
     /** El correo institucional de un docente (AC-06). */
     public string $institutional_email = '';
 
+    /** El grado, el correo personal y la fecha de ingreso de un docente (CV17). */
+    public string $degree = '';
+
+    public string $email = '';
+
+    public string $hired_on = '';
+
+    /**
+     * Las plazas de un docente en el panel «Corregir docente» (CV17): `id` (vacío si es nueva), `kind`, `category`
+     * (la clave del catálogo o vacía, PL-01), `base_hours`, `valid_from` y `valid_to`.
+     *
+     * @var list<array{id: string, kind: string, category: string, base_hours: string, valid_from: string, valid_to: string}>
+     */
+    public array $positions = [];
+
     /** El drawer «Agregar docente» y lo que se busca en él, RFC o nombre (CV-S9). */
     public bool $showAddTeacher = false;
 
@@ -270,6 +291,9 @@ new #[Title('Validación de catálogos')] class extends Component
         $state = $this->state();
         $data = ['departments' => $state['departments'], 'department' => $state['department'], 'term' => $state['term'], 'viewOnly' => $this->viewOnlyOn($state['department']?->id)];
 
+        // CV18: con alguna revisión validada y la carga en la etapa de la propuesta, se sugiere ir a la Bandeja.
+        $data['inboxLinks'] = ! $data['viewOnly'] && $state['reviews']->contains(fn (CatalogReview $review): bool => $review->status === ReviewStatus::Validated) ? $this->inboxLinks() : [];
+
         $empty = match (true) {
             $state['department'] === null => 'department',
             $state['term'] === null => 'term',
@@ -306,6 +330,11 @@ new #[Title('Validación de catálogos')] class extends Component
 
     public function updated(string $property): void
     {
+        // Las categorías cambian con el tipo de plaza (PL-01): al cambiarlo, la de antes ya no aplica.
+        if (preg_match('/^positions\.(\d+)\.kind$/', $property, $match) === 1 && isset($this->positions[(int) $match[1]])) {
+            $this->positions[(int) $match[1]]['category'] = '';
+        }
+
         if ($property === 'department') {
             $this->resolved = null;
         }
@@ -410,7 +439,8 @@ new #[Title('Validación de catálogos')] class extends Component
         } else {
             $this->authorize('validate', $review);
             $validateReview->handle($review, $this->user());
-            $this->success('Revisión validada', e($review->heading));
+            $hasDraftLoad = $this->inboxLinks() !== [];
+            $this->success('Revisión validada', e($review->heading.($hasDraftLoad ? '. Sigue: validar la propuesta de carrera en «Bandeja del departamento» (aunque ya haya grupos con docente).' : '')));
         }
 
         /*
@@ -490,12 +520,20 @@ new #[Title('Validación de catálogos')] class extends Component
         $record = $contents->findOrFail($review, (string) $this->editingId);
 
         if ($review->catalog === Catalog::Teachers) {
-            $this->authorize('updateInstitutionalEmail', $record);
+            $this->authorize('update', $record);
         }
 
         $this->ensureNoPendingFlag();
 
-        $record = $correctRecord->handle($review, $record, $this->validatedRecord($review->catalog), $this->user());
+        $data = $this->validatedRecord($review->catalog);
+
+        if ($record instanceof Teacher) {
+            // CV17: lo que el jefe no puede capturar de este docente no se manda (el correo institucional de quien ocupa un puesto, AC-06).
+            Gate::allows('updateInstitutionalEmail', $record) || $data = Arr::except($data, 'institutional_email');
+            Gate::allows('managePositions', $record) || $data = Arr::except($data, 'positions');
+        }
+
+        $record = $correctRecord->handle($review, $record, $data, $this->user());
 
         /*
         | Guardar sin cambios marca el registro como revisado (CV-S7, D9): el aviso dice que no cambió nada.
@@ -508,6 +546,35 @@ new #[Title('Validación de catálogos')] class extends Component
             default => 'Materia actualizada',
         } : 'Sin cambios: queda revisado', $this->describe($review, $record));
         $this->closeDrawer();
+    }
+
+    /**
+     * «Agregar plaza» en el panel de un docente: una fila nueva, vigente desde hoy (CV17).
+     */
+    public function addPositionRow(): void
+    {
+        $this->positions[] = ['id' => '', 'kind' => PositionKind::Asignatura->value, 'category' => '', 'base_hours' => '', 'valid_from' => CarbonImmutable::now()->toDateString(), 'valid_to' => ''];
+    }
+
+    /**
+     * «Cerrar plaza»: pone hoy como fin de vigencia; la fecha se puede cambiar antes de guardar (CV17).
+     */
+    public function closePositionRow(int $index): void
+    {
+        if (isset($this->positions[$index])) {
+            $this->positions[$index]['valid_to'] = CarbonImmutable::now()->toDateString();
+        }
+    }
+
+    /**
+     * Quita del formulario una plaza que todavía no se guarda (CV17).
+     */
+    public function discardPositionRow(int $index): void
+    {
+        if (($this->positions[$index]['id'] ?? null) === '') {
+            unset($this->positions[$index]);
+            $this->positions = array_values($this->positions);
+        }
     }
 
     public function toggleActive(string $id, CorrectRecord $correctRecord, CatalogContentsQuery $contents): void
@@ -848,6 +915,14 @@ new #[Title('Validación de catálogos')] class extends Component
             'comment' => 'comentario',
             'building_id' => 'edificio',
             'institutional_email' => 'correo institucional',
+            'email' => 'correo personal',
+            'degree' => 'grado',
+            'hired_on' => 'fecha de ingreso',
+            'positions.*.kind' => 'tipo de plaza',
+            'positions.*.category' => 'categoría',
+            'positions.*.base_hours' => 'horas base',
+            'positions.*.valid_from' => 'inicio de vigencia',
+            'positions.*.valid_to' => 'fin de vigencia',
             'dischargeKind' => 'motivo',
             'dischargeText' => 'motivo',
         ];
@@ -886,6 +961,28 @@ new #[Title('Validación de catálogos')] class extends Component
                 ->each(fn (CatalogReview $review) => $review->setRelation('term', $term));
 
         return $this->resolved = compact('departments', 'department', 'term', 'reviews');
+    }
+
+    /**
+     * CV18: la liga a la Bandeja del departamento mientras su carga sigue en la etapa de la propuesta (borrador o propuesta,
+     * MN-06). CatalogValidation no conoce las cargas, que están a su derecha en el mapa de módulos: pregunta las etapas al
+     * contrato de Core (LoadStages, que AcademicLoad implementa) y la ruta por nombre.
+     *
+     * @return list<array{modality: string|null, url: string}>
+     */
+    private function inboxLinks(): array
+    {
+        $state = $this->state();
+
+        if ($state['department'] === null || $state['term'] === null || ! Route::has('academic-load.inbox')) {
+            return [];
+        }
+
+        $stages = app(LoadStages::class)->of(app(Actor::class), $state['term']);
+
+        return in_array(Stage::Proposal, $stages, true)
+            ? [['modality' => null, 'url' => route('academic-load.inbox', ['depto' => $state['department']->code])]]
+            : [];
     }
 
     private function user(): User
@@ -1245,7 +1342,7 @@ new #[Title('Validación de catálogos')] class extends Component
             'claimFilters' => $isRooms && $this->showClaim ? app(RoomQuery::class)->unownedFilterOptions() : ['campuses' => [], 'buildings' => []],
             'roomFilters' => $isRooms ? $records->roomFilterOptions($review) : ['campuses' => [], 'buildings' => []],
             'departmentFilters' => $records->departmentFilterOptions($review),
-            'missingFilters' => [['id' => 'disponibilidad', 'name' => 'Sin disponibilidad'], ['id' => 'perfil', 'name' => 'Sin perfil'], ['id' => 'correo', 'name' => 'Sin correo institucional']],
+            'missingFilters' => [['id' => 'disponibilidad', 'name' => 'Sin disponibilidad'], ['id' => 'perfil', 'name' => 'Sin experiencia académica'], ['id' => 'correo', 'name' => 'Sin correo institucional']],
             'flagMap' => $records->openFlags($review, $ids),
             'editing' => $editing,
             'candidates' => $this->showAddTeacher && $review->catalog === Catalog::Teachers ? $this->candidates($review, $records) : null,
@@ -1255,6 +1352,9 @@ new #[Title('Validación de catálogos')] class extends Component
             'statusFilters' => [['id' => 'inactivos', 'name' => 'Solo inactivos'], ['id' => 'todos', 'name' => 'Activos e inactivos']],
             'hasFilters' => $this->search !== '' || $this->status !== '' || ! in_array($this->segment, ['', 'todos'], true) || $this->missing !== '' || $this->change !== '' || $this->roomCampus !== '' || $this->roomBuilding !== '' || $this->recordDepartment !== '',
             'flagOptions' => collect(ReviewFlag::cases())->filter(fn (ReviewFlag $flag): bool => $flag->appliesTo($review->catalog))->map(fn (ReviewFlag $flag): array => ['id' => $flag->value, 'name' => $flag->label()])->values()->all(),
+            'degrees' => array_map(fn (TeacherDegree $degree): array => ['id' => $degree->value, 'name' => $degree->label()], TeacherDegree::cases()),
+            'positionKinds' => array_map(fn (PositionKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], PositionKind::cases()),
+            'categoryOptions' => array_map(fn (array $position): array => PositionCategories::options(PositionKind::tryFrom($position['kind']), $position['category'] ?? null), $this->positions),
             'kinds' => array_map(fn (SubjectKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], SubjectKind::cases()),
             'roomTypes' => array_map(fn (RoomType $type): array => ['id' => $type->value, 'name' => $type->label()], RoomType::cases()),
         ];
@@ -1432,8 +1532,11 @@ new #[Title('Validación de catálogos')] class extends Component
             return ['canEdit' => false, 'editReason' => self::INACTIVE_TEACHER]; // CV14
         }
 
-        if ($current['canEdit'] && $record instanceof Teacher && ! Gate::allows('updateInstitutionalEmail', $record)) {
-            return ['canEdit' => false, 'editReason' => self::STAFF_EMAIL];
+        if ($current['canEdit'] && $record instanceof Teacher) {
+            // CV17: el jefe corrige al docente; el correo institucional y las plazas siguen sus propias policies.
+            return Gate::allows('update', $record)
+                ? ['canEdit' => true, 'editReason' => null, 'canInstitutionalEmail' => Gate::allows('updateInstitutionalEmail', $record), 'canPositions' => Gate::allows('managePositions', $record)]
+                : ['canEdit' => false, 'editReason' => self::STAFF_EMAIL];
         }
 
         return ['canEdit' => $current['canEdit'], 'editReason' => $current['editReason']];
@@ -1604,7 +1707,20 @@ new #[Title('Validación de catálogos')] class extends Component
                 'capacity' => (string) $record->capacity,
                 'features' => implode(', ', $record->features ?? []),
             ],
-            Catalog::Teachers => ['institutional_email' => (string) $record->institutional_email],
+            Catalog::Teachers => [
+                'institutional_email' => (string) $record->institutional_email,
+                'degree' => $record->degree?->value ?? '',
+                'email' => (string) $record->email,
+                'hired_on' => $record->hired_on?->toDateString() ?? '',
+                'positions' => $record->positions()->orderBy('valid_from')->get()->map(fn ($position): array => [
+                    'id' => (string) $position->getKey(),
+                    'kind' => $position->kind->value,
+                    'category' => (string) $position->category,
+                    'base_hours' => (string) $position->base_hours,
+                    'valid_from' => $position->valid_from?->toDateString() ?? '',
+                    'valid_to' => $position->valid_to?->toDateString() ?? '',
+                ])->all(),
+            ],
             default => [],
         };
     }
@@ -1625,7 +1741,20 @@ new #[Title('Validación de catálogos')] class extends Component
             Catalog::Careers => $this->validate(['name' => ['required', 'string', 'max:255']]),
             Catalog::StudyPlans => $this->planData(),
             Catalog::Rooms => $this->roomData($common),
-            Catalog::Teachers => ['institutional_email' => $this->validate(['institutional_email' => ['nullable', 'string', 'max:255']])['institutional_email'] ?? null],
+            Catalog::Teachers => $this->validate([
+                'name' => ['required', 'string', 'max:255'],
+                'degree' => ['nullable', Rule::enum(TeacherDegree::class)],
+                'email' => ['nullable', 'email', 'max:255'],
+                'institutional_email' => ['nullable', 'string', 'max:255'],
+                'hired_on' => ['nullable', 'date_format:Y-m-d'],
+                'positions' => ['array'],
+                'positions.*.id' => ['nullable', 'string'],
+                'positions.*.kind' => ['required', Rule::enum(PositionKind::class)],
+                'positions.*.category' => ['nullable', 'string', 'max:8'],
+                'positions.*.base_hours' => ['nullable', 'integer', 'min:0', 'max:'.PositionKind::MAX_HOURS],
+                'positions.*.valid_from' => ['nullable', 'date_format:Y-m-d'],
+                'positions.*.valid_to' => ['nullable', 'date_format:Y-m-d'],
+            ]),
         };
     }
 

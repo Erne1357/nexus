@@ -16,8 +16,9 @@ use Illuminate\Validation\ValidationException;
 use PDOException;
 
 /**
- * La única regla de «grupo editable» del editor de horarios (3.5) y de los cupos (3.6): el grupo no está cancelado y
- * la carga de su departamento en su modalidad y periodo (M1; AcademicLoad::ofDepartment) está en propuesta, asignación,
+ * La regla de «grupo editable» del editor de horarios (3.5) y de los cupos (3.6): el grupo no está cancelado y
+ * la carga de su departamento en su modalidad y periodo (M1; AcademicLoad::ofDepartment) está en borrador (solo horario, salón y cupos;
+ * SCHEDULE_EDITABLE, confirmado el 26 de noviembre de 2026), propuesta, asignación,
  * ajustes o re-análisis ("Aprobaciones y permisos"; en re-análisis, fase 8, tarea 8.1, la carga se edita con el validador
  * como en ajustes y la última versión publicada sigue intacta y pública). Un grupo sin fila de carga no se edita (supuesto por confirmar, lo más
  * restrictivo).
@@ -30,6 +31,14 @@ final class LoadEditability
 {
     /** @var list<LoadStatus> */
     public const array EDITABLE = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Reanalysis];
+
+    /**
+     * Dónde se editan horario, salón y cupos: lo mismo y además el borrador (confirmado el 26 de noviembre de
+     * 2026). Docente y selección siguen con EDITABLE: asignar docente en borrador abriría la oferta antes de HC-14/HC-17.
+     *
+     * @var list<LoadStatus>
+     */
+    public const array SCHEDULE_EDITABLE = [LoadStatus::Draft, ...self::EDITABLE];
 
     private const string DEADLOCK = '40P01';
 
@@ -70,9 +79,9 @@ final class LoadEditability
     /**
      * Por qué no se edita lo de una carga en ese estado (null si no hay carga), o null si se edita.
      */
-    public function loadReason(?LoadStatus $status, string $departmentId, string $modalityId, string $what): ?string
+    public function loadReason(?LoadStatus $status, string $departmentId, string $modalityId, string $what, bool $draft = false): ?string
     {
-        return self::isEditable($status) ? null : self::reason(
+        return self::isEditable($status, $draft) ? null : self::reason(
             $status,
             Department::withTrashed()->whereKey($departmentId)->value('name'),
             Modality::withTrashed()->whereKey($modalityId)->value('name'),
@@ -83,16 +92,17 @@ final class LoadEditability
     /**
      * @param  string  $what  lo que no se edita, para el mensaje («horarios», «cupos»)
      * @param  string  $key  la llave del error
+     * @param  bool  $draft  si el borrador también se edita (horario, salón y cupos; SCHEDULE_EDITABLE)
      *
      * @throws ValidationException
      */
-    public function ensure(Group $group, string $what = 'horarios', string $key = 'session'): void
+    public function ensure(Group $group, string $what = 'horarios', string $key = 'session', bool $draft = false): void
     {
         if ($group->status === GroupStatus::Cancelled) {
             throw ValidationException::withMessages([$key => "El grupo {$group->code} está cancelado: no se editan {$what}."]);
         }
 
-        $reason = $this->loadReason($this->lockLoad($group)?->status, $group->department_id, $group->modality_id, $what);
+        $reason = $this->loadReason($this->lockLoad($group)?->status, $group->department_id, $group->modality_id, $what, $draft);
 
         if ($reason !== null) {
             throw ValidationException::withMessages([$key => $reason]);
@@ -132,7 +142,7 @@ final class LoadEditability
 
             $status = $statuses[$key($group)] ?? null;
 
-            if (self::isEditable($status)) {
+            if (self::isEditable($status, true)) {
                 return [$group->id => null];
             }
 
@@ -182,9 +192,9 @@ final class LoadEditability
         return false;
     }
 
-    private static function isEditable(?LoadStatus $status): bool
+    private static function isEditable(?LoadStatus $status, bool $draft): bool
     {
-        return $status !== null && in_array($status, self::EDITABLE, true);
+        return $status !== null && in_array($status, $draft ? self::SCHEDULE_EDITABLE : self::EDITABLE, true);
     }
 
     private static function reason(?LoadStatus $status, ?string $department, ?string $modality, string $what): string

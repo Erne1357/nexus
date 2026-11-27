@@ -33,9 +33,9 @@ use Illuminate\Support\Facades\DB;
 /**
  * El horario de la orden de selección (tarea 1.33, diseño 6.4 y maqueta A «Franjas por hora»): los grupos de las
  * cargas incluidas (SelectionGroupsQuery) por día y hora, con lo que el docente necesita para elegir: si es suyo, si
- * le choca con lo que ya tiene en el periodo (HC-01, de cualquier carga o campus), si la materia está en su perfil o en
+ * le choca con lo que ya tiene en el periodo (HC-01, de cualquier carga o campus), si la materia está en su experiencia académica o en
  * su historial, sus horas contra su base (SEL-05) y el turno de ahora (SelectionTurnQuery, con la hora que se le da).
- * Sin docente (la jefatura sin renglón en la cola) no hay «tuyo», choques ni perfil. El periodo es el de la selección,
+ * Sin docente (la jefatura sin renglón en la cola) no hay «tuyo», choques ni experiencia académica. El periodo es el de la selección,
  * no el de la credencial. Un número constante de consultas, sin importar los grupos.
  *
  * `cells` va por sesión con llave `"{día}|{H:i}"`; strips() lo junta en un renglón por hora con los días de cada grupo
@@ -369,7 +369,7 @@ final class SelectionTimetableQuery
     }
 
     /**
-     * Lo del docente que se cruza con cada ficha: las materias de su perfil o su historial y sus sesiones del periodo
+     * Lo del docente que se cruza con cada ficha: las materias de su experiencia académica o su historial y sus sesiones del periodo
      * (de cualquier carga, modalidad o campus) para HC-01.
      *
      * @return array{profile: array<string, true>, own: BaseCollection<int, object>}

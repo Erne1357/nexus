@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| Perfil de un docente (S17, supuesto por confirmar): el jefe declara una materia como apta o preferente; declararla
+| Experiencia académica de un docente (S17, supuesto por confirmar): el jefe declara una materia como apta o preferente; declararla
 | de nuevo cambia el nivel y una quitada se restaura. Todo deja bitácora con el nivel anterior y el nuevo, y avisa
 | tras el commit.
 */
@@ -67,7 +67,7 @@ it('declarar lo mismo dos veces no escribe, no registra ni avisa', function () {
     Event::assertNotDispatched(QualificationChanged::class);
 });
 
-it('quita una materia del perfil con borrado lógico y bitácora', function () {
+it('quita una materia de la experiencia académica con borrado lógico y bitácora', function () {
     $qualification = app(SetQualification::class)->handle($this->teacher, $this->subject, QualificationLevel::Preferente, $this->jefe);
     $base = (int) Activity::max('id');
 

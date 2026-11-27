@@ -241,6 +241,30 @@ final class OrgChartQuery
     }
 
     /**
+     * El nombre del titular vigente de cada unidad dada, por id (tarea 1.59: el jefe de cada departamento en la pestaña
+     * «Carga» de la ficha del docente). Las unidades sin puesto de titular o sin titular vigente no salen.
+     *
+     * @param  list<string>  $unitIds
+     * @return array<string, string>
+     */
+    public function titularNames(array $unitIds): array
+    {
+        $names = [];
+
+        foreach (OrgUnit::query()->whereIn('id', $unitIds)->get() as $unit) {
+            $role = $this->rules->titularRoleOf($unit);
+            $assignment = $role === null ? null : RoleAssignment::query()->current()->where('role', $role)->where('org_unit_id', $unit->id)
+                ->with('user:id,name')->orderBy('valid_from')->first();
+
+            if ($assignment !== null) {
+                $names[$unit->id] = $assignment->user->name;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
      * La raíz sin borrar (la Dirección).
      */
     public function rootId(): string

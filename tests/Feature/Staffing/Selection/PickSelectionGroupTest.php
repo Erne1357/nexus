@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Enums\RequiredSpace;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
@@ -227,4 +228,13 @@ it('no suelta un grupo que le asignó el jefe', function () {
 
     expect($errors['group'])->toBe(['Solo puedes soltar los grupos que tomaste en la orden de selección.'])
         ->and($this->group->fresh()->teacher_id)->toBe($this->teacher->id);
+});
+
+it('1.62: con la carga en borrador no toma grupos aunque sí se editen horarios y salones (confirmado el 26 de noviembre de 2026)', function () {
+    $this->world->load->update(['status' => LoadStatus::Draft]);
+
+    $errors = pickSelectionErrors(fn () => pickSelectionGroupFor($this->teacher, $this->group, $this->room));
+
+    expect($errors['group'])->toBe(['La carga está en Borrador: los docentes se asignan en Asignación, Ajustes o Re-análisis.'])
+        ->and($this->group->fresh()->teacher_id)->toBeNull();
 });

@@ -651,7 +651,7 @@ describe('captura de docentes (2.6, CV6)', function () {
     it('la tarjeta de docentes avisa cuántos faltan y enlaza a la lista filtrada, sin bloquear validar', function () {
         $component = reviewPage()
             ->assertSee('sin disponibilidad en 20271')
-            ->assertSee('sin perfil')
+            ->assertSee('sin experiencia académica')
             ->assertSeeHtml(e(route('catalog-validation.review', ['department' => $this->sis->id, 'catalogo' => 'teachers', 'falta' => 'disponibilidad'])))
             ->assertSeeHtml('data-testid="missing-perfil"');
 
@@ -660,7 +660,7 @@ describe('captura de docentes (2.6, CV6)', function () {
         $component->call('confirm', 'validate', 'teachers')->assertSet('showConfirm', true);
     });
 
-    it('la lista trae disponibilidad, perfil, horas fuera y plaza, y las acciones de ficha y disponibilidad', function () {
+    it('la lista trae disponibilidad, experiencia académica, horas fuera y plaza, y las acciones de ficha y disponibilidad', function () {
         reviewPage($this->jefe, ['catalogo' => 'teachers'])
             ->assertSee('Disponibilidad')->assertSee('Capturada')->assertSee('Falta')
             ->assertSee('Plaza')
@@ -668,7 +668,7 @@ describe('captura de docentes (2.6, CV6)', function () {
             ->assertSeeHtml(route('faculty.teachers.show', $this->bare->id));
     });
 
-    it('el filtro «Falta» deja solo a quienes les falta disponibilidad o perfil', function (string $falta, array $see, array $dontSee) {
+    it('el filtro «Falta» deja solo a quienes les falta disponibilidad o experiencia académica', function (string $falta, array $see, array $dontSee) {
         reviewPage($this->jefe, ['catalogo' => 'teachers', 'falta' => $falta])
             ->assertSet('missing', $falta)
             ->assertSee($see)->assertDontSee($dontSee);
@@ -1388,5 +1388,34 @@ describe('revisión por registro (opción A)', function () {
             ->assertSee('Campus I')
             ->assertSee('con el edificio.')
             ->assertSee('Al guardar, queda revisado.');
+    });
+});
+
+describe('sugerencia de la Bandeja (CV18, 1.62)', function () {
+    beforeEach(function () {
+        $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Draft)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->sis->id]);
+    });
+
+    it('CV18: al validar con la carga en borrador, el aviso y la pantalla sugieren ir a la Bandeja aunque haya grupos con docente', function () {
+        reviewMarkAll(Catalog::Teachers);
+
+        $page = reviewPage()->call('confirm', 'validate', 'teachers')->call('confirmed')->assertHasNoErrors();
+
+        expect(reviewOf(Catalog::Teachers)->status)->toBe(ReviewStatus::Validated)
+            ->and(lastToastOf($page)['description'])->toContain('Bandeja del departamento');
+
+        $page->assertSeeHtml('data-testid="review-inbox-suggestion"')
+            ->assertSeeHtml(route('academic-load.inbox', ['depto' => 'SIS']))
+            ->assertSee('aunque algunos grupos ya tengan docente');
+    });
+
+    it('CV18: sin revisión validada, o con la carga fuera de la etapa de la propuesta, o en lectura para admin, no sugiere nada', function () {
+        reviewPage()->assertDontSeeHtml('data-testid="review-inbox-suggestion"');
+
+        reviewOf(Catalog::Teachers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+        reviewPage(User::factory()->admin()->create(), ['department' => $this->sis->id])->assertDontSeeHtml('data-testid="review-inbox-suggestion"');
+
+        $this->load->update(['status' => LoadStatus::Staffing]);
+        reviewPage()->assertDontSeeHtml('data-testid="review-inbox-suggestion"');
     });
 });

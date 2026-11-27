@@ -87,6 +87,7 @@
     @if ($open && isset($rankings[$group->id]))
         <div id="ranking-{{ $group->id }}" class="min-w-0 overflow-hidden rounded-box border border-base-300 md:col-span-2" data-testid="full-ranking">
             @include('staffing::assign.ranking', ['group' => $group, 'ranking' => $rankings[$group->id], 'currentTeacherId' => $group->teacher_id, 'capped' => true])
+            @include('staffing::assign.search')
             <details class="group/history border-t border-base-300" @if ($rankings[$group->id]->rows === []) open @endif>
                 <summary class="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 py-2.5 font-semibold hover:bg-base-200 [&::-webkit-details-marker]:hidden">
                     <x-icon name="o-chevron-right" class="h-4 w-4 transition-transform group-open/history:rotate-90 motion-reduce:transition-none" />

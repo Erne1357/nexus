@@ -308,3 +308,11 @@ it('G-07: varias sesiones a la vez: una sesión de otro grupo no se toca', funct
         ->and($this->session->fresh()->room_id)->toBeNull()
         ->and($foreign->fresh()->room_id)->toBeNull();
 });
+
+it('1.62: con la carga en borrador sí asigna salón (confirmado el 26 de noviembre de 2026)', function () {
+    $this->load->update(['status' => LoadStatus::Draft]);
+
+    assignRoom($this->room);
+
+    expect($this->session->fresh()->room_id)->toBe($this->room->id);
+});

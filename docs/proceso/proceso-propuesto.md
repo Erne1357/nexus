@@ -66,7 +66,7 @@ flowchart LR
 ### 5. Asignación docente (jefe de departamento y jefe de proyecto docente)
 
 - Entrada: grupos de las materias del departamento, catálogo de docentes validado.
-- Acción: para cada grupo Nexus muestra el **ranking** de docentes (base de horas, luego historial y perfil en la materia, luego evaluación docente) con horas restantes y choques. El jefe asigna; si elige a alguien que no es el primero, debe escribir el motivo. Toda la oferta del departamento es visible para todos los docentes del departamento.
+- Acción: para cada grupo Nexus muestra el **ranking** de docentes (base de horas, luego historial y experiencia académica en la materia, luego evaluación docente) con horas restantes y choques. El jefe asigna; si elige a alguien que no es el primero, debe escribir el motivo. Toda la oferta del departamento es visible para todos los docentes del departamento.
 - Solicitudes de cambio: el docente ve su carga y pide cambio de horario o salón; el jefe aprueba o rechaza; el coordinador reacomoda con el validador (R2: Nexus calcula el impacto antes de aprobar).
 - Salida: grupos con docente; `teacher_term_loads` al día; tablero de grupos sin docente.
 

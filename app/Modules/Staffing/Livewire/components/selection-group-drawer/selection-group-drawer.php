@@ -28,7 +28,7 @@ use Mary\Traits\Toast;
  * del grupo y «Asignar a…»). Se abre con `open-selection-group` desde la ficha, aparte de la página para que el
  * refresco de cada 5 s no lo vuelva a pintar. El docente sale siempre del usuario de la sesión, nunca del navegador.
  *
- * - **Grupo** (`mode = group`): sus datos, quién lo tiene, si está fuera de su perfil o le choca y, en su turno, cuántas
+ * - **Grupo** (`mode = group`): sus datos, quién lo tiene, si está fuera de su experiencia académica o le choca y, en su turno, cuántas
  *   horas llevaría. Si es su turno y el grupo está libre, elige el salón entre los elegibles (SelectionRoomOptionsQuery,
  *   SEL-01 a SEL-04) en las pestañas Lista y Mapa y lo toma (PickSelectionGroup); si no queda ningún salón elegible lo
  *   toma sin salón. En el Mapa va `scheduling::components.map-picker` en modo «elegir» si ya existe (tarea 1.33, Task

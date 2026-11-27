@@ -294,13 +294,14 @@ it('un csv que no es la relación da un error claro y no cae al lector xlsx', fu
         ->assertFailed();
 });
 
-it('handleMany sin importación rechaza la carga en borrador y con importación rechaza la publicada', function () {
+it('handleMany sin importación rechaza la carga cerrada (en borrador ya se acepta, 1.62) y con importación rechaza la publicada', function () {
     ($this->import)([relationLine('AID-2501', 'C', '9 - 10', 1, 5, '', 30)]);
     $group = Group::query()->sole();
     $rooms = $group->sessions->mapWithKeys(fn ($session): array => [$session->id => $this->room])->all();
     $assign = app(AssignSessionRoom::class);
 
-    $this->load->update(['status' => LoadStatus::Draft]);
+    // Desde 1.62 el salón se pone también con la carga en borrador; una carga cerrada sigue sin aceptarlo fuera de la importación.
+    $this->load->update(['status' => LoadStatus::Closed]);
     expect(fn () => $assign->handleMany($group, $rooms, $this->actor, importing: false))->toThrow(ValidationException::class);
 
     $this->load->update(['status' => LoadStatus::Published]);

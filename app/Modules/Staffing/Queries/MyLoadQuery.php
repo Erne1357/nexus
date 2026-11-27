@@ -51,7 +51,7 @@ final class MyLoadQuery
 
     /**
      * @return array{
-     *     groups: list<array{id: string, code: string, subject_name: string, campus_code: string, schedule: list<array{days: string, time: string}>}>,
+     *     groups: list<array{id: string, code: string, subject_code: string, subject_name: string, campus_code: string, hours: int, schedule: list<array{days: string, time: string}>}>,
      *     home: ?string,
      *     travel_minutes: int,
      *     days: array<int, array{name: string, short: string, hours: int, blocks: list<array<string, mixed>>}>,
@@ -130,8 +130,11 @@ final class MyLoadQuery
             'groups' => array_map(fn (array $group): array => [
                 'id' => $group['id'],
                 'code' => $group['code'],
+                'subject_code' => $group['subject_code'],
                 'subject_name' => $group['subject_name'],
                 'campus_code' => $group['campus_code'],
+                'hours' => $group['hours'],
+                'counts_teacher_hours' => $group['counts_teacher_hours'] ?? true,
                 'schedule' => $group['schedule'],
             ], $groups),
             'days' => $days,

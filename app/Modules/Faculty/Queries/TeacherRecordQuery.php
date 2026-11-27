@@ -212,7 +212,7 @@ final class TeacherRecordQuery
     }
 
     /**
-     * El perfil del docente (S17, supuesto por confirmar): las materias que puede dar, por clave, con su nivel y el
+     * La experiencia académica del docente (S17, supuesto por confirmar): las materias que puede dar, por clave, con su nivel y el
      * departamento de la materia (aunque esté borrado), quién la declaró y `taught_count`, cuántos grupos de ella ha
      * dado (el historial). Las preferentes primero, luego por clave; sin las quitadas.
      *
@@ -291,7 +291,7 @@ final class TeacherRecordQuery
     }
 
     /**
-     * Las materias que se pueden declarar en el perfil: activas, de los departamentos dados (null es todos; un
+     * Las materias que se pueden declarar en la experiencia académica: activas, de los departamentos dados (null es todos; un
      * arreglo vacío, ninguno), buscadas por clave o nombre, hasta `$limit`.
      *
      * @param  list<string>|null  $departments
@@ -314,7 +314,7 @@ final class TeacherRecordQuery
     }
 
     /**
-     * Una materia del perfil del docente, sin quitar; el id llega del navegador.
+     * Una materia de la experiencia académica del docente, sin quitar; el id llega del navegador.
      *
      * @throws ModelNotFoundException<TeacherSubjectQualification>
      */

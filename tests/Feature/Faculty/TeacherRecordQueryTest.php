@@ -108,8 +108,8 @@ it('lee con pocas consultas', function () {
     expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(6);
 });
 
-describe('perfil, horas fuera del ITCJ e historial', function () {
-    it('el perfil trae las materias con su departamento, preferentes primero y luego por clave, sin las quitadas', function () {
+describe('experiencia académica, horas fuera del ITCJ e historial', function () {
+    it('la experiencia académica trae las materias con su departamento, preferentes primero y luego por clave, sin las quitadas', function () {
         $b = Subject::factory()->create(['code' => 'SCD-2', 'department_id' => $this->sc->id]);
         $a = Subject::factory()->create(['code' => 'SCD-1', 'department_id' => $this->sc->id]);
         $gone = Subject::factory()->create(['code' => 'SCD-0', 'department_id' => $this->sc->id]);
@@ -192,7 +192,7 @@ describe('perfil, horas fuera del ITCJ e historial', function () {
             ->and($query->qualifiableSubjects([], '')->all())->toBe([]);
     });
 
-    it('busca un perfil y unas horas del docente por id, y no los de otro', function () {
+    it('busca una experiencia académica y unas horas del docente por id, y no los de otro', function () {
         $query = app(TeacherRecordQuery::class);
         $qualification = TeacherSubjectQualification::factory()->for($this->ana)->create();
         $load = TeacherExternalLoad::factory()->for($this->ana)->create();

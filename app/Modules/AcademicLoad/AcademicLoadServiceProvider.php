@@ -29,6 +29,7 @@ use App\Modules\AcademicLoad\Exports\PublishedExport;
 use App\Modules\AcademicLoad\Listeners\BlockDepartmentDeletionWithLoads;
 use App\Modules\AcademicLoad\Listeners\BlockReviewReopeningAfterDraft;
 use App\Modules\AcademicLoad\Listeners\CreateLoadsOnTermOpened;
+use App\Modules\AcademicLoad\Listeners\ForgetLoadStagesOnTransition;
 use App\Modules\AcademicLoad\Listeners\NotifyAffectedOnRepublication;
 use App\Modules\AcademicLoad\Listeners\NotifyCoordinatorsOnProposalReturned;
 use App\Modules\AcademicLoad\Listeners\NotifyDepartmentsOnProposalSubmitted;
@@ -53,6 +54,7 @@ use App\Modules\AcademicLoad\Policies\ForecastEvaluationPolicy;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
 use App\Modules\AcademicLoad\Queries\DemandBoard;
 use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
+use App\Modules\AcademicLoad\Queries\LoadStagesQuery;
 use App\Modules\AcademicLoad\Queries\ReanalysisAvailabilityQuery;
 use App\Modules\AcademicLoad\Queries\ReanalysisChangesQuery;
 use App\Modules\AcademicLoad\Queries\ReanalysisCycleQuery;
@@ -63,6 +65,7 @@ use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Events\LoadStatusesRequested;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\LoadStages;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
 use App\Modules\Core\Demo\DemoStep;
@@ -126,6 +129,16 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         return AgreementSettings::definitions();
     }
 
+    /**
+     * Las etapas de la carga del jefe y del JPD, que Core usa para sus pantallas de la carga (MN-06).
+     */
+    public function register(): void
+    {
+        parent::register();
+
+        $this->app->bind(LoadStages::class, LoadStagesQuery::class);
+    }
+
     public function boot(): void
     {
         parent::boot();
@@ -143,6 +156,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(DemandForecastsComputed::class, NotifyReanalysisAvailableOnForecastsComputed::class);
         Event::listen(LoadTransitioned::class, RecordGroupHistoryOnPublication::class);
         Event::listen(LoadTransitioned::class, NotifyAffectedOnRepublication::class);
+        Event::listen(LoadTransitioned::class, ForgetLoadStagesOnTransition::class);
 
         RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by(PublishedThrottle::who($request)));
 

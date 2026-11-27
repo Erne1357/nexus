@@ -52,6 +52,19 @@
         @enderror
     @endforeach
 
+    @if ($inboxLinks !== [])
+        <x-alert icon="o-arrow-right-circle" class="alert-info alert-soft mb-4 text-sm" data-testid="review-inbox-suggestion">
+            <span>
+                Con tus catálogos validados, el siguiente paso es validar la propuesta de carrera en la Bandeja del departamento. Aplica aunque algunos grupos ya tengan docente por elección previa: aceptar la propuesta no los cambia.
+            </span>
+            <x-slot:actions>
+                @foreach ($inboxLinks as $link)
+                    <x-button :label="count($inboxLinks) > 1 ? 'Ir a la Bandeja · '.$link['modality'] : 'Ir a la Bandeja'" :link="$link['url']" class="btn-primary btn-sm" data-testid="review-inbox-link" />
+                @endforeach
+            </x-slot:actions>
+        </x-alert>
+    @endif
+
     @if ($empty !== null)
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="review-empty">
             <x-icon name="o-clipboard-document-check" class="mx-auto mb-2 h-8 w-8 text-neutral" aria-hidden="true" />

@@ -29,7 +29,7 @@ function rankedIds(array $candidates, ?RankingWeights $weights = null): array
     return array_map(fn (RankedCandidate $r) => $r->candidate->teacherId, (new RankingScorer($weights ?? new RankingWeights))->rank($candidates));
 }
 
-it('Ranking docente: el puntaje suma historial, perfil y evaluación con los pesos', function () {
+it('Ranking docente: el puntaje suma historial, experiencia académica y evaluación con los pesos', function () {
     $ranked = (new RankingScorer(new RankingWeights))->rank([
         rankingCandidate('a', ['historyCount' => 3, 'qualification' => QualificationLevel::Preferente, 'evaluation' => 4.5]),
         rankingCandidate('b', ['historyCount' => 2, 'qualification' => QualificationLevel::Apto, 'evaluation' => 3.33]),
@@ -48,7 +48,7 @@ it('Ranking docente: respeta pesos propios', function () {
     expect($ranked[0]->score)->toBe(4.5);
 });
 
-it('Ranking docente: el perfil preferente reemplaza al apto, no se suman', function () {
+it('Ranking docente: la experiencia académica preferente reemplaza al apto, no se suman', function () {
     $ranked = (new RankingScorer(new RankingWeights))->rank([rankingCandidate('a', ['qualification' => QualificationLevel::Preferente, 'evaluation' => null])]);
 
     expect($ranked[0]->score)->toBe(3.0);

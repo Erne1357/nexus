@@ -10,6 +10,10 @@ use App\Modules\Faculty\Models\Teacher;
  * conoce los grupos ni el horario, que están a su derecha en el mapa de módulos: liga NoTeacherWeeklyLoad y Staffing
  * lo reemplaza en su register().
  *
+ * Cada semana de Nexus trae además `departments` (tarea 1.59): los departamentos de adscripción del docente (`home`)
+ * y los demás donde tiene grupos, cada uno con `name`, `head` (jefe vigente o nulo), `tone`, `hours` y `groups`;
+ * vacío si la semana viene del SII, que no conoce el departamento del grupo. Cada bloque de `days` lleva `tone`.
+ *
  * `current` y `next` son nulos si no hay periodo o grupos; `upcoming` es el nombre del periodo que sigue al en curso
  * aunque no tenga grupos todavía (para el estado vacío); `base_hours` son las horas base de hoy.
  *
