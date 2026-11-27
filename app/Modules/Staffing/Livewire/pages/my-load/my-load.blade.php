@@ -41,9 +41,12 @@
         <div class="grid grid-cols-2 overflow-hidden rounded-box border border-base-300 bg-base-100 md:flex md:items-stretch" role="group" aria-label="Tus horas" data-testid="my-load-hours">
             {{-- HC-08 (tarea 1.50): el tope es el de su banda de horas frente a grupo (+2, art. 147), el de honorarios o lo que autorizó su casilla. --}}
             <div class="min-w-0 px-4 py-3 md:flex-1">
-                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $h['administrative'] !== null ? 'Tope con tu plaza administrativa' : ($h['honorarios_cap'] !== null ? 'Tope de honorarios' : ($h['limit'] > $h['band_limit'] ? 'Autorizadas' : 'Tope de tu banda')) }}</span>
+                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $h['no_plaza'] ? 'Sin plaza docente' : ($h['administrative'] !== null ? 'Tope con tu plaza administrativa' : ($h['honorarios_cap'] !== null ? 'Tope de honorarios' : ($h['limit'] > $h['band_limit'] ? 'Autorizadas' : 'Tope de tu banda'))) }}</span>
                 <b class="block font-mono text-3xl leading-tight" data-testid="hours-base">{{ $h['limit'] }}<small class="text-sm font-normal text-neutral"> h</small></b>
-                @if ($h['administrative'] !== null)
+                @if ($h['no_plaza'])
+                    {{-- PL-04 (tarea 1.83): sin plaza docente no hay banda; todas sus horas son de honorarios. --}}
+                    <span class="text-sm text-neutral" data-testid="hours-band">{{ \App\Modules\Scheduling\Rules\TeacherHourLimit::NO_PLAZA_LABEL }}</span>
+                @elseif ($h['administrative'] !== null)
                     <span class="text-sm text-neutral" data-testid="hours-band">{{ $h['administrative_cap'] }} h − plaza administrativa <span class="font-mono">{{ $h['administrative'] }}</span> h</span>
                 @elseif ($h['honorarios_cap'] === null)
                     <span class="text-sm text-neutral" data-testid="hours-band">frente a grupo <span class="font-mono">{{ $h['teaching'] }}</span> h ({{ $h['band_from'] }} a {{ $h['band_to'] }}){{ $h['tolerance'] > 0 ? " + {$h['tolerance']} de tolerancia" : '' }}{{ $h['limit'] > $h['band_limit'] ? ' · con tu casilla' : '' }}</span>
@@ -71,7 +74,7 @@
             <div @class(['min-w-0 px-4 py-3 max-md:border-t max-md:border-base-300 md:flex-1', 'bg-success/10 text-success' => $h['remaining'] >= 0, 'bg-warning/10 text-warning' => $h['remaining'] < 0])>
                 <span class="text-[11.5px] font-medium uppercase tracking-[0.09em]">Restantes</span>
                 <b class="block font-mono text-3xl leading-tight" data-testid="hours-remaining">{{ $h['remaining'] }}<small class="text-sm font-normal"> h</small></b>
-                @if ($h['remaining'] < 0)
+                @if ($h['remaining'] < 0 && ! $h['no_plaza'])
                     <span class="text-sm">{{ $h['administrative'] !== null ? 'Pasas del tope de tu plaza' : 'Pasas de tu banda' }}</span>
                 @endif
             </div>

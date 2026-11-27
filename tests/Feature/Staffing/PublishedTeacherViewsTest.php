@@ -13,6 +13,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
@@ -179,6 +180,24 @@ function publishedViewMoveTo(Group $group, Room $room): void
 }
 
 describe('Mi carga', function () {
+    it('PL-04: sin plaza docente «Mi carga» dice que sus horas son de honorarios y no pinta la banda; con plaza sigue con su banda', function () {
+        publishedViewGroup($this->c2, '1A', 'Fundamentos de Programación', $this->me, [[1, '07:00', '09:00']], $this->a101);
+
+        $page = Livewire::actingAs($this->user)->test('staffing::pages.my-load')
+            ->assertSeeText('Sin plaza docente · sus horas son de honorarios')
+            ->assertSeeText('4 h extra · honorarios por autorizar (jefe de depto)')
+            ->assertDontSeeText('(0 a 2)')
+            ->assertDontSeeText('Pasas de tu banda');
+
+        expect(publishedViewText($page, '[data-testid="hours-band"]'))->not->toContain('frente a grupo');
+
+        TeacherPosition::factory()->for($this->me)->tiempoCompleto()->create();
+
+        Livewire::actingAs($this->user)->test('staffing::pages.my-load')
+            ->assertDontSeeText('Sin plaza docente')
+            ->assertSeeText('frente a grupo');
+    });
+
     it('con la carga publicada muestra lo publicado aunque después cambien en lo vivo el salón o el docente', function () {
         $basics = publishedViewGroup($this->c2, '1A', 'Fundamentos de Programación', $this->me, [[1, '07:00', '09:00']], $this->a101);
         $calculus = publishedViewGroup($this->c2, '1B', 'Cálculo Diferencial', $this->me, [[2, '07:00', '09:00']], $this->a101);
