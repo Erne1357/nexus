@@ -7,6 +7,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Support\StaffPhotos;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -153,4 +154,14 @@ it('CO-03: otro jefe no ve la pantalla ni entra a la ruta', function () {
 
 it('CO-03: la ruta de Comunicación la ve su jefa y aparece en su menú', function () {
     $this->actingAs($this->head)->get(route('communication.staff-photos'))->assertOk()->assertSee('Fotos del personal');
+});
+
+it('CO-03: con el montaje roto, mostrar la miniatura del personal no da 500: cuenta como sin foto', function () {
+    $this->ana->forceFill(['photo_path' => "{$this->ana->id}/20270101000000.jpg", 'photo_updated_at' => now()])->save();
+    throwingDisk('staff_photos', ['exists']);
+    $photos = app(StaffPhotos::class);
+
+    expect($photos->thumbDataUrl($this->ana))->toBeNull()
+        ->and($photos->stream($this->ana))->toBeNull()
+        ->and($photos->stream($this->ana, true))->toBeNull();
 });

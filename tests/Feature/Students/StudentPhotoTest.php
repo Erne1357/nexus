@@ -292,3 +292,15 @@ it('CO-06: en un lote, una foto que el disco no deja guardar es «no guardada» 
         ->and($batch->fresh()->applied)->toBe(0)
         ->and(PhotoOutcome::NoGuardada->label())->toBe('No se pudo guardar');
 });
+
+it('CO-06: con el montaje roto, mostrar la foto de la credencial no da 500: cuenta como sin foto', function () {
+    throwingDisk('student_photos', ['exists', 'directories']);
+    $photos = app(StudentPhotos::class);
+
+    expect($photos->locate('21111182'))->toBeNull()
+        ->and($photos->read('21111182'))->toBeNull()
+        ->and($photos->version('21111182'))->toBeNull()
+        ->and($photos->modifiedAt('21111182'))->toBeNull()
+        ->and($photos->stream('21111182', []))->toBeNull()
+        ->and($photos->controlNumbersWithPhoto())->toBe([]);
+});
