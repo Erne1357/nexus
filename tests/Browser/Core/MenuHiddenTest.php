@@ -40,13 +40,13 @@ const MENU_WHY_TIP = '(() => { const t = document.querySelector("[data-menu-why-
 it('el admin ve lo oculto con su insignia y su motivo, y el aviso en la pantalla', function () {
     $why = 'Oculta para los demás: No hay carga en curso en Ene-Jun 2027';
 
-    // En Inicio, la columna cerrada es Académico: oculta entera por un solo motivo, lo dice junto a su nombre.
+    // En Inicio no hay columna (MN-07): con el menú abierto, Académico, oculta entera por un solo motivo, lo dice junto a su nombre.
     $page = signInToHiddenMenu('admin')
+        ->click('@hare')
         ->assertSeeIn('[data-menu-area="academico"] [data-menu-flip="name"] [data-menu-badge]', 'Oculta');
 
     // En la pantalla oculta, el aviso arriba del contenido.
-    $page->click('@hare')
-        ->click('a[data-label="Avance del cierre"]')
+    $page->click('a[data-label="Avance del cierre"]')
         ->assertPathIs('/staffing/closing-board')
         ->assertSeeIn('#nexus-content [role="note"]', 'Oculta para los demás. No hay carga en curso en Ene-Jun 2027. Tú la ves porque administras Nexus; en el menú de los demás no aparece.');
 
@@ -109,9 +109,9 @@ it('en la hoja del celular, el admin lee el motivo bajo el área, el grupo y la 
 
 it('el coordinador no ve nada de la carga ni ninguna marca: de Carga académica, solo Horarios publicados', function () {
     signInToHiddenMenu('19110001')
+        ->click('@hare')
         ->assertVisible('a[data-label="Horarios publicados"]')
         ->assertMissing('a[data-label="Propuesta de carrera"]')
-        ->click('@hare')
         ->assertScript('[...document.querySelectorAll(\'[data-menu-area="carga_academica"] a[data-menu-entry]\')].map((a) => a.dataset.label).join()', 'Horarios publicados')
         ->assertNotPresent('[data-menu-badge]')
         ->assertNotPresent('[data-why]')
