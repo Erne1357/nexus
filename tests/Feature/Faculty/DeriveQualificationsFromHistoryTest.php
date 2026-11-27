@@ -47,7 +47,7 @@ it('D-02: crea Apto con source history para las materias de los últimos 6 semes
         ->and($rows->pluck('subject_id')->contains($old->id))->toBeFalse();
 });
 
-it('D-02: no toca las materias de perfil manuales', function () {
+it('D-02: no toca las materias de experiencia académica manuales', function () {
     $subject = Subject::factory()->create();
     taught($this->teacher, $subject, '20263');
     $manual = TeacherSubjectQualification::factory()->preferente()->create([

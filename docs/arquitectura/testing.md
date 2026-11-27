@@ -167,7 +167,7 @@ El `MassiveSeeder` siembra unos 12 000 alumnos y 600 docentes, más los datos de
   - MM: en el masivo, todo validado; en el `DemoSeeder`, validado en parte, reabierto (docentes y carreras) y con los salones en revisión.
 
   Hay observaciones de todos los tipos y recordatorio a los departamentos con algo pendiente (CEA en el masivo, MM en el `DemoSeeder`).
-- **Captura docente en 20271:** alrededor de 25 % sin disponibilidad, 15 % sin perfil y 30 % con horas fuera del ITCJ.
+- **Captura docente en 20271:** alrededor de 25 % sin disponibilidad, 15 % sin experiencia académica y 30 % con horas fuera del ITCJ.
 - **Propuestas, bandejas y avisos** de las carreras de C1 y C2, en distintos estados. Con los catálogos de CB, SC, II, EE y MM validados, el masivo acepta más partes (regresa una de cada 6 y deja pendiente una de cada 5; el `DemoSeeder`, una de cada 4 y una de cada 3).
 
 Con qué usuario revisar cada pantalla (contraseña `password`). Los jefes trabajan en todo el Tec y eligen el campus en cada pantalla (`?campus=<código>`; la credencial ya no lo elige, #415):

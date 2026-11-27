@@ -57,7 +57,7 @@ function captureQualification(User $actor): void
     app(SetQualification::class)->handle(test()->teacher, test()->subject, QualificationLevel::Apto, $actor);
 }
 
-it('el perfil que declara el jefe de su departamento inicia la revisión de docentes', function () {
+it('la experiencia académica que declara el jefe de su departamento inicia la revisión de docentes', function () {
     expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::Pending);
 
     captureQualification($this->jefe);

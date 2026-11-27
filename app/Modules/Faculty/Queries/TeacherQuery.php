@@ -257,7 +257,7 @@ final class TeacherQuery
 
     /**
      * Los departamentos en los que puede `$permission` (uno por unidad), para filtrar lo que no es un docente, como
-     * las materias del perfil: null si los cubre todos, es decir, si cubre un objetivo sin unidad (el admin, o un
+     * las materias de la experiencia académica: null si los cubre todos, es decir, si cubre un objetivo sin unidad (el admin, o un
      * nombramiento sin unidad); si no, los ids de los departamentos, también los borrados, de su unidad o de su
      * subárbol (Actor::constrain()): a un jefe, el suyo; a la Subdirección, los de Subdirección Académica.
      *

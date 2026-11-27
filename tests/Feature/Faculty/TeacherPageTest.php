@@ -33,7 +33,7 @@ use Spatie\Activitylog\Models\Activity;
 /*
 | Ficha del docente (`/faculty/teachers/{teacher}`, faculty::pages.teacher; spec 4.3 y S8). Cinco pestañas: Datos
 | (datos, asignaciones: quitar y hacer principal), Plazas (agregar, editar y quitar), Disponibilidad (de solo
-| lectura, con el enlace al editor), Perfil e Historial. Cada quien ve y cambia a los docentes de su alcance
+| lectura, con el enlace al editor), Experiencia académica e Historial. Cada quien ve y cambia a los docentes de su alcance
 | (TeacherPolicy); cada método vuelve a autorizar. «Restablecer contraseña» (por enlace) y la invitación del admin son
 | solo del administrador (UserPolicy).
 */
@@ -77,7 +77,7 @@ describe('ficha', function () {
     it('muestra encabezado, horas base del periodo y las cinco pestañas', function () {
         $this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))
             ->assertOk()
-            ->assertSeeInOrder(['Ana Pérez', '1000001', 'Horas base', 'Ene-Jun 2027', '40', 'Datos', 'Plazas', 'Disponibilidad', 'Perfil', 'Historial']);
+            ->assertSeeInOrder(['Ana Pérez', '1000001', 'Horas base', 'Ene-Jun 2027', '40', 'Datos', 'Plazas', 'Disponibilidad', 'Experiencia académica', 'Historial']);
     });
 
     it('en Datos muestra sus datos y sus asignaciones con la principal primero', function () {
@@ -596,18 +596,18 @@ describe('revisión de la ficha', function () {
     });
 });
 
-describe('perfil', function () {
+describe('experiencia académica', function () {
     beforeEach(function () {
         $this->redes = Subject::factory()->create(['code' => 'SCC-1', 'name' => 'Redes de computadoras', 'department_id' => $this->sc->id]);
         $this->calculo = Subject::factory()->create(['code' => 'ACF-1', 'name' => 'Cálculo diferencial', 'department_id' => $this->cb->id]);
     });
 
-    it('S17: lista las materias del perfil con su nivel y cuántas veces las impartió', function () {
+    it('S17: lista las materias de la experiencia académica con su nivel y cuántas veces las impartió', function () {
         TeacherSubjectQualification::factory()->for($this->ana)->for($this->redes)->preferente()->create();
         TeacherSubjectHistory::factory()->for($this->ana)->for($this->redes)->count(2)->create();
 
         teacherRecord($this->admin, $this->ana)->set('tab', 'perfil')
-            ->assertSeeInOrder(['Perfil', 'SCC-1', 'Redes de computadoras', 'Preferente', 'veces'])
+            ->assertSeeInOrder(['SCC-1', 'Redes de computadoras', 'Preferente', 'veces'])
             ->assertSeeHtml('>2</span> veces')
             ->assertSeeHtml('data-testid="qualifications"');
     });
@@ -637,7 +637,7 @@ describe('perfil', function () {
         expect(TeacherSubjectQualification::count())->toBe(0);
     });
 
-    it('lee el perfil de 10 materias sin una consulta por materia', function () {
+    it('lee la experiencia académica de 10 materias sin una consulta por materia', function () {
         foreach (range(1, 10) as $i) {
             TeacherSubjectQualification::factory()->for($this->ana)->for(Subject::factory()->create(['department_id' => $this->sc->id]))->create();
         }
@@ -688,10 +688,10 @@ describe('perfil', function () {
         $page->call('removeQualification', $qualification->id);
 
         expect($qualification->fresh()->trashed())->toBeTrue()
-            ->and(lastToastOf($page))->title->toBe('Materia quitada del perfil');
+            ->and(lastToastOf($page))->title->toBe('Materia quitada de la experiencia académica');
     });
 
-    it('el jefe de SC no edita ni quita una materia de CB del perfil aunque llame directo', function () {
+    it('el jefe de SC no edita ni quita una materia de CB de la experiencia académica aunque llame directo', function () {
         $qualification = TeacherSubjectQualification::factory()->for($this->ana)->for($this->calculo)->apto()->create();
 
         teacherRecord($this->jefe, $this->ana)->call('editQualification', $qualification->id)->assertForbidden();
@@ -700,7 +700,7 @@ describe('perfil', function () {
         expect($qualification->fresh()->trashed())->toBeFalse();
     });
 
-    it('no toca el perfil de otro docente ni uno que no es uuid', function () {
+    it('no toca la experiencia académica de otro docente ni uno que no es uuid', function () {
         $foreign = TeacherSubjectQualification::factory()->for($this->beto)->for($this->redes)->create();
 
         teacherRecord($this->admin, $this->ana)->call('removeQualification', $foreign->id)->assertNotFound();

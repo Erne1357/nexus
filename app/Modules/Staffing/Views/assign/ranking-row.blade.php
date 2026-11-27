@@ -28,7 +28,7 @@
             @foreach ([
                 ['Base', $candidate->baseHours, true],
                 ['Veces', $candidate->historyCount, true],
-                ['Perfil', null, false],
+                ['Experiencia', null, false],
                 ['Eval.', $candidate->evaluationLabel() ?? '—', true],
                 ['Puntaje', $candidate->scoreLabel(), true],
                 ['Quedan', $candidate->remainingLabel() ?? '—', true],

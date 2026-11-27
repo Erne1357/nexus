@@ -1,6 +1,6 @@
 {{--
     Las etiquetas de un docente en el ranking: su plaza (PositionTag, en Mono) y «otro depto.» si viene de otro
-    departamento con perfil preferente.
+    departamento con experiencia académica preferente.
 --}}
 <span class="badge badge-sm badge-neutral badge-soft whitespace-nowrap font-mono font-semibold" title="Plaza">{{ $positions }}</span>
 @if ($fromOther)

@@ -2,7 +2,7 @@
     La ficha de un grupo en su renglón de hora (maqueta A, «gc»): clave · grupo, el tipo de espacio y el cupo; la
     materia en dos renglones; quién lo tiene («Libre», «Tú» o su nombre) con el salón (o «Sin salón») y los días como
     marcas L M Mi J V. Libre con borde punteado; tomado en gris; tuyo en `info`; si te choca, rayado. Para el docente,
-    «Fuera de tu perfil» y «Choca con tu …»; para quien asigna, «Asignar a…». Toda la ficha abre el drawer del grupo.
+    «Fuera de tu experiencia académica» y «Choca con tu …»; para quien asigna, «Asignar a…». Toda la ficha abre el drawer del grupo.
     Espera $card, $days (los del horario) y $inQueue (si quien ve está en la cola).
 --}}
 @use('App\Modules\Scheduling\Validation\Minutes')
@@ -70,7 +70,7 @@
     @if ($outOfProfile || $state === 'clash')
         <span class="flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px] font-semibold">
             @if ($outOfProfile)
-                <span class="inline-flex items-center gap-1 text-warning"><x-icon name="o-exclamation-triangle" class="h-3.5 w-3.5" aria-hidden="true" />Fuera de tu perfil</span>
+                <span class="inline-flex items-center gap-1 text-warning"><x-icon name="o-exclamation-triangle" class="h-3.5 w-3.5" aria-hidden="true" />Fuera de tu experiencia académica</span>
             @endif
             @if ($state === 'clash')
                 <span class="inline-flex items-center gap-1 text-error"><x-icon name="o-x-circle" class="h-3.5 w-3.5" aria-hidden="true" />Choca con tu {{ $card['clash_with'] }}</span>
