@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\DB;
  * `seleccion_materias` (el inscrito `I` primero) y, solo para los que esa no cubre, el de `historia_alumno`; así un
  * renglón se cuenta una vez. Cada fuente y los candidatos del kárdex se normalizan una vez en tablas temporales con
  * índice (las de `sii_archivo` no tienen), y el trabajo corre por periodo, con una transacción corta por periodo para no
- * sostener un candado largo sobre `kardex_records`. Deja UNA entrada de bitácora al final con los conteos por fuente y
- * periodo. Con `$dryRun` calcula los mismos conteos y no escribe ni deja bitácora. Idempotente: solo toca renglones sin
+ * sostener un candado largo sobre `kardex_records`. Deja una entrada de bitácora `backfilled` por periodo con escritura, dentro
+ * de la transacción de ese periodo (fuente y conteo), así un fallo a medio camino no deja periodos escritos sin bitácora.
+ * Con `$dryRun` calcula los mismos conteos y no escribe ni deja bitácora. Idempotente: solo toca renglones sin
  * grupo. `$term` limita la corrida a un periodo.
  */
 final class BackfillKardexGroups
@@ -64,12 +65,23 @@ final class BackfillKardexGroups
                         DB::insert("insert into kg_fill (id, grupo, source) select c.id, s.grupo, ? from kg_cand c join kg_src_{$table} s on s.term = c.term and s.ctl = c.ctl and s.subj = c.subj where c.term = ? and not exists (select 1 from kg_fill f where f.id = c.id)", [$table, $row->term]);
                     }
 
+                    $counts = DB::select('select source, count(*) as n from kg_fill group by source');
+                    $counts = array_map(fn ($c) => (array) $c, $counts);
+
                     foreach (DB::select('select source, count(*) as n from kg_fill group by source') as $count) {
                         $filled[$count->source][$row->term] = (int) $count->n;
                     }
 
                     if (! $dryRun) {
                         DB::update('update kardex_records kr set sii_group_code = f.grupo, updated_at = now() from kg_fill f where kr.id = f.id and kr.sii_group_code is null');
+
+                        $periodTotal = array_sum(array_column($counts, 'n'));
+                        if ($periodTotal > 0) {
+                            activity()
+                                ->event('backfilled')
+                                ->withProperties(['term' => $row->term, 'filled' => array_map(fn ($n) => (int) $n, array_column($counts, 'n', 'source')), 'total' => $periodTotal])
+                                ->log("Se rellenó el grupo del SII en {$periodTotal} renglones del kárdex (periodo {$row->term}).");
+                        }
                     }
                 });
             }
@@ -81,13 +93,6 @@ final class BackfillKardexGroups
             unset($terms);
 
             $total = array_sum(array_map('array_sum', $filled));
-
-            if ($total > 0 && ! $dryRun) {
-                activity()
-                    ->event('backfilled')
-                    ->withProperties(['filled' => $filled, 'total' => $total])
-                    ->log("Se rellenó el grupo del SII en {$total} renglones del kárdex.");
-            }
 
             $pending = (int) DB::scalar('select count(*) from kg_cand') - ($dryRun ? $total : 0);
             if (! $dryRun) {
