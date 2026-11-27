@@ -971,6 +971,7 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 - **Uso:** como máscara CSS, para que tome el color del lugar: blanca sobre el cuadro rojo.
 - **Animación:** se mueve completa. Las orejas se animarían por separado solo con un SVG que las tenga como piezas aparte.
 - Es la única marca: no hay otro logo en la banda.
+- **Ícono de la pestaña (tarea 1.79):** la liebre blanca en el cuadro rojo Tec, con las esquinas apenas redondeadas, en `public/favicon.ico` (16, 32 y 48 px); `public/apple-touch-icon.png` (180 px) va a sangre, porque el celular redondea solo. Los enlaza `core::favicon` en el `<head>` de cada layout y se regeneran con `php .github/scripts/favicon-build.php` (en el contenedor) desde `liebre-512.png`.
 
 ### Pantalla de acceso
 El login G (tarea 1.17) con la credencial (tarea 1.23), elegidos con maquetas de impeccable (G y H). Es la única pantalla con identidad propia fuera del shell; las demás siguen el resto de este documento.
