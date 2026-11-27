@@ -55,10 +55,10 @@
                                 {{ match ($key) { 'prior' => 'Elección previa · ya traen sus grupos, sin turno', 'nd' => 'Sin datos · al final, por antigüedad en Nexus', default => $rows->first()['tier_label'] } }}
                                 <span class="font-mono">{{ $rows->count() }}</span>
                             </h3>
-                            <ol class="divide-y divide-base-300 overflow-hidden rounded-box border border-base-300">
+                            <ol class="divide-y divide-base-300 rounded-box border border-base-300 [&>li:first-child]:rounded-t-box [&>li:last-child]:rounded-b-box">
                                 @foreach ($rows as $row)
                                     @php($me = $teacher !== null && $row['teacher_id'] === $teacher->id)
-                                    <li wire:key="order-{{ $row['position'] }}-{{ $row['teacher_id'] }}" data-testid="{{ $row['prior'] ? 'order-row-prior-'.$row['teacher_id'] : 'order-row-'.$row['position'] }}" @class(['grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-2 gap-y-1 px-3 py-2.5', 'bg-info/10' => $me])>
+                                    <li wire:key="order-{{ $row['position'] }}-{{ $row['teacher_id'] }}" data-testid="{{ $row['prior'] ? 'order-row-prior-'.$row['teacher_id'] : 'order-row-'.$row['position'] }}" @class(['grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-2 gap-y-1 px-3 py-2.5 min-w-0', 'bg-info/10' => $me])>
                                         <span @class(['pt-0.5 text-end font-mono', 'font-semibold text-info' => $row['in_turn'], 'text-neutral' => ! $row['in_turn']])>{{ $row['prior'] ? '—' : $row['position'] }}</span>
                                         <div class="min-w-0 space-y-1">
                                             <div class="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
@@ -82,7 +82,7 @@
                                                     @if ($row['source'] === 'appended')
                                                         <span>Sin datos · no viene en el CSV{{ $row['hired_on'] ? ' · ingresó en '.substr($row['hired_on'], 0, 4) : '' }}</span>
                                                     @else
-                                                        <span class="whitespace-nowrap"><b class="text-base-content">{{ $row['plaza_tier_label'] }}</b>@if ($row['tier_label'] !== $row['plaza_tier_label']) → <b class="text-base-content">{{ $row['tier_label'] }}</b>@endif · {{ $row['failed_criteria'] > 0 ? $row['failed_criteria'].' '.($row['failed_criteria'] === 1 ? 'criterio' : 'criterios') : $row['base_hours'].' h en el CSV' }}</span>
+                                                        <span><b class="text-base-content">{{ $row['plaza_tier_label'] }}</b>@if ($row['tier_label'] !== $row['plaza_tier_label']) → <b class="text-base-content">{{ $row['tier_label'] }}</b>@endif · {{ $row['failed_criteria'] > 0 ? $row['failed_criteria'].' '.($row['failed_criteria'] === 1 ? 'criterio' : 'criterios') : $row['base_hours'].' h en el CSV' }}</span>
                                                         @if ($row['seniority'] !== null)
                                                             <span class="whitespace-nowrap"><span class="font-mono text-base-content">{{ $row['seniority'] }}</span> años</span>
                                                         @elseif ($row['hired_on'])
@@ -91,13 +91,11 @@
                                                     @endif
                                                 @endif
                                             </p>
-                                            @if ($row['criteria'] !== null)
-                                                <p class="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px]">
-                                                    @foreach ($criteria as $field => [$short, $long])
-                                                        <span class="inline-flex items-center gap-1">@include('staffing::offer.selection.criterion', ['value' => $row['criteria'][$field] ?? null, 'label' => $long, 'noData' => false]){{ $short }}</span>
-                                                    @endforeach
-                                                </p>
-                                            @endif
+                                            <p class="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px]">
+                                                @foreach ($criteria as $field => [$short, $long])
+                                                    <span class="inline-flex items-center gap-1">@include('staffing::offer.selection.criterion', ['value' => $row['criteria'][$field] ?? null, 'label' => $long, 'noData' => $row['criteria'] === null]){{ $short }}</span>
+                                                @endforeach
+                                            </p>
                                         </div>
                                     </li>
                                 @endforeach
