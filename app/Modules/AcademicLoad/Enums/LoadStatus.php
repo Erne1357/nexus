@@ -2,6 +2,7 @@
 
 namespace App\Modules\AcademicLoad\Enums;
 
+use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Enums\StatusTone;
 use App\Modules\Core\Models\ModalityProfile;
 
@@ -95,6 +96,28 @@ enum LoadStatus: string
             self::Approved => [self::Published, self::Adjusting, self::Reanalysis],
             self::Published => [self::Reanalysis, self::Adjusting],
             self::Reanalysis => [self::Closed, self::Published],
+        };
+    }
+
+    /**
+     * Las etapas del proceso en que está una carga en este estado (MN-06): las pantallas de esas etapas son las que ven y
+     * abren el jefe de departamento y el JPD (AcademicLoadVisibility::ROUTE_STAGES). Supuesto por confirmar, sobre los
+     * ejemplos del usuario (26 de noviembre de 2026): en borrador ya corre la orden de selección, así que el jefe asigna y ve
+     * cómo va la asignación; Salones y acuerdos acompañan a Horarios desde la propuesta. La propuesta sigue abierta en
+     * propuesta: la carga pasa a propuesta al aceptar la primera parte (AcceptProposalReview), y el jefe sigue aceptando las
+     * de las demás carreras y armando paralelos en la bandeja.
+     *
+     * @return list<Stage>
+     */
+    public function stages(): array
+    {
+        return match ($this) {
+            self::Draft => [Stage::Proposal, Stage::Scheduling, Stage::Staffing],
+            self::Proposed => [Stage::Proposal, Stage::Scheduling, Stage::Rooms, Stage::Staffing],
+            self::Staffing, self::Adjusting => [Stage::Scheduling, Stage::Rooms, Stage::Staffing, Stage::Closing],
+            self::Closed, self::Approved => [Stage::Closing, Stage::Publication],
+            self::Published => [Stage::Publication, Stage::Reanalysis],
+            self::Reanalysis => [Stage::Scheduling, Stage::Rooms, Stage::Staffing, Stage::Reanalysis, Stage::Publication],
         };
     }
 

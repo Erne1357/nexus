@@ -229,8 +229,13 @@ describe('menú y visibilidad', function () {
             ->and($labels(User::factory()->withRole(Role::Docente)->create()))->not->toContain('Carga actual');
     });
 
-    it('MN-05: con la carga oculta, la ruta responde 403 al jefe y el admin la sigue abriendo', function () {
+    it('MN-06: con la carga oculta, el jefe la sigue abriendo (es de todas las etapas) salvo que el admin apague las de su etapa; el admin siempre', function () {
         app(UpdateSetting::class)->handle(app(SettingRegistry::class)->get(AcademicLoadVisibility::SETTING), false);
+
+        $this->actingAs($this->jefe)->get(route('staffing.current-load'))->assertOk();
+
+        app(UpdateSetting::class)->handle(app(SettingRegistry::class)->get(AcademicLoadVisibility::HEADS_SETTING), false);
+        app(AcademicLoadVisibility::class)->forget();
 
         $this->actingAs($this->jefe)->get(route('staffing.current-load'))->assertForbidden();
         $this->actingAs(User::factory()->admin()->create())->get(route('staffing.current-load'))->assertOk();

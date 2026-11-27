@@ -32,8 +32,9 @@ use InvalidArgumentException;
  * Una pantalla hija que no va en el menú (la ficha de un alumno) se declara en `childRoutes` de la entrada
  * de su listado: así el menú y la banda la ubican en esa entrada.
  *
- * Las entradas del área Carga académica, además, solo las ve quien no la tiene oculta (MN-05, AcademicLoadVisibility):
- * con ella oculta, solo el admin.
+ * Las entradas del área Carga académica, además, solo las ve quien no tiene cerrada su pantalla (AcademicLoadVisibility::
+ * closesFor): con la carga oculta, solo el admin (MN-05) y el jefe y el JPD en las de su etapa; con ella visible, el jefe
+ * y el JPD también solo las de su etapa (MN-06).
  */
 final readonly class NavigationItem
 {
@@ -78,8 +79,8 @@ final readonly class NavigationItem
     }
 
     /**
-     * Si el usuario del contexto tiene permiso de verla y, si es de Carga académica, no la tiene oculta (MN-05); si está
-     * disponible en el periodo lo decide Navigation con `whyUnavailable`.
+     * Si el usuario del contexto tiene permiso de verla y, si es de Carga académica, no tiene cerrada su pantalla (MN-05,
+     * MN-06); si está disponible en el periodo lo decide Navigation con `whyUnavailable`.
      */
     public function isVisibleTo(Actor $context): bool
     {
@@ -89,7 +90,7 @@ final readonly class NavigationItem
             return false;
         }
 
-        if ($this->area === NavigationArea::CargaAcademica && app(AcademicLoadVisibility::class)->hiddenFrom($context)) {
+        if ($this->area === NavigationArea::CargaAcademica && app(AcademicLoadVisibility::class)->closesFor($context, $this->route)) {
             return false;
         }
 

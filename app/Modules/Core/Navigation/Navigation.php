@@ -112,7 +112,8 @@ final readonly class Navigation
      * en el periodo activo, solo quien tiene `core.navigation.view_unavailable`, con el motivo en
      * MenuEntry::$hiddenReason (MN-02). Cada condición de disponibilidad se evalúa una sola vez por llamada,
      * aunque la compartan varias entradas, y nunca la de una entrada que el usuario no puede ver. Si el admin ocultó la
-     * carga académica (MN-05), quien aún ve sus entradas (el admin) las ve con ese motivo, que gana al del periodo.
+     * carga académica (MN-05), el admin, que aún ve sus entradas, las ve con ese motivo, que gana al del periodo; el jefe y
+     * el JPD que ven las de su etapa (MN-06) no llevan esa marca.
      *
      * @return list<array{area: NavigationArea, headings: bool, groups: non-empty-list<array{group: ?NavigationGroup, entries: non-empty-list<MenuEntry>}>}>
      */
@@ -121,7 +122,7 @@ final readonly class Navigation
         /** @var SplObjectStorage<Closure, ?string> $reasons */
         $reasons = new SplObjectStorage;
         $seesUnavailable = null;
-        $loadHidden = null;
+        $loadMarked = null;
         $byArea = [];
 
         foreach ($this->menuOrder as $item) {
@@ -129,7 +130,7 @@ final readonly class Navigation
                 continue;
             }
 
-            if ($item->area === NavigationArea::CargaAcademica && ($loadHidden ??= app(AcademicLoadVisibility::class)->isHidden())) {
+            if ($item->area === NavigationArea::CargaAcademica && ($loadMarked ??= app(AcademicLoadVisibility::class)->marksHiddenFor($context))) {
                 $byArea[$item->area->value][$item->group->value ?? ''][] = new MenuEntry($item, AcademicLoadVisibility::HIDDEN_REASON);
 
                 continue;
@@ -203,11 +204,11 @@ final readonly class Navigation
      * El motivo por el que los demás no ven una entrada en el periodo activo, si el usuario del contexto la ve
      * marcada (MN-02): la puede ver, tiene `core.navigation.view_unavailable` y la entrada no está disponible. En
      * cualquier otro caso, null. Es lo que el aviso de la pantalla le dice al admin. Una entrada de Carga académica oculta
-     * por el admin (MN-05) da ese motivo a quien aún la ve, como en el menú.
+     * por el admin (MN-05) da ese motivo al admin, que aún la ve, como en el menú; al jefe que ve su etapa (MN-06), no.
      */
     public function hiddenReasonFor(NavigationItem $item, Actor $context): ?string
     {
-        if ($item->area === NavigationArea::CargaAcademica && $item->isVisibleTo($context) && app(AcademicLoadVisibility::class)->isHidden()) {
+        if ($item->area === NavigationArea::CargaAcademica && $item->isVisibleTo($context) && app(AcademicLoadVisibility::class)->marksHiddenFor($context)) {
             return AcademicLoadVisibility::HIDDEN_REASON;
         }
 

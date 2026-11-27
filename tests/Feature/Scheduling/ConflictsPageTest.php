@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
@@ -46,6 +47,8 @@ function conflictsPage(User $user, array $query = [])
 
 describe('quién entra', function () {
     it('lo ven quienes ven la carga y el coordinador, con su entrada en el menú', function (Role $role, Closure $scope) {
+        // El jefe y el JPD la abren con la carga de su departamento en una etapa de horarios (MN-06).
+        AcademicLoad::factory()->for($this->term)->create(['department_id' => departmentKey(10)]);
         $user = User::factory()->withRole($role, $scope($this))->create();
 
         $this->actingAs($user)->get(route('scheduling.conflicts'))->assertOk()->assertSee('Choques y avance');

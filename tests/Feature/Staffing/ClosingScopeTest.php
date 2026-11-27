@@ -82,13 +82,15 @@ it('el jefe de otro departamento no ve la carga ajena por la URL: 403, y entra a
         ->assertDontSeeHtml('data-testid="closing-department"');
 });
 
-it('el jefe cuyo departamento no tiene carga en el periodo lo ve dicho por la URL, no 403; uno ajeno sin carga sigue en 403', function () {
+// Desde la tarea 1.56 (MN-06) el jefe sin carga en el periodo no abre ninguna pantalla de la carga: la URL le responde 403.
+// La pantalla, montada, lo sigue diciendo (es lo que ve quien la abre con su alcance).
+it('el jefe cuyo departamento no tiene carga en el periodo no abre el cierre por la URL (MN-06), y la pantalla lo dice; uno ajeno sin carga sigue en 403', function () {
     $ee = Department::factory()->create(['code' => 'EE', 'name' => 'Eléctrica y Electrónica']);
     $jefeEe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $ee->id])->create();
     $lo = Department::factory()->create(['code' => 'LO', 'name' => 'Logística']);
 
-    $this->actingAs($jefeEe)->get(route('staffing.closing', ['departamento' => $ee->id]))
-        ->assertOk()
+    $this->actingAs($jefeEe)->get(route('staffing.closing', ['departamento' => $ee->id]))->assertForbidden();
+    Livewire::withQueryParams(['departamento' => $ee->id])->actingAs($jefeEe)->test('staffing::pages.closing')
         ->assertSee('Eléctrica y Electrónica no tiene carga en Ene-Jun 2027.');
 
     $this->actingAs($jefeEe)->get(route('staffing.closing', ['departamento' => $lo->id]))->assertForbidden();
