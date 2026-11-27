@@ -103,6 +103,7 @@ Mientras llegan, cada módulo trabaja con factories y un `DemoSeeder` que reprod
 | 1.54 ✅ [#908](https://github.com/Erne1357/nexus/pull/908) | Orden de selección: los docentes con puesto administrativo eligen primero («Además, puestos administrativos primero», confirmado) | | | | |
 | 1.55 ✅ [#887](https://github.com/Erne1357/nexus/issues/887) | Demo 8095: carga académica y elecciones previas cargadas, orden de selección sin cargar (operación con respaldo, sin PR) | | | | |
 | 1.73 ⬜ [#921](https://github.com/Erne1357/nexus/issues/921) | Tutorías (pedido del usuario del 26 de noviembre de 2026): la materia no cuenta horas en la carga del docente (HC-08, banda de la orden de selección, carga por docente); al alumno sus créditos sí le cuentan | | | | |
+| 1.75 ⬜ [#929](https://github.com/Erne1357/nexus/issues/929) | Fotos del personal y de alumnos (reporte del usuario del 26 de noviembre de 2026 desde producción): un fallo del disco (por ejemplo, la carpeta del host recreada después de arrancar los contenedores) ya no da error 500: se avisa «No se pudo guardar la foto» y queda en el log; síntoma y arreglo en la tabla de problemas de `despliegue.md` | | | | |
 
 ## Pruebas de la fase
 
