@@ -7,10 +7,12 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\MailConnection;
 use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Notifications\AccessInvitation;
 use App\Modules\Core\Notifications\AllowsPersonalMail;
 use App\Modules\Core\Notifications\InstitutionalMail;
 use App\Modules\Core\Notifications\PasswordResetLink;
+use App\Modules\Core\Notifications\PersonalMailExceptions;
 use App\Modules\Core\Notifications\RoutesMailAddress;
 use App\Modules\Core\Notifications\UserEmailChanged;
 use App\Modules\Faculty\Models\Teacher;
@@ -21,6 +23,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Notification as NotificationFacade;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\Mailer\SentMessage;
 use Symfony\Component\Mime\Address;
 
@@ -219,17 +222,18 @@ describe('la guardia del correo', function () {
         $log = MailLog::query()->sole();
 
         expect(ce01Recipients())->toBe([])
-            ->and($log->status)->toBe(MailStatus::Blocked)
+            ->and($log->status)->toBe(MailStatus::Failed)
+            ->and($log->is_blocked)->toBeTrue()
             ->and($log->to)->toBe('ana.perez@gmail.com')
             ->and($log->subject)->toBe('Aviso elegido')
-            ->and($log->error)->toContain('CE-01')->toContain('no es institucional');
+            ->and($log->error)->toStartWith('Bloqueado (CE-01): ')->toContain('no es institucional');
     });
 
     it('CE-01: un aviso a una dirección suelta que no es institucional no sale', function () {
         NotificationFacade::route('mail', 'alguien@gmail.com')->notify(ce01PersonNotice());
 
         expect(ce01Recipients())->toBe([])
-            ->and(MailLog::query()->sole())->status->toBe(MailStatus::Blocked)->to->toBe('alguien@gmail.com');
+            ->and(MailLog::query()->sole())->status->toBe(MailStatus::Failed)->to->toBe('alguien@gmail.com');
     });
 
     it('CE-01: a una dirección institucional sale como siempre y queda enviado', function () {
@@ -243,7 +247,7 @@ describe('la guardia del correo', function () {
         NotificationFacade::route('mail', ['alguien@cdjuarez.tecnm.mx' => 'Alguien', 'otro@gmail.com' => 'Otro'])->notify(ce01PersonNotice());
 
         expect(ce01Recipients())->toBe([])
-            ->and(MailLog::query()->sole())->status->toBe(MailStatus::Blocked)->to->toBe('alguien@cdjuarez.tecnm.mx, otro@gmail.com');
+            ->and(MailLog::query()->sole())->status->toBe(MailStatus::Failed)->to->toBe('alguien@cdjuarez.tecnm.mx, otro@gmail.com');
     });
 
     it('CE-01: un aviso que dice tener una excepción pero no está en la lista declarada no sale', function () {
@@ -252,7 +256,7 @@ describe('la guardia del correo', function () {
         $user->notify(ce01RoutedNotice('ana.perez@gmail.com', 'SEL-15'));
 
         expect(ce01Recipients())->toBe([])
-            ->and(MailLog::query()->sole()->status)->toBe(MailStatus::Blocked);
+            ->and(MailLog::query()->sole()->status)->toBe(MailStatus::Failed);
     });
 
     it('CE-01: el aviso de cambio de correo (CF-S3) sale al correo anterior solo si era institucional', function () {
@@ -262,7 +266,7 @@ describe('la guardia del correo', function () {
         NotificationFacade::route('mail', 'anterior@cdjuarez.tecnm.mx')->notify($notice());
 
         expect(ce01Recipients())->toBe(['anterior@cdjuarez.tecnm.mx'])
-            ->and(MailLog::query()->where('status', MailStatus::Blocked)->sole()->to)->toBe('anterior@gmail.com');
+            ->and(MailLog::query()->where('error', 'like', 'Bloqueado (CE-01)%')->sole()->to)->toBe('anterior@gmail.com');
     });
 
     it('CE-01: la invitación de acceso automática a un correo personal no sale', function () {
@@ -271,11 +275,24 @@ describe('la guardia del correo', function () {
         app(SendAccessInvitation::class)->handle($user, 'luis@gmail.com');
 
         expect(ce01Recipients())->toBe([])
-            ->and(MailLog::query()->sole())->status->toBe(MailStatus::Blocked)->kind->toBe('AccessInvitation');
+            ->and(MailLog::query()->sole())->status->toBe(MailStatus::Failed)->kind->toBe('AccessInvitation');
     });
 });
 
 describe('las excepciones declaradas', function () {
+    it('CE-01: Core junta las excepciones de los módulos por su clase completa y rechaza una que no implementa la interfaz', function () {
+        $provider = new class(app()) extends ModuleServiceProvider
+        {
+            public function personalMailExceptions(): array
+            {
+                return [PasswordResetLink::class => 'SEL-13'];
+            }
+        };
+
+        expect(app(PersonalMailExceptions::class)->declared())->toBe([AccessInvitation::class => 'SEL-13', SelectionTeacherNotice::class => 'SEL-15'])
+            ->and(fn () => PersonalMailExceptions::fromModules([$provider]))->toThrow(LogicException::class, 'no es válida (CE-01)');
+    });
+
     it('SEL-13: la invitación de la orden de selección sí sale al correo personal', function () {
         $user = User::factory()->create(['email' => null, 'password' => null]);
 
@@ -315,11 +332,30 @@ it('CF-S9 y CE-01: el correo de prueba va al correo de quien lo pide solo si es 
         ->and(app(SendTestMail::class)->handle($institutional, $connection))->toBe('admin@cdjuarez.tecnm.mx');
 });
 
-it('CE-01: «Correos y colas» muestra el correo bloqueado con su estado', function () {
-    MailLog::factory()->create(['subject' => 'Aviso bloqueado', 'status' => MailStatus::Blocked, 'error' => 'CE-01: no es institucional']);
+it('CF-S9 y CE-01: si ni el correo de quien lo pide ni la cuenta de envío son institucionales, no lo manda y lo dice', function () {
+    $connection = MailConnection::factory()->create(['account_email' => 'pruebas@outlook.com', 'access_token' => 'at-vigente']);
+    $admin = User::factory()->admin()->create(['email' => 'admin@gmail.com']);
+    config(['mail.mailers.microsoft-graph' => ['transport' => 'array']]);
+
+    expect(fn () => app(SendTestMail::class)->handle($admin, $connection))->toThrow(ValidationException::class, SendTestMail::NO_INSTITUTIONAL);
+
+    $page = Livewire\Livewire::actingAs($admin)->test('core::pages.mail-and-queues')->call('sendTestMail');
+
+    expect(lastToastOf($page)['title'])->toBe('No salió el correo de prueba')
+        ->and(lastToastOf($page)['description'])->toContain('institucionales')
+        ->and(ce01Recipients())->toBe([])
+        ->and(MailLog::query()->count())->toBe(0);
+});
+
+it('CE-01: «Correos y colas» muestra como «Bloqueado» el correo fallido que bloqueó la guardia; los demás fallidos siguen igual', function () {
+    MailLog::factory()->failed('Bloqueado (CE-01): ana@gmail.com no es institucional y este aviso no tiene una excepción declarada.')->create(['subject' => 'Aviso bloqueado']);
+    MailLog::factory()->failed('Timeout')->create(['subject' => 'Aviso que falló']);
 
     Livewire\Livewire::actingAs(User::factory()->admin()->create())->test('core::pages.mail-and-queues')
         ->assertSeeInOrder(['Aviso bloqueado', 'Bloqueado'])
-        ->set('status', 'blocked')
+        ->assertSeeInOrder(['Aviso que falló', 'Fallido'])
+        ->set('status', 'failed')
         ->assertSee('Aviso bloqueado');
+
+    expect(MailStatus::cases())->toBe([MailStatus::Sent, MailStatus::Failed]);
 });

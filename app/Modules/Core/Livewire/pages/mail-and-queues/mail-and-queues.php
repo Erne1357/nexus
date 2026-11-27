@@ -196,6 +196,8 @@ new #[Title('Correos y colas')] class extends Component
             $this->success('Correo de prueba enviado', e("Revisa la bandeja de {$to}."));
         } catch (TransportExceptionInterface $exception) {
             $this->error('No salió el correo de prueba', e(RedactsSecrets::redact($exception->getMessage())), timeout: 10000);
+        } catch (ValidationException $exception) {
+            $this->error('No salió el correo de prueba', e((string) collect($exception->errors())->flatten()->first()), timeout: 10000);
         }
     }
 

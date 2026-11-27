@@ -72,6 +72,8 @@ use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Notifications\AccessInvitation;
+use App\Modules\Core\Notifications\PersonalMailExceptions;
 use App\Modules\Core\Notifications\PersonMailAddresses;
 use App\Modules\Core\Policies\ActivityPolicy;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
@@ -147,6 +149,11 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // Singleton por lo mismo: las fuentes del correo institucional de la persona (CE-01) se registran una vez al
         // arrancar (boot de Faculty y Students) y son closures sin estado.
         $this->app->singleton(PersonMailAddresses::class);
+
+        // Singleton porque es inmutable: las excepciones de correo personal que declaran los módulos (CE-01).
+        $this->app->singleton(PersonalMailExceptions::class, fn (Application $app): PersonalMailExceptions => PersonalMailExceptions::fromModules(
+            $app->getProviders(ModuleServiceProvider::class),
+        ));
 
         // `scoped` por lo mismo: memoriza los snapshots de nombramientos de la petición en curso.
         $this->app->scoped(AuthorizationSnapshots::class, fn (Application $app): AuthorizationSnapshots => new AuthorizationSnapshots($app['cache.store']));
@@ -309,6 +316,14 @@ final class CoreServiceProvider extends ModuleServiceProvider
     public function activityProtectedProperties(): array
     {
         return ['deactivated' => ['note' => CorePermission::UserDeactivate]];
+    }
+
+    /**
+     * SEL-13 (CE-01): la invitación de acceso de la cola de una orden de selección y su reenvío pueden ir al personal.
+     */
+    public function personalMailExceptions(): array
+    {
+        return [AccessInvitation::class => 'SEL-13'];
     }
 
     public function navigation(): array
