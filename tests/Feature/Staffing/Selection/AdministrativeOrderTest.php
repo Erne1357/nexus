@@ -98,3 +98,27 @@ it('SEL-07: el recálculo en borrador aplica el puesto administrativo y la vista
     expect($rows[0])->toMatchArray(['name' => 'Docente Jefe', 'position' => 1, 'admin_post' => Role::JefeDepartamento->label()])
         ->and($rows[1])->toMatchArray(['name' => 'Docente TC', 'position' => 2, 'admin_post' => null]);
 });
+
+it('SEL-07: el recálculo guarda la marca en el renglón y, ya publicada, no se vuelve a calcular con la fecha de hoy', function () {
+    csvTeacher('Docente TC', 0);
+    $head = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id])->create();
+    $boss = csvTeacher('Docente Jefe', 3, $head);
+    recomputeOrder();
+
+    expect($this->world->entryOf($boss)->administrative_post)->toBe(Role::JefeDepartamento->label());
+
+    $this->world->selection->update(['status' => SelectionStatus::Published]);
+    $head->roleAssignments()->update(['valid_from' => '2019-01-01', 'valid_to' => '2020-01-02']);
+    recomputeOrder();
+
+    expect($this->world->entryOf($boss)->administrative_post)->toBe(Role::JefeDepartamento->label())
+        ->and(array_column(app(SelectionOrderQuery::class)->forSelection($this->world->selection->fresh()), 'name'))->toBe(['Docente Jefe', 'Docente TC']);
+});
+
+it('SEL-07: la plaza de apoyo sin fecha de inicio se marca como «Plaza de apoyo»', function () {
+    $support = csvTeacher('Apoyo', 3);
+    TeacherPosition::factory()->for($support)->create(['kind' => PositionKind::Apoyo, 'base_hours' => 10, 'valid_from' => null, 'valid_to' => null]);
+    recomputeOrder();
+
+    expect($this->world->entryOf($support)->administrative_post)->toBe('Plaza de apoyo');
+});

@@ -287,7 +287,7 @@
                     @endif
                     @php
                         $queue = $entries->whereNull('prior_choice_at');
-                        $withPost = $queue->filter(fn ($entry) => isset($adminPosts[$entry->teacher_id]));
+                        $withPost = $queue->filter(fn ($entry) => $entry->administrative_post !== null);
                     @endphp
                     @if ($withPost->isNotEmpty())
                         <h3 class="mt-4 text-xs font-semibold uppercase text-neutral">Puesto administrativo · {{ $withPost->count() }}</h3>
@@ -299,7 +299,7 @@
                                         <tr wire:key="admin-{{ $entry->id }}">
                                             <td class="w-10 font-mono">{{ $entry->position }}</td>
                                             <td class="font-semibold">{{ $entry->teacher?->name ?? $entry->csv_name }} <x-core::status-badge tone="info" label="Puesto administrativo" class="badge-sm" /></td>
-                                            <td class="text-xs text-neutral">{{ $adminPosts[$entry->teacher_id] }}@if ($entry->source === \App\Modules\Staffing\Enums\SelectionEntrySource::Csv) · {{ [0 => 'TC', 1 => '¾', 2 => '½'][$entry->plaza_tier] ?? 'Asignatura' }}@if ($entry->failed_criteria > 0) · {{ $entry->failed_criteria }} {{ $entry->failed_criteria === 1 ? 'criterio fallido' : 'criterios fallidos' }}@endif @endif</td>
+                                            <td class="text-xs text-neutral">{{ $entry->administrative_post }}@if ($entry->source === \App\Modules\Staffing\Enums\SelectionEntrySource::Csv) · {{ [0 => 'TC', 1 => '¾', 2 => '½'][$entry->plaza_tier] ?? 'Asignatura' }}@if ($entry->failed_criteria > 0) · {{ $entry->failed_criteria }} {{ $entry->failed_criteria === 1 ? 'criterio fallido' : 'criterios fallidos' }}@endif @endif</td>
                                             <td class="text-right font-mono text-xs">{{ $entry->slot_starts_at?->locale('es')->isoFormat('ddd D, H:mm') ?? '—' }}</td>
                                         </tr>
                                     @endforeach
@@ -307,7 +307,7 @@
                             </table>
                         </div>
                     @endif
-                    @foreach ($queue->reject(fn ($entry) => isset($adminPosts[$entry->teacher_id]))->groupBy('tier') as $tier => $group)
+                    @foreach ($queue->reject(fn ($entry) => $entry->administrative_post !== null)->groupBy('tier') as $tier => $group)
                         <h3 class="mt-4 text-xs font-semibold uppercase text-neutral">Escalón {{ $tier + 1 }} · {{ $group->count() }}</h3>
                         <div class="mt-1 overflow-x-auto rounded-box border border-base-300">
                             <table class="table table-sm">

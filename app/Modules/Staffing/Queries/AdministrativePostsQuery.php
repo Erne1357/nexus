@@ -14,10 +14,14 @@ use Carbon\CarbonInterface;
  * de 2026: «Se le tiene que dar prioridad a los docentes que tienen o ayudan con una carga administrativa»): un
  * nombramiento vigente ese día en un puesto de `Role::ADMINISTRATIVE` (jefe de departamento, jefe de proyecto docente,
  * coordinador, subdirector, directivo, personal de área) del usuario del docente, o una plaza vigente de tipo `apoyo`
- * (supuesto por confirmar). Dos consultas, sin importar cuántos docentes.
+ * (supuesto por confirmar). Cuenta cualquier puesto administrativo vigente, de cualquier departamento o campus (el docente «tiene
+ * o ayuda con» carga administrativa); `valid_from` nulo es sin inicio, como TeacherPosition::currentOn. Dos consultas, sin importar cuántos docentes.
  */
 final class AdministrativePostsQuery
 {
+    /** El motivo de quien pasa primero por una plaza de apoyo. */
+    public const string SUPPORT = 'Plaza de apoyo';
+
     /**
      * El puesto de cada docente administrativo, por id de docente: los nombres de sus puestos y plazas de apoyo, juntos.
      * Los que no tienen no aparecen.
@@ -38,7 +42,7 @@ final class AdministrativePostsQuery
         RoleAssignment::query()
             ->whereIn('user_id', array_values($users))
             ->whereIn('role', array_map(fn (Role $role): string => $role->value, Role::ADMINISTRATIVE))
-            ->where('valid_from', '<=', $day)
+            ->where(fn ($query) => $query->whereNull('valid_from')->orWhere('valid_from', '<=', $day))
             ->where(fn ($query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', $day))
             ->get(['user_id', 'role'])
             ->each(function (RoleAssignment $assignment) use (&$posts, $users): void {
@@ -53,7 +57,7 @@ final class AdministrativePostsQuery
             ->where('kind', PositionKind::Apoyo->value)
             ->pluck('teacher_id')
             ->each(function (string $teacherId) use (&$posts): void {
-                $posts[$teacherId][] = PositionKind::Apoyo->label();
+                $posts[$teacherId][] = self::SUPPORT;
             });
 
         return array_map(fn (array $labels): string => implode(', ', array_values(array_unique($labels))), $posts);

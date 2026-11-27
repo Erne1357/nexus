@@ -53,16 +53,15 @@ final class SelectionMonitorQuery
         $byTeacher = $groups->whereNotNull('teacher_id')->groupBy('teacher_id');
         $access = $this->accessOf($entries);
         $measured = $this->priorHours->forSelection($selection, $entries);
-        $posts = (new AdministrativePostsQuery)->forTeachers($entries->pluck('teacher_id')->filter()->values()->all(), $selection->starts_at ?? CarbonImmutable::now());
 
-        $rows = $entries->map(function (SelectionEntry $entry) use ($byTeacher, $current, $access, $measured, $posts): array {
+        $rows = $entries->map(function (SelectionEntry $entry) use ($byTeacher, $current, $access, $measured): array {
             $taken = $byTeacher->get($entry->teacher_id, collect());
 
             return [
                 'entry' => $entry,
                 'name' => $entry->teacher?->name ?? $entry->csv_name,
                 // SEL-07: el puesto administrativo con el que pasa primero en la orden (tarea 1.54), o nulo.
-                'admin_post' => $entry->isPriorChoice() ? null : ($posts[$entry->teacher_id] ?? null),
+                'admin_post' => $entry->isPriorChoice() ? null : $entry->administrative_post,
                 'hours' => (int) $taken->sum('hours'),
                 'groups' => $taken->pluck('code')->sort()->values()->all(),
                 'current' => $current?->getKey() === $entry->getKey(),

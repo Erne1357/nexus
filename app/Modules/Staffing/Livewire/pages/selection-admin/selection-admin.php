@@ -28,7 +28,6 @@ use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
-use App\Modules\Staffing\Queries\AdministrativePostsQuery;
 use App\Modules\Staffing\Queries\SelectionGroupsQuery;
 use App\Modules\Staffing\Queries\SelectionMonitorQuery;
 use Carbon\CarbonImmutable;
@@ -535,7 +534,6 @@ new #[Title('Orden de selección')] class extends Component
             'entries' => $entries,
             'priorHours' => $groups->hoursByTeacher($selection, $entries->whereNotNull('prior_choice_at')->pluck('teacher_id')->filter()->values()->all()),
             'slotPreview' => $this->slotPreview($entries, $selection),
-            'adminPosts' => (new AdministrativePostsQuery)->forTeachers($entries->pluck('teacher_id')->filter()->values()->all(), $selection->starts_at ?? CarbonImmutable::now()),
         ];
     }
 

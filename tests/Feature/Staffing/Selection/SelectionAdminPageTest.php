@@ -352,7 +352,7 @@ it('SEL-07: el monitor y la vista previa marcan «Puesto administrativo» y el j
     $head = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $selection->department_id])->create();
     $boss = Teacher::factory()->create(['name' => 'Rosa Jefa Soto', 'user_id' => $head->id]);
     $plain = Teacher::factory()->create(['name' => 'Luis Docente Ruiz']);
-    SelectionEntry::factory()->for($selection)->create(['teacher_id' => $boss->id, 'position' => 1, 'slot_index' => 0, 'slot_starts_at' => now()->subMinutes(5), 'slot_ends_at' => now()->addMinutes(25)]);
+    SelectionEntry::factory()->for($selection)->create(['teacher_id' => $boss->id, 'administrative_post' => 'Jefe de departamento académico', 'position' => 1, 'slot_index' => 0, 'slot_starts_at' => now()->subMinutes(5), 'slot_ends_at' => now()->addMinutes(25)]);
     SelectionEntry::factory()->for($selection)->create(['teacher_id' => $plain->id, 'position' => 2, 'slot_index' => 1, 'slot_starts_at' => now()->addMinutes(25), 'slot_ends_at' => now()->addMinutes(55)]);
 
     Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin', ['seleccion' => $selection->id])

@@ -24,6 +24,8 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class RecomputeSelectionOrder
 {
+    public function __construct(private readonly AdministrativePostsQuery $posts) {}
+
     /**
      * Los docentes que pueden estar en la cola: activos y adscritos al departamento de la selección.
      *
@@ -109,13 +111,21 @@ final class RecomputeSelectionOrder
             ->get();
 
         // SEL-07: los docentes con puesto administrativo vigente al inicio de la selección (o hoy, sin fecha) van primero.
-        $administrative = (new AdministrativePostsQuery)->forTeachers(
-            $entries->pluck('teacher_id')->filter()->values()->all(),
-            $selection->starts_at ?? CarbonImmutable::now(),
-        );
+        // La marca se fija en cada recálculo del borrador y después se lee guardada (monitor, vista previa y drawer).
+        if ($selection->status === SelectionStatus::Draft) {
+            $posts = $this->posts->forTeachers($entries->pluck('teacher_id')->filter()->values()->all(), $selection->starts_at ?? CarbonImmutable::now());
+
+            foreach ($entries as $entry) {
+                $post = $posts[$entry->teacher_id] ?? null;
+
+                if ($entry->administrative_post !== $post) {
+                    $entry->update(['administrative_post' => $post]);
+                }
+            }
+        }
 
         $ranked = collect(SelectionOrder::rank($entries->map(fn ($entry): array => [
-            'admin' => isset($administrative[$entry->teacher_id]),
+            'admin' => $entry->administrative_post !== null,
             'key' => (string) $entry->getKey(),
             'source' => $entry->source->value,
             'tier' => $entry->tier,
