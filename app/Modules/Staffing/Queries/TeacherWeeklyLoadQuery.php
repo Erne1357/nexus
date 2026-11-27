@@ -109,6 +109,8 @@ final class TeacherWeeklyLoadQuery implements TeacherWeeklyLoad
                 'subject_code' => $group['subject_code'],
                 'subject_name' => $group['subject_name'],
                 'hours' => (int) $group['hours'],
+                // PL-02: una tutoría cuenta 0 h en su carga, aunque ocupe su horario.
+                'counts_teacher_hours' => (bool) ($group['counts_teacher_hours'] ?? true),
             ];
         }
 

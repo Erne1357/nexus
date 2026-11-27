@@ -127,6 +127,21 @@ it('HC-08: si pasa su banda, ve que su oficio de conformidad está pendiente', f
         ->assertSee('Pasas de tu banda de horas frente a grupo: requiere tu oficio de conformidad (pendiente).');
 });
 
+it('PL-02: una tutoría ocupa su día con «0 h · no cuenta en tu carga» y no suma en sus asignadas', function () {
+    myLoadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00']]);
+    $tutoring = myLoadGroup($this->c2, 'TUT', 'Tutorías', [[2, '07:00', '08:00']]);
+    $tutoring->subject->update(['counts_teacher_hours' => false]);
+    TeacherPosition::factory()->asignatura(20)->create(['teacher_id' => $this->me->id]);
+
+    $data = app(MyLoadQuery::class)->forTeacher($this->me, $this->term);
+
+    expect($data['hours']['assigned'])->toBe(4);
+    Livewire::actingAs($this->user)->test('staffing::pages.my-load')
+        ->assertSeeHtml('data-testid="block-'.$tutoring->id.'"')
+        ->assertSeeHtml('data-testid="no-teacher-hours-'.$tutoring->id.'"')
+        ->assertSee('no cuenta en tu carga');
+});
+
 it('un docente sin grupos igual ve base y externas con asignadas en 0', function () {
     TeacherPosition::factory()->asignatura(12)->create(['teacher_id' => $this->me->id]);
     TeacherExternalLoad::query()->create(['teacher_id' => $this->me->id, 'term_id' => $this->term->id, 'source' => 'UACJ', 'hours' => 2]);

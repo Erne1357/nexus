@@ -92,6 +92,24 @@ final class ConflictRecomputeTargetsQuery
     }
 
     /**
+     * Cambió si las horas de la materia cuentan en la carga del docente (PL-02, HC-08): los periodos y modalidades con
+     * grupos no cancelados de los docentes que tienen grupos de la materia, en los periodos que no han terminado.
+     *
+     * @return list<array{string, string}>
+     */
+    public function forSubject(string $subjectId): array
+    {
+        $teacherIds = Group::query()->where('subject_id', $subjectId)->whereNotNull('teacher_id')
+            ->where('status', '<>', GroupStatus::Cancelled->value)
+            ->tap(fn (Builder $query) => $this->openTerms($query))
+            ->distinct()->pluck('teacher_id')->all();
+
+        return $teacherIds === [] ? [] : $this->pairs(Group::query()->whereIn('teacher_id', $teacherIds)
+            ->where('status', '<>', GroupStatus::Cancelled->value)
+            ->tap(fn (Builder $query) => $this->openTerms($query)));
+    }
+
+    /**
      * @param  Builder<Group>  $query
      */
     private function openTerms(Builder $query): void

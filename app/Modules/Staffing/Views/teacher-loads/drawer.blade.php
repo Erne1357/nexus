@@ -66,7 +66,12 @@
                         <li class="flex items-center gap-3 px-3 py-2">
                             <span class="w-14 shrink-0 font-mono text-[15px] font-semibold">{{ $group['code'] }}</span>
                             <span class="min-w-0 flex-1"><span class="block truncate font-medium">{{ $group['subject'] }}</span><span class="font-mono text-xs text-neutral">{{ $group['subject_code'] }}</span></span>
-                            <span class="font-mono text-sm tabular-nums">{{ $group['hours'] }} h</span>
+                            @if ($group['counts_teacher_hours'] ?? true)
+                                <span class="font-mono text-sm tabular-nums">{{ $group['hours'] }} h</span>
+                            @else
+                                {{-- PL-02 (tarea 1.73): ocupa su horario, pero sus horas no cuentan en su carga. --}}
+                                <span class="text-end text-sm text-neutral" data-testid="drawer-no-teacher-hours"><span class="font-mono tabular-nums">0 h</span> · no cuenta</span>
+                            @endif
                         </li>
                     @endforeach
                 </ul>

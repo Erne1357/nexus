@@ -101,7 +101,12 @@
                                             @foreach ($department['groups'] as $group)
                                                 <li class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
                                                     <div><span class="font-semibold">{{ $group['subject_name'] }}</span> <span class="font-mono text-neutral">{{ $group['subject_code'] }} · {{ $group['code'] }}</span></div>
-                                                    <span class="font-mono font-semibold tabular-nums">{{ $group['hours'] }} h</span>
+                                                    @if ($group['counts_teacher_hours'] ?? true)
+                                                        <span class="font-mono font-semibold tabular-nums">{{ $group['hours'] }} h</span>
+                                                    @else
+                                                        {{-- PL-02 (tarea 1.73): ocupa su horario, pero sus horas no cuentan en su carga. --}}
+                                                        <span class="text-neutral" data-testid="load-no-teacher-hours"><span class="font-mono tabular-nums">0 h</span> · no cuenta</span>
+                                                    @endif
                                                 </li>
                                             @endforeach
                                         </ul>

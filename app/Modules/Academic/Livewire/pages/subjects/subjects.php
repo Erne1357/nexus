@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Actions\CreateSubject;
 use App\Modules\Academic\Actions\SetSubjectRequiredSpace;
+use App\Modules\Academic\Actions\SetSubjectTeacherHours;
 use App\Modules\Academic\Actions\UpdateSubject;
 use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Academic\Enums\SubjectKind;
@@ -31,8 +32,10 @@ use Mary\Traits\Toast;
  * necesitan alumnos lo veta Students: el motivo sale en un toast de error.
  *
  * El tipo de espacio que pide la materia (SEL-17) lo cambian el admin y el jefe del departamento de la materia, con
- * SetSubjectRequiredSpace y `setSpace` de la policy. El jefe, que no ve el catálogo completo, llega a esta pantalla solo
- * con las materias de su departamento y ese control: sin alta, sin edición y sin desactivar.
+ * SetSubjectRequiredSpace y `setSpace` de la policy; los mismos marcan si sus horas cuentan en la carga del docente
+ * (PL-02, tarea 1.73), con SetSubjectTeacherHours y `setTeacherHours`, en su propio drawer. El jefe, que no ve el
+ * catálogo completo, llega a esta pantalla solo con las materias de su departamento y esos dos controles: sin alta,
+ * sin edición y sin desactivar.
  *
  * Los campos del formulario se llaman como las columnas, así los errores de las Actions caen en su
  * campo.
@@ -71,6 +74,15 @@ new #[Title('Materias')] class extends Component
 
     /** Valor de RequiredSpace elegido en el drawer. */
     public string $spaceChoice = '';
+
+    /** La materia cuya cuenta en la carga del docente se cambia en el drawer (PL-02); null con el drawer cerrado. */
+    #[Locked]
+    public ?string $hoursSubjectId = null;
+
+    public bool $showHoursDrawer = false;
+
+    /** Si sus horas cuentan en la carga del docente, como se eligió en el drawer. */
+    public bool $countsTeacherHours = true;
 
     /** La materia que se edita; null es un alta. El navegador no lo puede cambiar. */
     #[Locked]
@@ -216,6 +228,33 @@ new #[Title('Materias')] class extends Component
 
         $this->showSpaceDrawer = false;
         $this->success('Tipo de espacio guardado', $this->describe($subject));
+    }
+
+    /**
+     * Abre el drawer de si las horas de la materia cuentan en la carga del docente (PL-02), con lo que tiene hoy.
+     */
+    public function editTeacherHours(string $id, SubjectQuery $subjects): void
+    {
+        $subject = $subjects->findOrFail($id);
+        $this->authorize('setTeacherHours', $subject);
+
+        $this->hoursSubjectId = $subject->id;
+        $this->countsTeacherHours = (bool) $subject->counts_teacher_hours;
+        $this->resetValidation();
+        $this->showHoursDrawer = true;
+    }
+
+    public function saveTeacherHours(SetSubjectTeacherHours $setHours, SubjectQuery $subjects): void
+    {
+        abort_if($this->hoursSubjectId === null, 404);
+
+        $subject = $subjects->findOrFail($this->hoursSubjectId);
+        $this->authorize('setTeacherHours', $subject);
+
+        $subject = $setHours->handle($subject, $this->countsTeacherHours, Auth::user());
+
+        $this->showHoursDrawer = false;
+        $this->success($subject->counts_teacher_hours ? 'Cuenta en la carga del docente' : 'No cuenta en la carga del docente', $this->describe($subject));
     }
 
     public function save(CreateSubject $createSubject, UpdateSubject $updateSubject, SubjectQuery $subjects): void

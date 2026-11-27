@@ -308,6 +308,18 @@ it('da las cuatro cifras de todo el Tec: materias, sugeridos, pedidos y la difer
     ]);
 });
 
+it('PL-02: las horas de docente de la diferencia no cuentan una materia que no cuenta en la carga del docente', function () {
+    demandBoardForecast($this->isic, $this->topics, $this->c1, 4);
+    demandBoardForecast($this->isic, $this->web, $this->c1, 3);
+    $isic = demandBoardProposal($this->isic, ProposalStatus::Accepted);
+    demandBoardItem($isic, $this->topics, $this->c1, 6);
+    demandBoardItem($isic, $this->web, $this->c1, 2);
+    $this->web->update(['counts_teacher_hours' => false]);
+
+    // SCD-1027: +2 grupos × 5 h; AEB-1055 no cuenta para el docente: su −1 grupo no resta horas.
+    expect(demandBoardOf($this->sc)->figures())->toMatchArray(['difference' => 1, 'hours' => 10]);
+});
+
 it('la fecha de la proyección es la más reciente de sus filas, y sin filas no hay fecha', function () {
     demandBoardForecast($this->isic, $this->topics, $this->c1, 2, ['computed_at' => '2026-11-16 08:00:00']);
     demandBoardForecast($this->ige, $this->topics, $this->c1, 2, ['computed_at' => '2026-11-17 06:10:00']);

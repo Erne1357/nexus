@@ -7,8 +7,9 @@ use App\Modules\Scheduling\Validation\ScheduleState;
 
 /**
  * La cuenta de horas de un docente en el periodo que usa HC-08, para todos los que la necesitan (la regla, el ranking,
- * `teacher_term_loads` de Staffing y la entrada del motor). Horas asignadas = teoría + práctica de la materia de cada
- * grupo activo suyo, en todos los campus (supuesto por confirmar).
+ * `teacher_term_loads` de Staffing y la entrada del motor). Horas asignadas = las que le cuenta al docente la materia
+ * de cada grupo activo suyo (teoría + práctica, o 0 si no cuenta en su carga, PL-02), en todos los campus (supuesto
+ * por confirmar).
  *
  * Desde la tarea 1.50 se mide contra sus **horas frente a grupo** (PL-01, con el respaldo del CSV de la selección) y no
  * contra las de su plaza: su banda va de frente a grupo − 2 a frente a grupo + 2 (art. 147) y su tope de banda
@@ -43,7 +44,7 @@ final class TeacherHourLimit
 
         foreach ($state->groups() as $group) {
             if ($group->isActive && $group->teacherId === $teacherId && $group->id !== $exceptGroupId) {
-                $groups[$group->id] = $state->subject($group->subjectId)?->weeklyHours() ?? 0;
+                $groups[$group->id] = $state->subject($group->subjectId)?->teacherHours() ?? 0;
             }
         }
 

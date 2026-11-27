@@ -3,6 +3,7 @@
 namespace App\Modules\Staffing\Queries;
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Models\Teacher;
@@ -48,7 +49,7 @@ final class TeacherLoadsBoardQuery
             ->where('groups.status', '<>', GroupStatus::Cancelled->value)
             ->orderBy('campuses.code')->orderBy('groups.code')
             ->toBase()
-            ->get(['groups.id', 'groups.teacher_id', 'groups.code', 'campuses.code as campus', 'subjects.code as subject_code', 'subjects.name as subject', DB::raw('subjects.theory_hours + subjects.practice_hours as hours')]);
+            ->get(['groups.id', 'groups.teacher_id', 'groups.code', 'campuses.code as campus', 'subjects.code as subject_code', 'subjects.name as subject', DB::raw(SubjectTeacherHours::SQL.' as hours'), 'subjects.counts_teacher_hours']);
 
         $sessions = GroupSession::query()->whereIn('group_id', $groups->pluck('id')->all())
             ->orderBy('day')->orderBy('starts_at')
@@ -94,7 +95,7 @@ final class TeacherLoadsBoardQuery
                 $kinds->contains(fn (TeacherPosition $position): bool => $position->kind === PositionKind::Honorarios),
                 $byCampus,
                 $mine->map(fn (object $group): array => ['code' => $group->code, 'subject' => $group->subject, 'subject_code' => $group->subject_code,
-                    'campus' => $group->campus, 'hours' => (int) $group->hours])->values()->all(),
+                    'campus' => $group->campus, 'hours' => (int) $group->hours, 'counts_teacher_hours' => (bool) $group->counts_teacher_hours])->values()->all(),
                 $weekly,
                 $load->teaching_hours,
                 $load->band_limit_hours,

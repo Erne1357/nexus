@@ -121,6 +121,19 @@ it('la ficha parte la carga en su departamento y en otros departamentos, con el 
         ->assertSee('Frente a grupo: 22 h (20 a 24)');
 });
 
+it('PL-02: una tutoría sale en la semana y en su departamento con «0 h · no cuenta» y no suma en sus horas', function () {
+    loadTabGroupIn($this->dept, 'AED-2000', 'Bases de Datos', 1, '10:00', '12:00');
+    loadTabGroupIn($this->dept, 'TUT-2024', 'Tutorías', 3, '10:00', '11:00');
+    Subject::query()->where('code', 'TUT-2024')->update(['counts_teacher_hours' => false]);
+
+    $html = Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertSee('Tutorías')
+        ->assertSeeHtml('data-testid="load-no-teacher-hours"')
+        ->html();
+
+    expect(trim(strip_tags(domOf($html)->querySelector('[data-testid=load-hours-next] .font-mono')?->textContent ?? '')))->toBe('2');
+});
+
 it('un departamento sin jefe vigente lo dice', function () {
     $cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
     loadTabGroupIn($cb, 'ACF-0901', 'Cálculo Diferencial', 2, '08:00', '10:00');

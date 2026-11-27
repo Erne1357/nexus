@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Listeners;
 
+use App\Modules\Academic\Events\SubjectUpdated;
 use App\Modules\Core\Events\ModalityUpdated;
 use App\Modules\Facilities\Events\RoomBlockAdded;
 use App\Modules\Facilities\Events\RoomBlockRemoved;
@@ -43,6 +44,8 @@ final class QueueConflictRecompute
             $event instanceof PositionChanged => $this->targets->forTeacher($event->position->teacher_id),
             $event instanceof TeachingHoursChanged => $this->targets->forTeachers($event->teacherIds, $event->termId),
             $event instanceof ModalityUpdated => in_array('settings', $event->changed, true) ? $this->targets->forModality($event->modality) : [],
+            // PL-02: si las horas de la materia cuentan en la carga del docente cambia HC-08 de quienes la dan.
+            $event instanceof SubjectUpdated => in_array('counts_teacher_hours', $event->changed, true) ? $this->targets->forSubject($event->subject->id) : [],
             default => [],
         };
 

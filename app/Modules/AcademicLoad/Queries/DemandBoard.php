@@ -129,7 +129,8 @@ final readonly class DemandBoard
             $total = $subject->total();
             $suggested += $total->suggested;
             $counted += $total->counted;
-            $hours += $total->difference() * $subject->weeklyHours();
+            // Horas de docente: las que le cuenta la materia (PL-02; una tutoría no suma).
+            $hours += $total->difference() * $subject->teacherHours();
 
             if ($subject->subject->needs_lab) {
                 $suggestedLab += $total->suggested;

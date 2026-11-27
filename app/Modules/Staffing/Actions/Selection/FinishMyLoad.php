@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing\Actions\Selection;
 
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\GrantHourAllowance;
@@ -22,7 +23,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * «Terminar mi carga» (tarea 1.33, diseño 6.6, SEL-05 y SEL-12). Quién puede lo decide SelectionPolicy::pickOwn.
  *
- * En su turno y con el candado de la selección, suma las horas (teoría + práctica de la materia) de los grupos del
+ * En su turno y con el candado de la selección, suma las horas que le cuentan (teoría + práctica de la materia, o 0 si no cuenta en su carga, PL-02) de los grupos del
  * docente en las cargas incluidas y las compara con su base: la del CSV o, si no viene en él, la de sus plazas en Nexus
  * al inicio del periodo (TeacherBaseHoursQuery). Dentro de la banda de ±2 (LoadBand) termina. Fuera, solo con la
  * casilla de responsabilidad: con horas de más termina; con menos pasa a la ronda extra (`pending_extra`), y en la
@@ -101,7 +102,7 @@ final class FinishMyLoad
         $hours = (int) $this->groups->of($selection)
             ->where('groups.teacher_id', $teacher->getKey())
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->sum(DB::raw('subjects.theory_hours + subjects.practice_hours'));
+            ->sum(DB::raw(SubjectTeacherHours::SQL));
         $base = $this->targets->forTerm($term, [$teacher->getKey() => (int) $entry->base_hours])[$teacher->getKey()] ?? 0;
         $band = LoadBand::classify($hours, $base);
 

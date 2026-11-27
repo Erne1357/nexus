@@ -2,14 +2,15 @@
 
 namespace App\Modules\Scheduling\Queries;
 
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use App\Modules\Core\Models\Term;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 
 /**
- * Horas asignadas por docente en un periodo, en una sola consulta agregada: la suma de teoría más práctica de la
- * materia de cada grupo no cancelado con docente, en cualquier campus (supuesto por confirmar: las horas de un grupo
- * son las de su materia). Es la única definición de «horas asignadas» y la comparten HC-08 (TeacherHours) y las
+ * Horas asignadas por docente en un periodo, en una sola consulta agregada: la suma de las horas que le cuenta al
+ * docente la materia de cada grupo no cancelado con docente (teoría más práctica, o 0 si no cuenta en su carga, PL-02),
+ * en cualquier campus (supuesto por confirmar: las horas de un grupo son las de su materia). Es la única definición de «horas asignadas» y la comparten HC-08 (TeacherHours) y las
  * `teacher_term_loads` de Staffing.
  */
 final class TeacherAssignedHoursQuery
@@ -27,7 +28,7 @@ final class TeacherAssignedHoursQuery
             ->where('groups.status', '<>', GroupStatus::Cancelled->value)
             ->when($teacherIds !== null, fn ($query) => $query->whereIn('groups.teacher_id', $teacherIds))
             ->groupBy('groups.teacher_id')
-            ->selectRaw('groups.teacher_id, sum(subjects.theory_hours + subjects.practice_hours) as hours')
+            ->selectRaw('groups.teacher_id, sum('.SubjectTeacherHours::SQL.') as hours')
             ->orderBy('groups.teacher_id')
             ->pluck('hours', 'teacher_id')
             ->map(fn ($hours): int => (int) $hours)

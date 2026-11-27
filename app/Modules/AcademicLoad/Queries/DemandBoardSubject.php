@@ -40,6 +40,15 @@ final readonly class DemandBoardSubject
     }
 
     /**
+     * Las horas que la materia le cuenta a un docente (PL-02): las de la semana, o 0 si no cuenta en su carga (las
+     * tutorías). Con ellas se estiman las horas de docente de la diferencia.
+     */
+    public function teacherHours(): int
+    {
+        return (int) $this->subject->teacher_hours;
+    }
+
+    /**
      * Sus filas en el campus del filtro (todas sin él).
      *
      * @return list<DemandBoardRow>
