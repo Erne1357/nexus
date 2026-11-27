@@ -2,8 +2,9 @@
     La retícula del alumno por semestre (DESIGN.md, "Retícula del alumno"), la misma en la ficha del personal
     (students::pages.student) y en la pestaña «Retícula» del propio alumno (students::pages.my-record). Va en columnas por semestre
     con las piezas de Core (core::semester-grid): el tronco común arriba y una banda por especialidad, con la leyenda de
-    estados y, debajo, las materias que esperan semestre (D18). `$record` es el StudentRecord. Con `:interactive="false"`
-    es solo lectura, como la ve el alumno: mosaicos sin resaltado, sin la leyenda de cadenas y sin la barra de selección.
+    estados y, debajo, las materias que esperan semestre (D18). `$record` es el StudentRecord. La ve igual el personal que el alumno (1.68):
+    tocar una materia resalta su cadena, la leyenda de cadenas (plegada en celular) y la barra de selección. Con
+    `:interactive="false"` queda solo lectura (mosaicos sin resaltado, sin leyenda de cadenas y sin barra); ninguna pantalla lo usa hoy.
 --}}
 @props(['record', 'interactive' => true, 'audience' => 'personal'])
 @use('App\Modules\Students\Enums\ChainColor')
