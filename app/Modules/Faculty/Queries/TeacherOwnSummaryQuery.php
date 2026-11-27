@@ -87,6 +87,18 @@ final class TeacherOwnSummaryQuery
      */
     public function availability(Teacher $teacher, Term $term): array
     {
+        return $this->availabilityBox($teacher, $term)['days'];
+    }
+
+    /**
+     * La caja «Tu disponibilidad» del Resumen: las horas disponibles y el total de la cuadrícula (como el resumen de la
+     * ficha: disponibles son todas menos las no disponibles) y, por día, los rangos de availability(). Una sola lectura
+     * de la cuadrícula.
+     *
+     * @return array{available: int|float, total: int|float, days: list<array{day: int, name: string, ranges: list<array{label: string, kind: string, kind_label: string}>}>}
+     */
+    public function availabilityBox(Teacher $teacher, Term $term): array
+    {
         $grid = $this->availability->for($teacher, $term, $this->availability->profile());
         $days = [];
 
@@ -102,6 +114,6 @@ final class TeacherOwnSummaryQuery
             }
         }
 
-        return $days;
+        return ['available' => $grid['summary']['available'], 'total' => $grid['summary']['total'], 'days' => $days];
     }
 }
