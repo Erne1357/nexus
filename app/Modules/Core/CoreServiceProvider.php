@@ -294,7 +294,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
             LoginNotice::class => ['title' => 'Título', 'link_url' => 'Enlace', 'image_path' => 'Imagen'],
             LoginShortcut::class => ['kind' => ['Tipo', LoginShortcutKind::class]],
             PermissionSet::class => ['name' => 'Nombre del puesto', 'description' => 'Descripción'],
-            User::class => ['name' => 'Nombre', 'is_active' => 'Activo'],
+            User::class => ['name' => 'Nombre', 'is_active' => 'Activo', 'version' => 'Versión del aviso de privacidad'],
         ];
     }
 

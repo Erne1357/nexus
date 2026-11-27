@@ -34,7 +34,7 @@ beforeEach(function () {
     KardexRecord::factory()->for($this->student)->for($calculus)->create(['term_code' => '20253', 'grade' => 88]);
     KardexRecord::factory()->for($this->other)->for($calculus)->create(['term_code' => '20253', 'grade' => 61]);
     app(SyncStudentAccounts::class)->handle(['21110001' => '4821', '21110002' => '1357']);
-    $this->user = $this->student->fresh()->user;
+    $this->user = settledStudentUser($this->student->fresh()->user);
 });
 
 it('AC-15: por omisión muestra «Mis datos» y las otras pestañas no pintan su contenido', function () {

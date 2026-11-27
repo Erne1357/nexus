@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Http\Responses;
 
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ use Symfony\Component\HttpFoundation\Response;
  * Respuesta de Fortify después de cambiar la contraseña. La sesión actual sigue activa con un id
  * nuevo (las demás las cierra AuthenticateSession). Vuelve a la pantalla de cambio con el estado
  * `password-updated`, donde cuelga el acuse (tarea 1.30). Si era el cambio obligatorio del primer
- * acceso, guarda en la sesión la página que había pedido (o el inicio) para el botón «Entrar a
+ * acceso o del NIP del SII (AC-12), guarda en la sesión la página que había pedido (o el inicio) para el botón «Entrar a
  * Nexus» del acuse (CONTINUE_TO).
  */
 final class PasswordUpdateResponse implements PasswordUpdateResponseContract
@@ -46,13 +47,19 @@ final class PasswordUpdateResponse implements PasswordUpdateResponseContract
     }
 
     /**
-     * UpdateUserPassword apaga `must_change_password` en el mismo guardado que cambia la
-     * contraseña; si cambió en ese guardado, el cambio era el obligatorio.
+     * UpdateUserPassword apaga `must_change_password` y deja el origen como propio en el mismo guardado que cambia la
+     * contraseña (el último del usuario): si `must_change_password` cambió, o si el origen dejó de ser el NIP del SII
+     * (AC-12), el cambio era el obligatorio.
      */
     private function wasForcedChange(Request $request): bool
     {
         $user = $request->user();
 
-        return $user instanceof User && $user->wasChanged('must_change_password');
+        if (! $user instanceof User) {
+            return false;
+        }
+
+        return $user->wasChanged('must_change_password')
+            || ($user->wasChanged('password_origin') && ($user->getPrevious()['password_origin'] ?? null) === PasswordOrigin::SiiNip->value);
     }
 }
