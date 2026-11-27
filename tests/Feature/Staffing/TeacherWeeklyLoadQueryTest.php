@@ -2,8 +2,10 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
@@ -59,4 +61,29 @@ it('el periodo en curso es el que contiene hoy y el siguiente solo existe con gr
         ->and($result['next']['source'])->toBe('nexus')
         ->and($result['next']['hours'])->toBe(4)
         ->and($result['next']['days'][2]['blocks'][0]['room'])->toBe('705');
+});
+
+it('parte la semana por departamento: adscripción primero, los demás con su jefe y horas (1.59)', function () {
+    $other = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
+    $head = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $other->id])->create(['name' => 'Héctor Olivas']);
+    $mine = Group::factory()->create(['term_id' => $this->next->id, 'campus_id' => $this->campus->id, 'subject_id' => Subject::factory()->create(['department_id' => $this->dept->id, 'theory_hours' => 2, 'practice_hours' => 0])->id, 'department_id' => $this->dept->id, 'code' => 'C', 'teacher_id' => $this->teacher->id]);
+    GroupSession::factory()->on(2, '09:00', '11:00')->create(['group_id' => $mine->id, 'room_id' => $this->room->id]);
+    $subject = Subject::factory()->create(['department_id' => $other->id, 'theory_hours' => 3, 'practice_hours' => 0]);
+    $theirs = Group::factory()->create(['term_id' => $this->next->id, 'campus_id' => $this->campus->id, 'subject_id' => $subject->id, 'department_id' => $other->id, 'code' => 'A', 'teacher_id' => $this->teacher->id]);
+    GroupSession::factory()->on(3, '09:00', '12:00')->create(['group_id' => $theirs->id, 'room_id' => $this->room->id]);
+
+    $week = app(TeacherWeeklyLoad::class)->forTeacher($this->teacher)['next'];
+
+    expect($week['hours'])->toBe(5)
+        ->and(array_column($week['departments'], 'name'))->toBe([$this->dept->name, 'Ciencias Básicas'])
+        ->and($week['departments'][0])->toMatchArray(['home' => true, 'hours' => 2, 'head' => null])
+        ->and($week['departments'][1])->toMatchArray(['home' => false, 'hours' => 3, 'head' => 'Héctor Olivas'])
+        ->and($week['departments'][1]['groups'])->toHaveCount(1)
+        ->and($week['days'][2]['blocks'][0]['tone'])->toBe($week['departments'][0]['tone'])
+        ->and($week['days'][3]['blocks'][0]['tone'])->toBe($week['departments'][1]['tone'])
+        ->and($week['departments'][0]['tone'])->not->toBe($week['departments'][1]['tone']);
+});
+
+it('la semana del SII no se parte por departamento', function () {
+    expect(app(TeacherWeeklyLoad::class)->forTeacher($this->teacher)['current']['departments'])->toBe([]);
 });
