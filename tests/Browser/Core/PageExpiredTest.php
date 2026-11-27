@@ -35,7 +35,7 @@ function expireNextLivewireRequest(array $headers = []): string
             };
 
             const root = document.querySelector('[wire\\\\:id]');
-            window.Livewire.find(root.getAttribute('wire:id')).\$wire.\$refresh();
+            setTimeout(() => window.Livewire.find(root.getAttribute('wire:id')).\$refresh(), 0);
         })()
     JS;
 }
