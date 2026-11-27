@@ -13,7 +13,7 @@ use Database\Seeders\DatabaseSeeder;
 use Illuminate\Support\Facades\DB;
 
 /*
-| Variedad de captura docente en el último periodo abierto (tarea 2.6): unos sin disponibilidad, unos sin perfil y
+| Variedad de captura docente en el último periodo abierto (tarea 2.6): unos sin disponibilidad, unos sin experiencia académica y
 | unos con horas fuera del ITCJ, para ver el estado «Capturada» y «Falta» en la validación de docentes.
 */
 
@@ -60,7 +60,7 @@ it('no hace nada sin periodos abiertos', function () {
     expect(TeacherAvailability::count())->toBe(200)->and(TeacherSubjectQualification::count())->toBe(200)->and(TeacherExternalLoad::count())->toBe(0);
 });
 
-it('deja docentes con y sin disponibilidad, perfil y horas fuera del ITCJ en las proporciones del perfil masivo', function () {
+it('deja docentes con y sin disponibilidad, experiencia académica y horas fuera del ITCJ en las proporciones del perfil masivo', function () {
     $term = seedCaptureScenario();
 
     runCaptureSeeder('massive');

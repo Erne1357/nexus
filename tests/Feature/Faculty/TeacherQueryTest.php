@@ -273,7 +273,7 @@ it('la lista de docentes da las mismas filas que antes por puesto', function () 
     expect(app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('rfc')->all())->toBe([]);
 });
 
-it('los departamentos del perfil de materias y del alta son los de antes por puesto', function () {
+it('los departamentos de la experiencia académica en materias y del alta son los de antes por puesto', function () {
     $both = User::factory()
         ->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])
         ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])

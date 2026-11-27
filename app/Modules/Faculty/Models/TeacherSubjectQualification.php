@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Perfil: el nivel con que el jefe declara que el docente puede dar una materia.
+ * Experiencia académica: el nivel con que el jefe declara que el docente puede dar una materia.
  */
 #[Fillable(['teacher_id', 'subject_id', 'level', 'qualified_by', 'notes', 'source'])]
 #[UseFactory(TeacherSubjectQualificationFactory::class)]

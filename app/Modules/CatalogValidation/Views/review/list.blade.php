@@ -173,7 +173,7 @@
                             @switch ($catalog)
                                 @case (\App\Modules\CatalogValidation\Enums\Catalog::Teachers)
                                     <th class="max-[1023px]:hidden">Disponibilidad</th>
-                                    <th class="text-end max-[1199px]:hidden">Perfil</th>
+                                    <th class="text-end max-[1199px]:hidden">Experiencia</th>
                                     <th class="text-end max-[1535px]:hidden">Fuera</th>
                                     <th class="text-end max-[1535px]:hidden">Plaza</th>
                                     @break
@@ -305,7 +305,7 @@
                                         @else
                                             Docente inactivo
                                         @endif
-                                        · <span class="font-mono tabular-nums">{{ $ready['subjects'] ?? 0 }}</span> materias en perfil
+                                        · <span class="font-mono tabular-nums">{{ $ready['subjects'] ?? 0 }}</span> materias en su experiencia académica
                                         @break
                                     @case (\App\Modules\CatalogValidation\Enums\Catalog::StudyPlans)
                                         <span class="font-mono">{{ $record->career?->code }}</span> · {{ $record->career?->name }}

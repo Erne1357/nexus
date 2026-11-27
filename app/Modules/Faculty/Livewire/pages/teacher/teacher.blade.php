@@ -5,7 +5,7 @@
     tiene contraseña, CF-07 y AC-07, o «Restablecer contraseña» por enlace si la tiene, CF-08, cada una deshabilitada con
     su motivo para quien no la puede; con la cuenta dada de baja en el panel, CF-09, solo «Se reactiva desde el panel»);
     una franja de cifras (horas base del periodo activo, plazas con las que cuenta y asignaciones) y cinco
-    pestañas (`tabs tabs-border`): Datos, Plazas, Disponibilidad, Perfil (materias apto/preferente y «Carga académica en
+    pestañas (`tabs tabs-border`): Datos, Plazas, Disponibilidad, Experiencia académica (materias apto/preferente y «Carga académica en
     otra modalidad») e Historial (grupos por periodo y evaluaciones, de solo lectura). Disponibilidad es la vista de solo lectura
     del periodo activo con el enlace al editor (faculty::teachers.availability-tab). Agregar o editar una plaza y quitar
     una asignación o una plaza
@@ -187,7 +187,7 @@
             @php($preferred = $profile->filter(fn ($qualification) => $qualification->level === \App\Modules\Faculty\Enums\QualificationLevel::Preferente)->count())
             <section class="overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-perfil" data-testid="qualifications">
                 <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-base-300 px-5 py-3">
-                    <h2 id="h-perfil" class="text-lg font-bold">Perfil <span class="font-mono text-neutral">{{ $profile->count() }}</span></h2>
+                    <h2 id="h-perfil" class="text-lg font-bold">Experiencia académica <span class="font-mono text-neutral">{{ $profile->count() }}</span></h2>
                     <span class="text-sm text-neutral max-md:order-last max-md:w-full">{{ $preferred }} {{ $preferred === 1 ? 'preferente' : 'preferentes' }} · {{ $profile->count() - $preferred }} {{ $profile->count() - $preferred === 1 ? 'apta' : 'aptas' }}</span>
                     <x-button label="Agregar materia" icon="o-plus" class="btn-outline btn-sm" wire:click="createQualification" spinner="createQualification" data-testid="add-qualification" />
                 </header>
@@ -209,17 +209,17 @@
                         <span class="min-w-0 text-sm text-neutral max-md:col-span-2">Calificó <span class="text-base-content">{{ $qualification->qualifier?->name ?? '—' }}</span>, {{ $qualification->updated_at->format('d/m/Y') }}</span>
                         <span class="flex justify-end gap-1 max-md:col-span-2 max-md:justify-start max-md:-ms-3">
                             @if ($canQualify[$qualification->id])
-                                <x-button label="Editar" icon="o-pencil-square" class="btn-ghost btn-sm" wire:click="editQualification('{{ $qualification->id }}')" spinner="editQualification('{{ $qualification->id }}')" :data-testid="'edit-qualification-'.$loop->index" aria-label="Editar {{ $qualification->subject?->code }} del perfil" />
-                                <x-button label="Quitar" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeQualification('{{ $qualification->id }}')" x-confirm="Queda en la bitácora." data-confirm-title="¿Quitar {{ $qualification->subject?->code }} del perfil de {{ $record->teacher->name }}?" data-confirm-button="Quitar" data-confirm-tone="error" spinner="removeQualification('{{ $qualification->id }}')" :data-testid="'remove-qualification-'.$loop->index" aria-label="Quitar {{ $qualification->subject?->code }} del perfil" />
+                                <x-button label="Editar" icon="o-pencil-square" class="btn-ghost btn-sm" wire:click="editQualification('{{ $qualification->id }}')" spinner="editQualification('{{ $qualification->id }}')" :data-testid="'edit-qualification-'.$loop->index" aria-label="Editar {{ $qualification->subject?->code }} de la experiencia académica" />
+                                <x-button label="Quitar" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeQualification('{{ $qualification->id }}')" x-confirm="Queda en la bitácora." data-confirm-title="¿Quitar {{ $qualification->subject?->code }} de la experiencia académica de {{ $record->teacher->name }}?" data-confirm-button="Quitar" data-confirm-tone="error" spinner="removeQualification('{{ $qualification->id }}')" :data-testid="'remove-qualification-'.$loop->index" aria-label="Quitar {{ $qualification->subject?->code }} de la experiencia académica" />
                             @else
-                                <span class="tooltip tooltip-left" data-tip="Solo quien administra el departamento de la materia cambia su perfil.">
+                                <span class="tooltip tooltip-left" data-tip="Solo quien administra el departamento de la materia cambia su experiencia académica.">
                                     <x-button label="Editar" icon="o-pencil-square" class="btn-ghost btn-sm" disabled aria-label="Editar {{ $qualification->subject?->code }}: solo quien administra su departamento" />
                                 </span>
                             @endif
                         </span>
                     </div>
                 @empty
-                    <p class="px-5 py-6 text-center text-neutral" data-testid="qualifications-empty">Todavía no tiene materias en su perfil: sin ellas el motor no la sugiere para ninguna.</p>
+                    <p class="px-5 py-6 text-center text-neutral" data-testid="qualifications-empty">Todavía no tiene materias en su experiencia académica: sin ellas el motor no la sugiere para ninguna.</p>
                 @endforelse
             </section>
 
@@ -579,7 +579,7 @@
             <x-button label="Quitar plaza" icon="o-trash" class="btn-error" wire:click="removePosition" spinner="removePosition" data-testid="confirm-remove-position" />
         </x-slot:actions>
     </x-modal>
-    <x-modal wire:model="showQualificationModal" :title="$editingQualificationId === null ? 'Agregar materia al perfil' : 'Editar materia del perfil'" :subtitle="$record->teacher->name" box-class="max-w-2xl" separator>
+    <x-modal wire:model="showQualificationModal" :title="$editingQualificationId === null ? 'Agregar materia a la experiencia académica' : 'Editar materia de la experiencia académica'" :subtitle="$record->teacher->name" box-class="max-w-2xl" separator>
         <x-form wire:submit="saveQualification" no-separator>
             <div class="grid gap-4">
                 @if ($editingQualificationId === null)

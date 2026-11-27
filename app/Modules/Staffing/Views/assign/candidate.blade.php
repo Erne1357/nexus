@@ -1,6 +1,6 @@
 {{--
     Uno de los tres primeros lugares de un grupo sin docente, en la vista por materia: su lugar y su nombre; su plaza,
-    «otro depto.», su perfil, las veces que impartió la materia, su evaluación y sus avisos; sus marcas; sus horas base
+    «otro depto.», su experiencia académica, las veces que impartió la materia, su evaluación y sus avisos; sus marcas; sus horas base
     y su puntaje con el mismo peso (el ranking va primero por horas base), las horas que le quedan y «Asignar». El
     primero que puede tomarlo (`recommended`) lleva el borde y el botón en primary; uno con marca nunca.
 --}}

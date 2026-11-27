@@ -651,7 +651,7 @@ describe('captura de docentes (2.6, CV6)', function () {
     it('la tarjeta de docentes avisa cuántos faltan y enlaza a la lista filtrada, sin bloquear validar', function () {
         $component = reviewPage()
             ->assertSee('sin disponibilidad en 20271')
-            ->assertSee('sin perfil')
+            ->assertSee('sin experiencia académica')
             ->assertSeeHtml(e(route('catalog-validation.review', ['department' => $this->sis->id, 'catalogo' => 'teachers', 'falta' => 'disponibilidad'])))
             ->assertSeeHtml('data-testid="missing-perfil"');
 
@@ -660,7 +660,7 @@ describe('captura de docentes (2.6, CV6)', function () {
         $component->call('confirm', 'validate', 'teachers')->assertSet('showConfirm', true);
     });
 
-    it('la lista trae disponibilidad, perfil, horas fuera y plaza, y las acciones de ficha y disponibilidad', function () {
+    it('la lista trae disponibilidad, experiencia académica, horas fuera y plaza, y las acciones de ficha y disponibilidad', function () {
         reviewPage($this->jefe, ['catalogo' => 'teachers'])
             ->assertSee('Disponibilidad')->assertSee('Capturada')->assertSee('Falta')
             ->assertSee('Plaza')
@@ -668,7 +668,7 @@ describe('captura de docentes (2.6, CV6)', function () {
             ->assertSeeHtml(route('faculty.teachers.show', $this->bare->id));
     });
 
-    it('el filtro «Falta» deja solo a quienes les falta disponibilidad o perfil', function (string $falta, array $see, array $dontSee) {
+    it('el filtro «Falta» deja solo a quienes les falta disponibilidad o experiencia académica', function (string $falta, array $see, array $dontSee) {
         reviewPage($this->jefe, ['catalogo' => 'teachers', 'falta' => $falta])
             ->assertSet('missing', $falta)
             ->assertSee($see)->assertDontSee($dontSee);

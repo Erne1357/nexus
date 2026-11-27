@@ -7,14 +7,14 @@ use App\Modules\Faculty\Actions\DeriveQualificationsFromHistory;
 use Illuminate\Console\Command;
 
 /**
- * Deriva el perfil «Apto» de los docentes desde el historial de los últimos 6 semestres (D-02). Sin `--term` usa el
+ * Deriva la experiencia académica «Apto» de los docentes desde el historial de los últimos 6 semestres (D-02). Sin `--term` usa el
  * periodo que contiene hoy y, si no hay, el último que terminó.
  */
 final class DeriveQualificationsCommand extends Command
 {
     protected $signature = 'faculty:derive-qualifications {--term= : Clave del periodo, p. ej. 20271}';
 
-    protected $description = 'Deriva el perfil Apto de los docentes del historial de los últimos 6 semestres (D-02)';
+    protected $description = 'Deriva la experiencia académica Apto de los docentes del historial de los últimos 6 semestres (D-02)';
 
     public function handle(DeriveQualificationsFromHistory $derive): int
     {
