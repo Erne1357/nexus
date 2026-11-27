@@ -1721,8 +1721,8 @@ document.addEventListener('alpine:init', () => {
 });
 
 /*
-| Todo 419 de Livewire (sesión, CSRF o perfil vencidos) se avisa con el diálogo de Nexus y se ofrece recargar; nunca el
-| `confirm()` en inglés de Livewire (ADR-0023). AZ-S5: si el perfil activo de la sesión ya no es con el que se pintó la
+| Todo 419 de Livewire (sesión, CSRF o perfil vencidos) se avisa con el diálogo de Nexus y se ofrece recargar; nunca el aviso
+| nativo en inglés de Livewire (ADR-0023). AZ-S5: si el perfil activo de la sesión ya no es con el que se pintó la
 | página (cambió en otra pestaña, o cambiaron sus puestos: perdió el activo, se desactivó su campus o recibió el
 | primero), el servidor responde 419 con X-Nexus-Role-Changed (Core\Livewire\ActiveRoleHook) y el aviso lo dice. Sin
 | esa cabecera (sesión o CSRF vencidos, o un proxy que la pierde) el aviso es el general de «La página venció».
