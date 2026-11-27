@@ -8,10 +8,22 @@
 	#   local_certs  -> CA interna de Caddy, sin salir a internet
 	#   acme_ca https://acme-staging-v02.api.letsencrypt.org/directory  -> staging de Let's Encrypt
 	{$CADDY_GLOBAL_OPTIONS}
+
+	# Sin esta opción Caddy 2.11 no emite las métricas HTTP (caddy_http_request_*), solo las de proceso.
+	metrics
+}
+
+# Métricas de Caddy para Prometheus. El puerto no se publica en compose: solo se alcanza por la red backend.
+# La API admin se queda en su valor por omisión (localhost:2019, dentro del contenedor).
+:9180 {
+	metrics
 }
 
 {$APP_DOMAIN} {
 	encode zstd gzip
+
+	# Id de petición propio del borde: la app y sus logs lo reutilizan para correlacionar con el de Caddy.
+	request_header X-Request-Id {http.request.uuid}
 
 	# Opt-in: contraseña previa al sitio para mostrarlo por un túnel (ver
 	# docs/operacion/despliegue.md, «Mostrar la prueba de concepto»). Sin
@@ -73,17 +85,20 @@
 		respond "<!doctype html><meta charset=utf-8><title>Nexus</title><p>Nexus está en mantenimiento. Vuelve a intentarlo en unos minutos.</p>" 503
 	}
 
-	# El registro de peticiones no guarda el parámetro `token` de la consulta: el enlace para restablecer la
-	# contraseña lo lleva (`/reset-password?token=…`, AC-17) y sirve 60 minutos.
+	# El registro de peticiones no guarda datos personales: ni la query (el enlace de restablecer la contraseña
+	# lleva `?token=…`, AC-17, y otras pantallas llevan filtros), ni el Referer ni el Location, que pueden
+	# repetirla. El regexp quita toda la query, así que ya no hace falta `query { delete token }` (Caddy no deja
+	# mezclar ambos filtros en el mismo campo).
 	log {
 		output stdout
 		format filter {
 			wrap json
 			fields {
-				request>uri query {
-					delete token
-				}
+				request>uri regexp \?.* ""
+				request>headers>Referer delete
+				resp_headers>Location delete
 			}
 		}
 	}
+	log_append request_id {http.request.uuid}
 }
