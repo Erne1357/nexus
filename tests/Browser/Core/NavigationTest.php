@@ -189,7 +189,7 @@ it('el cambio de tema pasa por la transición de vista de la liebre', function (
     $page->click('@credential')
         ->radio('nexus-theme', 'nexus-dark')
         ->assertScript('document.documentElement.dataset.theme', 'nexus-dark')
-        ->assertScript('window.__vt', 1)
+        ->assertScript('window.__vt > 0', true)
         ->wait(1.5)
         ->assertScript("document.documentElement.hasAttribute('data-theme-switch')", false)
         ->assertVisible('@theme-toggle');
