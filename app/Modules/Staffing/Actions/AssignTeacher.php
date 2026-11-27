@@ -5,9 +5,11 @@ namespace App\Modules\Staffing\Actions;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
+use App\Modules\Scheduling\Validation\Violation;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Queries\SelectionGroupsQuery;
 use Illuminate\Support\Facades\DB;
@@ -50,7 +52,7 @@ final class AssignTeacher
 
     /**
      * Lo mismo que handle(), con el aviso de HC-08 (tarea 1.50) que dio checkTeacher al asignar: «Ana Pérez pasa su banda
-     * de horas frente a grupo (…). Requiere oficio de conformidad del docente (pendiente).», o null si no pasa su banda o
+     * de horas frente a grupo (…). Sus horas extra quedan como honorarios por autorizar (jefe de depto).», o null si no pasa su banda o
      * si el docente ya era el del grupo.
      *
      * @return array{0: GroupTeacherAssignment, 1: ?string}
@@ -98,7 +100,8 @@ final class AssignTeacher
             $result = $validator->checkTeacher($group, $teacher);
 
             if ($result->hasHard()) {
-                throw ValidationException::withMessages(['teacher' => $result->messages()]);
+                // Solo los choques duros: los avisos (HC-08, honorarios por autorizar) no son el motivo del veto.
+                throw ValidationException::withMessages(['teacher' => array_values(array_map(fn (Violation $violation): string => $violation->message, array_filter($result->violations(), fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard)))]);
             }
 
             $notice = $result->forRule('HC-08')[0]->message ?? null;

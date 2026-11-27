@@ -75,10 +75,10 @@ it('HC-08: la banda para mostrar y el aviso sin el nombre, que comparten las pan
 
     expect(TeacherHourLimit::bandLabel(TeacherHourLimit::of($state, 'T3')))->toBe('22 h (20 a 24)')
         ->and(TeacherHourLimit::bandLabel(TeacherHourLimit::of($state, 'T4')))->toBe('4 h (tope de honorarios)')
-        ->and(TeacherHourLimit::notice(TeacherHourLimit::of($state, 'T1')))->toBe('Pasa su banda de horas frente a grupo (2 h, de 0 a 4): lleva 5 h. Requiere oficio de conformidad del docente (pendiente).')
+        ->and(TeacherHourLimit::notice(TeacherHourLimit::of($state, 'T1')))->toBe('Pasa su banda de horas frente a grupo (2 h, de 0 a 4): lleva 5 h. 1 h extra · honorarios por autorizar (jefe de depto).')
         ->and(TeacherHourLimit::notice(TeacherHourLimit::of($state, 'T2')))->toBe('Pasa su banda de horas frente a grupo (2 h, de 0 a 4): lleva 5 h, aceptado por el docente (casilla).')
         ->and(TeacherHourLimit::notice(TeacherHourLimit::of($state, 'T3')))->toBeNull()
-        ->and(TeacherHourLimit::notice(TeacherHourLimit::of($state, 'T4')))->toBe('Pasa su tope de honorarios (4 h): lleva 5 h. Requiere oficio de conformidad del docente (pendiente).');
+        ->and(TeacherHourLimit::notice(TeacherHourLimit::of($state, 'T4')))->toBe('Pasa su tope de honorarios (4 h): lleva 5 h. Sus horas extra quedan como honorarios por autorizar (jefe de depto).');
 });
 
 it('PL-02: una materia que no cuenta en la carga del docente le suma 0 h; sus horas de sesión siguen siendo las de la materia', function () {
@@ -153,4 +153,50 @@ it('PL-03: sin clases no hay problema, y apoyo más asignatura aplica PL-03 y no
 
     expect(TeacherHourLimit::of($state, 'T1'))->over_band->toBeFalse()->administrative_excess->toBe(0)->remaining_hours->toBe(6)
         ->and(TeacherHourLimit::of($state, 'T2'))->over_band->toBeFalse()->administrative_excess->toBe(0)->remaining_hours->toBe(0)->teaching_hours->toBe(0);
+});
+
+/*
+| PL-04 y HC-22 (confirmado el 27 de noviembre de 2026): las horas que pasan de frente a grupo + 2 son extra (honorarios);
+| plaza + extra no puede pasar de 44 h.
+*/
+
+it('PL-04: TC de 40 h con 22 frente a grupo, 24 h sin extra, 26 h con 2 h extra', function () {
+    $state = fn (int $theory) => States::builder()
+        ->teacher(States::teacher('T1', base: 40, teaching: 22))
+        ->subject(States::subject('S-A', theory: $theory, practice: 0))
+        ->group(States::group('A', teacher: 'T1', subject: 'S-A'))
+        ->build();
+
+    expect(TeacherHourLimit::of($state(24), 'T1'))->extra_hours->toBe(0)->honorarios_excess->toBe(0)->over_band->toBeFalse()
+        ->and(TeacherHourLimit::of($state(26), 'T1'))->extra_hours->toBe(2)->plaza_hours->toBe(40)->honorarios_excess->toBe(0)->over_band->toBeTrue();
+});
+
+it('HC-22: 40 h de plaza más 5 h extra pasa el tope de 44 h; el tope sale de staffing.max_hours_with_honorarios', function () {
+    $state = fn (int $theory, ?int $cap = null) => tap(States::builder(), fn ($b) => $cap === null ? null : $b->setting('staffing.max_hours_with_honorarios', $cap))
+        ->teacher(States::teacher('T1', base: 40, teaching: 22))
+        ->subject(States::subject('S-A', theory: $theory, practice: 0))
+        ->group(States::group('A', teacher: 'T1', subject: 'S-A'))
+        ->build();
+
+    $at = TeacherHourLimit::of($state(28), 'T1');
+    $over = TeacherHourLimit::of($state(29), 'T1');
+
+    expect($at)->extra_hours->toBe(4)->with_honorarios_max->toBe(44)->honorarios_excess->toBe(0)
+        ->and($over)->extra_hours->toBe(5)->honorarios_excess->toBe(1)
+        ->and(TeacherHourLimit::honorariosNotice($over))->toStartWith('Pasa el tope con honorarios (44 h)')->toContain('1 h de más')
+        ->and(TeacherHourLimit::of($state(28, 42), 'T1'))->honorarios_excess->toBe(2);
+});
+
+it('PL-04: sin plaza docente todas sus horas son extra y no hay tope duro; el estado de las horas se escribe como lo pidió el usuario', function () {
+    $state = States::builder()
+        ->teacher(States::teacher('T1', base: 0, teaching: 0, honorarios: true))
+        ->subject(States::subject('S-A', theory: 3, practice: 3))
+        ->group(States::group('A', teacher: 'T1', subject: 'S-A'))
+        ->build();
+
+    expect(TeacherHourLimit::of($state, 'T1'))->extra_hours->toBe(6)->honorarios_excess->toBe(0)->with_honorarios_max->toBeNull()
+        ->and(TeacherHourLimit::extraLabel(2, 'pending'))->toBe('2 h extra · honorarios por autorizar (jefe de depto)')
+        ->and(TeacherHourLimit::extraLabel(2, 'authorized'))->toBe('2 h de honorarios autorizadas')
+        ->and(TeacherHourLimit::extraLabel(2, 'unauthorized'))->toBe('2 h extra no autorizadas · requiere oficio del docente (pendiente)')
+        ->and(TeacherHourLimit::extraLabel(2, 'jefatura'))->toContain('Jefatura: sin honorarios · requiere oficio del docente (pendiente)');
 });

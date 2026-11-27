@@ -50,3 +50,18 @@ it('HC-22: el tope es staffing.administrative_max_hours', function () {
 it('PL-03: HC-08 no le aplica a la plaza administrativa (sin banda de ±2) aunque pase de 42', function () {
     expect([...(new TeacherHours)->check(administrativeState(20), ValidationScope::groups('A'))])->toBe([]);
 });
+
+it('HC-22 y PL-04: con plaza docente pasa el tope de 44 h (plaza más extra) y es choque duro por grupo', function () {
+    $state = States::builder()
+        ->teacher(States::teacher('T1', 'Docente Uno', base: 40, teaching: 22))
+        ->subject(States::subject('S-A', theory: 29, practice: 0))
+        ->group(States::group('A', teacher: 'T1', subject: 'S-A'))
+        ->build();
+
+    $violations = collect((new AdministrativeHours)->check($state, ValidationScope::teacher('T1')));
+
+    expect($violations)->toHaveCount(1)
+        ->and($violations->first()->severity->value ?? null)->not->toBeNull()
+        ->and($violations->first()->rule)->toBe('HC-22')
+        ->and($violations->first()->message)->toContain('tope con honorarios (44 h)');
+});

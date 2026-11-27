@@ -30,6 +30,9 @@ final class TeachingHours
     /** PL-03 y HC-22: lo más que pueden sumar clases, horas externas y horas administrativas de quien tiene plaza administrativa (límite duro). */
     public const int ADMINISTRATIVE_MAX = 42;
 
+    /** PL-04 (tarea 1.81, confirmado el 27 de noviembre de 2026): lo más que puede sumar quien tiene plaza docente entre las horas de su plaza y sus horas extra (honorarios): TC de 40 h con hasta 4 h de honorarios (límite duro, HC-22). */
+    public const int MAX_WITH_HONORARIOS = 44;
+
     /** Horas de carrera por familia y jornada [TC, ¾, ½] (arts. 143, 144 y 146). */
     private const array CAREER = [
         'titular' => ['tiempo_completo' => 22, 'tres_cuartos' => 16, 'medio_tiempo' => 12],
@@ -104,6 +107,21 @@ final class TeachingHours
             30 => 16,
             20 => 12,
             default => $hours,
+        };
+    }
+
+    /**
+     * PL-04. Las horas de plaza que corresponden a unas horas frente a grupo que vienen del CSV de la selección: la
+     * operación inversa de fromCsvHours (22 es 40, 16 es 30, 12 es 20; otro valor se queda igual; supuesto por confirmar).
+     * Sirve para medir el tope con honorarios de quien no tiene plazas en Nexus pero sí renglón en el CSV.
+     */
+    public static function plazaFromTeaching(int $teaching): int
+    {
+        return match ($teaching) {
+            22 => 40,
+            16 => 30,
+            12 => 20,
+            default => $teaching,
         };
     }
 

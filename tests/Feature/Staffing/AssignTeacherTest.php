@@ -262,7 +262,7 @@ it('HC-08: sin selección viva HC-16 se exige, pero pasar la banda de horas ya n
         ->and($this->group->fresh()->teacher_id)->toBe($short->id)
         ->and($validator->validateTeacher($short, $term)->hasHard())->toBeFalse()
         ->and($validator->teacherHoursNotice($short, $term))->toStartWith('Pasa su banda de horas frente a grupo (1 h, de 0 a 3): lleva ')
-        ->and($validator->teacherHoursNotice($short, $term))->toEndWith('Requiere oficio de conformidad del docente (pendiente).')
+        ->and($validator->teacherHoursNotice($short, $term))->toEndWith('h extra · honorarios por autorizar (jefe de depto).')
         ->and($notice)->toBe($short->name.' '.lcfirst((string) $validator->teacherHoursNotice($short, $term)));
 })->with([
     'borrador' => [SelectionStatus::Draft],

@@ -36,7 +36,7 @@ use App\Modules\Scheduling\Validation\State\StateTeacher;
 final class TeacherHourLimit
 {
     /**
-     * @return array{base_hours: int, teaching_hours: int, band_from: int, band_to: int, external_hours: int, assigned_hours: int, tolerance: int, honorarios_cap: ?int, band_limit: int, allowance_hours: ?int, limit: int, remaining_hours: int, over_band: bool, accepted: bool, hard: bool, groups: array<string, int>, administrative_hours: ?int, administrative_cap: ?int, administrative_excess: int}|null
+     * @return array{base_hours: int, teaching_hours: int, band_from: int, band_to: int, external_hours: int, assigned_hours: int, tolerance: int, honorarios_cap: ?int, band_limit: int, allowance_hours: ?int, limit: int, remaining_hours: int, over_band: bool, accepted: bool, hard: bool, groups: array<string, int>, administrative_hours: ?int, administrative_cap: ?int, administrative_excess: int, plaza_hours: int, extra_hours: int, with_honorarios_max: ?int, honorarios_excess: int}|null
      */
     public static function of(ScheduleState $state, string $teacherId, ?string $exceptGroupId = null): ?array
     {
@@ -65,10 +65,16 @@ final class TeacherHourLimit
 
         $teaching = $teacher->teachingHours;
         $bandTo = $teaching + TeachingHours::MARGIN;
+        $withHonorarios = max(1, (int) $state->setting('staffing.max_hours_with_honorarios', TeachingHours::MAX_WITH_HONORARIOS));
+        // PL-04: horas de su plaza (las de Nexus o, sin plazas, las que corresponden a su renglón del CSV) y horas extra.
+        $plaza = $teacher->baseHours > 0 ? $teacher->baseHours : ($teaching > 0 ? TeachingHours::plazaFromTeaching($teaching) : 0);
+        $noPlaza = $plaza === 0 && $teaching === 0;
         $honorariosCap = $teacher->isHonorarios && $cap !== null ? (int) $cap : null;
         $bandLimit = $teacher->engineLimit ?? $honorariosCap ?? $bandTo + $tolerance;
         $limit = $teacher->engineLimit ?? max($bandLimit, $teacher->allowanceHours ?? $bandLimit);
         $overBand = $total > $bandLimit;
+        $extra = $teacher->engineLimit !== null ? 0 : ($noPlaza ? $total : max(0, $total - ($bandTo + $tolerance)));
+        $honorariosExcess = $teacher->engineLimit !== null || $noPlaza ? 0 : max(0, $plaza + $extra - $withHonorarios);
 
         return [
             'base_hours' => $teacher->baseHours,
@@ -90,6 +96,10 @@ final class TeacherHourLimit
             'administrative_hours' => null,
             'administrative_cap' => null,
             'administrative_excess' => 0,
+            'plaza_hours' => $plaza,
+            'extra_hours' => $extra,
+            'with_honorarios_max' => $noPlaza ? null : $withHonorarios,
+            'honorarios_excess' => $honorariosExcess,
         ];
     }
 
@@ -125,6 +135,10 @@ final class TeacherHourLimit
             'administrative_hours' => $administrative,
             'administrative_cap' => $adminCap,
             'administrative_excess' => max(0, $total - $limit),
+            'plaza_hours' => 0,
+            'extra_hours' => 0,
+            'with_honorarios_max' => null,
+            'honorarios_excess' => 0,
         ];
     }
 
@@ -174,12 +188,41 @@ final class TeacherHourLimit
     }
 
     /**
-     * El aviso de HC-08 sin el nombre del docente, o null si no pasa su banda: «Pasa su banda de horas frente a grupo
-     * (22 h, de 20 a 24): lleva 26 h. Requiere oficio de conformidad del docente (pendiente).» Con la casilla vigente que
-     * cubre sus horas (SEL-12), «…: lleva 26 h, aceptado por el docente (casilla).». De honorarios con tope, «Pasa su
-     * tope de honorarios (20 h): …».
+     * PL-04 y HC-22, el aviso de quien pasa su tope con honorarios (plaza + horas extra), sin su nombre, o null si no lo pasa.
      *
-     * @param  array{teaching_hours: int, band_from: int, band_to: int, honorarios_cap: ?int, assigned_hours: int, external_hours: int, over_band: bool, accepted: bool}  $hours
+     * @param  array{plaza_hours: int, extra_hours: int, with_honorarios_max: ?int, honorarios_excess: int}  $hours
+     */
+    public static function honorariosNotice(array $hours): ?string
+    {
+        if ($hours['honorarios_excess'] <= 0) {
+            return null;
+        }
+
+        return "Pasa el tope con honorarios ({$hours['with_honorarios_max']} h): {$hours['plaza_hours']} h de su plaza más {$hours['extra_hours']} h extra, {$hours['honorarios_excess']} h de más.";
+    }
+
+    /**
+     * PL-04, el estado de las horas extra para mostrarlo: «2 h extra · honorarios por autorizar (jefe de depto)», «2 h de
+     * honorarios autorizadas», «2 h extra no autorizadas · requiere oficio del docente (pendiente)» y, de quien no puede
+     * tener honorarios, «2 h extra · Jefatura: sin honorarios · requiere oficio del docente (pendiente)».
+     */
+    public static function extraLabel(int $extra, string $state): string
+    {
+        return match ($state) {
+            'authorized' => "{$extra} h de honorarios autorizadas",
+            'unauthorized' => "{$extra} h extra no autorizadas · requiere oficio del docente (pendiente)",
+            'jefatura' => "{$extra} h extra · Jefatura: sin honorarios · requiere oficio del docente (pendiente)",
+            default => "{$extra} h extra · honorarios por autorizar (jefe de depto)",
+        };
+    }
+
+    /**
+     * El aviso de HC-08 sin el nombre del docente, o null si no pasa su banda: «Pasa su banda de horas frente a grupo
+     * (22 h, de 20 a 24): lleva 26 h. 2 h extra · honorarios por autorizar (jefe de depto).» Con la casilla vigente que
+     * cubre sus horas (SEL-12), «…: lleva 26 h, aceptado por el docente (casilla).». De honorarios con tope, «Pasa su
+     * tope de honorarios (20 h): …». Con `extra_state` (el que decidió el jefe, PL-04) dice ese estado en vez del de por autorizar.
+     *
+     * @param  array{teaching_hours: int, band_from: int, band_to: int, honorarios_cap: ?int, assigned_hours: int, external_hours: int, over_band: bool, accepted: bool, extra_hours?: int, extra_state?: string}  $hours
      */
     public static function notice(array $hours): ?string
     {
@@ -192,8 +235,14 @@ final class TeacherHourLimit
             : "Pasa su banda de horas frente a grupo ({$hours['teaching_hours']} h, de {$hours['band_from']} a {$hours['band_to']})";
         $total = $hours['assigned_hours'] + $hours['external_hours'];
 
-        return $hours['accepted']
-            ? "{$band}: lleva {$total} h, aceptado por el docente (casilla)."
-            : "{$band}: lleva {$total} h. Requiere oficio de conformidad del docente (pendiente).";
+        if ($hours['accepted']) {
+            return "{$band}: lleva {$total} h, aceptado por el docente (casilla).";
+        }
+
+        $extra = $hours['extra_hours'] ?? null;
+
+        return $extra === null || $extra <= 0
+            ? "{$band}: lleva {$total} h. Sus horas extra quedan como honorarios por autorizar (jefe de depto)."
+            : "{$band}: lleva {$total} h. ".self::extraLabel($extra, $hours['extra_state'] ?? 'pending').'.';
     }
 }

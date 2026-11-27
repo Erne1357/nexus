@@ -63,7 +63,7 @@
                         ['Asignadas', $totals['assigned'], collect($totals['byCampus'])->map(fn ($hours, $code) => "{$code} {$hours}")->implode(' · ').'|'.$totals['groups'].' grupos', ''],
                         ['Restantes', $totals['remaining'], 'sin contar honorarios', ''],
                         ['Sin carga', $totals['none'], 'sin grupos en el periodo', $totals['none'] > 0 ? 'text-warning' : ''],
-                        ['Exceden', $totals['over'], 'pasan su banda frente a grupo · oficio pendiente', $totals['over'] > 0 ? 'text-warning' : ''],
+                        ['Exceden', $totals['over'], 'con horas extra sobre su banda · honorarios por autorizar', $totals['over'] > 0 ? 'text-warning' : ''],
                     ];
                 @endphp
                 @foreach ($kpis as [$label, $value, $note, $tone])

@@ -44,7 +44,7 @@ new #[Title('Carga por docente')] class extends Component
     /** Las secciones del tablero, en orden: estado, título, tono y icono. */
     private const array SECTIONS = [
         // HC-08 es aviso desde la tarea 1.50 (advertencia pendiente, no choque): la sección va en warning.
-        TeacherLoadRow::OVER => ['Pasan su banda · oficio pendiente', 'warning', 'o-document-text'],
+        TeacherLoadRow::OVER => ['Con horas extra · honorarios por autorizar', 'warning', 'o-document-text'],
         TeacherLoadRow::NONE => ['Sin carga', 'warning', 'o-clock'],
         TeacherLoadRow::PART => ['Con horas libres', 'info', 'o-arrow-trending-down'],
         TeacherLoadRow::FULL => ['Carga completa', 'success', 'o-check-circle'],

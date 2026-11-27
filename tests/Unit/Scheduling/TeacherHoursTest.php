@@ -48,7 +48,7 @@ it('HC-08: pasar la banda de horas frente a grupo da un aviso, no un choque duro
         ->subjectType->toBe('teacher')
         ->subjectId->toBe('T1')
         ->groupId->toBe('A')
-        ->message->toBe('Ana Pérez pasa su banda de horas frente a grupo (8 h, de 6 a 10): lleva 11 h. Requiere oficio de conformidad del docente (pendiente).')
+        ->message->toBe('Ana Pérez pasa su banda de horas frente a grupo (8 h, de 6 a 10): lleva 11 h. 1 h extra · honorarios por autorizar (jefe de depto).')
         ->related->toBe([
             'base_hours' => 10,
             'teaching_hours' => 8,
@@ -71,7 +71,7 @@ it('HC-08: las horas externas cuentan contra la banda', function () {
     $violations = teacherHoursIn(teacherHoursBuilder(teaching: 10, external: 2)->build(), ValidationScope::groups('A'));
 
     expect($violations)->toHaveCount(1)
-        ->and($violations[0]->message)->toBe('Ana Pérez pasa su banda de horas frente a grupo (10 h, de 8 a 12): lleva 13 h. Requiere oficio de conformidad del docente (pendiente).')
+        ->and($violations[0]->message)->toBe('Ana Pérez pasa su banda de horas frente a grupo (10 h, de 8 a 12): lleva 13 h. 1 h extra · honorarios por autorizar (jefe de depto).')
         ->and($violations[0]->related)->toMatchArray(['external_hours' => 2, 'remaining_hours' => -1, 'missing_hours' => 1]);
 });
 
@@ -88,7 +88,7 @@ it('HC-08: la tolerancia configurada sube el tope de la banda', function () {
 
     expect(teacherHoursIn($within, ValidationScope::groups('A')))->toBe([])
         ->and($violations)->toHaveCount(1)
-        ->and($violations[0]->message)->toBe('Ana Pérez pasa su banda de horas frente a grupo (6 h, de 4 a 8): lleva 11 h. Requiere oficio de conformidad del docente (pendiente).')
+        ->and($violations[0]->message)->toBe('Ana Pérez pasa su banda de horas frente a grupo (6 h, de 4 a 8): lleva 11 h. 1 h extra · honorarios por autorizar (jefe de depto).')
         ->and($violations[0]->related)->toMatchArray(['teaching_hours' => 6, 'tolerance' => 2, 'band_limit' => 10, 'limit' => 10]);
 });
 
@@ -101,7 +101,7 @@ it('HC-08: un docente de honorarios usa el tope configurado en lugar de la banda
     expect(teacherHoursIn($capped, ValidationScope::groups('A')))->toHaveCount(1)
         ->and(teacherHoursIn($capped, ValidationScope::groups('A'))[0])
         ->severity->toBe(ConflictSeverity::Soft)
-        ->message->toBe('Ana Pérez pasa su tope de honorarios (10 h): lleva 11 h. Requiere oficio de conformidad del docente (pendiente).')
+        ->message->toBe('Ana Pérez pasa su tope de honorarios (10 h): lleva 11 h. Sus horas extra quedan como honorarios por autorizar (jefe de depto).')
         ->related->toMatchArray(['limit' => 10, 'missing_hours' => 1])
         ->and(teacherHoursIn($roomy, ValidationScope::groups('A')))->toBe([])
         ->and(teacherHoursIn($notHonorarios, ValidationScope::groups('A')))->toBe([])
@@ -121,7 +121,7 @@ it('HC-08: con la casilla vigente que cubre sus horas (SEL-12) el aviso dice que
 it('HC-08: si pasa también lo que autorizó la casilla, vuelve a pedir el oficio', function () {
     $violations = teacherHoursIn(teacherHoursBuilder(allowance: 10)->build(), ValidationScope::groups('A'));
 
-    expect($violations[0]->message)->toEndWith('lleva 11 h. Requiere oficio de conformidad del docente (pendiente).')
+    expect($violations[0]->message)->toEndWith('lleva 11 h. 1 h extra · honorarios por autorizar (jefe de depto).')
         ->and($violations[0]->related)->toMatchArray(['accepted' => false, 'remaining_hours' => -1]);
 });
 

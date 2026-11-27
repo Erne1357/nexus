@@ -50,7 +50,7 @@ it('SEL-12 y HC-08: con horas autorizadas el límite es el mayor de los dos y el
 
     expect($before)->toHaveCount(1)
         ->and($before[0]->severity)->toBe(ConflictSeverity::Soft)
-        ->and($before[0]->message)->toBe('Docente Horas pasa su banda de horas frente a grupo (2 h, de 0 a 4): lleva 5 h. Requiere oficio de conformidad del docente (pendiente).')
+        ->and($before[0]->message)->toBe('Docente Horas pasa su banda de horas frente a grupo (2 h, de 0 a 4): lleva 5 h. 1 h extra · honorarios por autorizar (jefe de depto).')
         ->and($after)->toHaveCount(1)
         ->and($after[0]->severity)->toBe(ConflictSeverity::Soft)
         ->and($after[0]->message)->toBe('Docente Horas pasa su banda de horas frente a grupo (2 h, de 0 a 4): lleva 5 h, aceptado por el docente (casilla).')
