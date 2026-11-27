@@ -66,7 +66,7 @@ it('MP-04: un renglón presente en la selección y en la historia se cuenta una 
     expect($report['total'])->toBe(1)->and($report['filled'])->toBe(['seleccion_materias' => ['20263' => 1]]);
 });
 
-it('MP-04: deja una sola entrada de bitácora con los conteos por fuente y periodo, y ninguna en --dry-run', function () {
+it('MP-04: deja una entrada de bitácora por periodo con escritura (fuente y conteo), y ninguna en --dry-run', function () {
     kardexGroupRow($this->student, '20263', 'QU1');
     kardexGroupRow($this->student, '20261', 'CD1');
     DB::table('sii_archivo.seleccion_materias')->insert(['periodo' => '20263', 'no_de_control' => 'B1', 'materia' => 'QU1', 'grupo' => 'K']);
@@ -76,7 +76,28 @@ it('MP-04: deja una sola entrada de bitácora con los conteos por fuente y perio
     expect(Activity::query()->where('event', 'backfilled')->count())->toBe(0);
 
     app(BackfillKardexGroups::class)->handle();
-    $log = Activity::query()->where('event', 'backfilled')->sole();
+    $logs = Activity::query()->where('event', 'backfilled')->get()->mapWithKeys(fn ($l) => [$l->properties['term'] => $l->properties->toArray()]);
 
-    expect($log->properties->toArray())->toBe(['filled' => ['historia_alumno' => ['20261' => 1], 'seleccion_materias' => ['20263' => 1]], 'total' => 2]);
+    expect($logs)->toHaveCount(2)
+        ->and($logs['20261'])->toBe(['term' => '20261', 'filled' => ['historia_alumno' => 1], 'total' => 1])
+        ->and($logs['20263'])->toBe(['term' => '20263', 'filled' => ['seleccion_materias' => 1], 'total' => 1]);
+});
+
+it('MP-04: con --term solo rellena ese periodo y el resto sigue pendiente; el conteo por periodo sale por lote', function () {
+    $a = kardexGroupRow($this->student, '20263', 'QU1');
+    $b = kardexGroupRow($this->student, '20261', 'CD1');
+    DB::table('sii_archivo.seleccion_materias')->insert([
+        ['periodo' => '20263', 'no_de_control' => 'B1', 'materia' => 'QU1', 'grupo' => 'K'],
+        ['periodo' => '20261', 'no_de_control' => 'B1', 'materia' => ' cd1 ', 'grupo' => 'B'],
+    ]);
+
+    $report = app(BackfillKardexGroups::class)->handle(term: '20261');
+
+    expect($report['filled'])->toBe(['seleccion_materias' => ['20261' => 1]])
+        ->and($b->fresh()->sii_group_code)->toBe('B')
+        ->and($a->fresh()->sii_group_code)->toBeNull()
+        ->and($report['pending'])->toBe(0);
+
+    $all = app(BackfillKardexGroups::class)->handle();
+    expect($all['filled'])->toBe(['seleccion_materias' => ['20263' => 1]])->and($a->fresh()->sii_group_code)->toBe('K');
 });
