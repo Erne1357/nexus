@@ -19,11 +19,11 @@ final class EnsurePasswordIsChanged
 {
     /**
      * Rutas permitidas antes de cambiar la contraseña: también las del restablecimiento por correo (AC-17), que sirven
-     * con o sin sesión.
+     * con o sin sesión, y la página pública del aviso de privacidad (AC-23), que la pantalla de cambio enlaza.
      *
      * @var list<string>
      */
-    private const array ALLOWED_ROUTES = ['user-password.edit', 'user-password.update', 'logout', 'password.request', 'password.email', 'password.reset', 'password.update'];
+    private const array ALLOWED_ROUTES = ['user-password.edit', 'user-password.update', 'logout', 'password.request', 'password.email', 'password.reset', 'password.update', 'privacy-notice'];
 
     /**
      * @param  Closure(Request): Response  $next

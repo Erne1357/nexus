@@ -41,6 +41,13 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::post('/reset-password', [ResetPasswordPage::class, 'update'])->name('password.update');
 });
 
+/*
+| El aviso de privacidad del TecNM (AC-23, tarea 1.65): página pública, sin sesión, con el mismo tope holgado que la
+| consulta de lo publicado (240 por minuto por usuario con sesión o por IP sin ella), porque los alumnos de un campus
+| comparten IP. EnsurePasswordIsChanged la deja ver a quien todavía debe cambiar su contraseña.
+*/
+Route::view('/aviso-de-privacidad', 'core::privacy-notice.show')->middleware('throttle:240,1')->name('privacy-notice');
+
 Route::middleware('auth')->group(function () {
     // La foto vigente de una persona (CO-04): solo con la URL firmada que arma StaffPhotoUrl y vence a las 2 horas.
     Route::get('/personal/{user}/foto/{version}', StaffPhoto::class)->middleware('signed')->name('core.staff-photo');

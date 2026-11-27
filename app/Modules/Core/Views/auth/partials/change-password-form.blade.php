@@ -13,13 +13,24 @@
     <x-button label="Guardar contraseña" type="submit" class="btn-primary mt-1 h-12 text-base" x-bind:disabled="! ready" />
 </form>
 
-@if ($firstAccess)
-    <form method="POST" action="{{ route('logout') }}" class="flex justify-end">
-        @csrf
-        <button type="submit" class="py-1 text-[14.5px] underline decoration-base-300 underline-offset-[3px] hover:decoration-current">Cerrar sesión</button>
-    </form>
-@else
-    <a href="{{ $backTo }}" class="inline-flex items-center gap-1.5 self-start py-1 text-[14.5px] underline decoration-base-300 underline-offset-[3px] hover:decoration-current">
-        <x-icon name="o-arrow-left" class="h-4 w-4" />Volver sin cambiarla
-    </a>
-@endif
+{{-- Abajo, salir (primer acceso) o volver (cambio voluntario) y el aviso de privacidad del TecNM (AC-23), que se abre en otra pestaña para no perder lo escrito --}}
+@php($privacyLink = 'inline-flex items-center gap-1.5 py-1 text-[14.5px] text-neutral underline decoration-base-300 underline-offset-[3px] hover:text-base-content hover:decoration-current')
+
+<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+    @if ($firstAccess)
+        <a href="{{ route('privacy-notice') }}" target="_blank" rel="noopener" data-testid="password-privacy-notice" class="{{ $privacyLink }}">
+            Aviso de privacidad<span class="sr-only"> (se abre en otra pestaña)</span>
+        </a>
+        <form method="POST" action="{{ route('logout') }}">
+            @csrf
+            <button type="submit" class="py-1 text-[14.5px] underline decoration-base-300 underline-offset-[3px] hover:decoration-current">Cerrar sesión</button>
+        </form>
+    @else
+        <a href="{{ $backTo }}" class="inline-flex items-center gap-1.5 py-1 text-[14.5px] underline decoration-base-300 underline-offset-[3px] hover:decoration-current">
+            <x-icon name="o-arrow-left" class="h-4 w-4" />Volver sin cambiarla
+        </a>
+        <a href="{{ route('privacy-notice') }}" target="_blank" rel="noopener" data-testid="password-privacy-notice" class="{{ $privacyLink }}">
+            Aviso de privacidad<span class="sr-only"> (se abre en otra pestaña)</span>
+        </a>
+    @endif
+</div>
