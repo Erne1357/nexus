@@ -16,14 +16,14 @@ use Throwable;
  * (canal `mail`, también al salir de la cola y con `notifyNow`), resuelve su destino como lo hará MailChannel (el usuario
  * con la notificación, o la ruta de una AnonymousNotifiable) y, si alguna dirección no es institucional
  * (InstitutionalMail) y el aviso no es de una excepción declarada (PersonalMailExceptions: SEL-13 y SEL-15), cancela ese
- * canal para ese destinatario y lo anota en el registro de correos (CF-S8) como bloqueado, con el destino, el asunto y el
- * motivo. La campana (`database`) no se toca. Sin destino no hace nada: MailChannel tampoco manda. Va después de
+ * canal para ese destinatario y lo anota en el registro de correos (CF-S8) como fallido con el motivo empezando por
+ * «Bloqueado (CE-01)» (MailStatus::BLOCKED_PREFIX), que la pantalla muestra como «Bloqueado», con el destino y el asunto. La campana (`database`) no se toca. Sin destino no hace nada: MailChannel tampoco manda. Va después de
  * HoldAcademicLoadMail (MN-05), que retiene antes lo de la carga oculta. Si anotar falla, se reporta y el correo sigue
  * bloqueado: la guardia nunca deja pasar un correo por un error.
  */
 final class GuardMailRecipient
 {
-    public function __construct(private readonly RecordMail $record) {}
+    public function __construct(private readonly RecordMail $record, private readonly PersonalMailExceptions $exceptions) {}
 
     /**
      * Falso cancela el canal `mail` para ese destinatario (NotificationSender lo pregunta con `until`).
@@ -37,7 +37,7 @@ final class GuardMailRecipient
         $addresses = $this->addresses($event->notifiable, $event->notification);
         $outside = array_values(array_filter($addresses, fn (string $address): bool => ! InstitutionalMail::isInstitutional($address)));
 
-        if ($outside === [] || PersonalMailExceptions::ruleFor($event->notification) !== null) {
+        if ($outside === [] || $this->exceptions->ruleFor($event->notification) !== null) {
             return null;
         }
 
@@ -46,8 +46,8 @@ final class GuardMailRecipient
                 $addresses,
                 $this->subject($event->notifiable, $event->notification),
                 class_basename($event->notification),
-                MailStatus::Blocked,
-                'CE-01: '.implode(', ', $outside).' no es institucional y este aviso no tiene una excepción declarada.',
+                MailStatus::Failed,
+                MailStatus::BLOCKED_PREFIX.': '.implode(', ', $outside).' no es institucional y este aviso no tiene una excepción declarada.',
             );
         } catch (Throwable $exception) {
             report($exception);
