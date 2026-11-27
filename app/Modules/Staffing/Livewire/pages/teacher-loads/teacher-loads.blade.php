@@ -155,7 +155,7 @@
                                         <span>ext. <b class="font-mono text-base-content">{{ $row->externalHours }}</b></span>
                                     @endif
                                     @if ($row->bandLabel() !== null)
-                                        <span data-testid="tile-band">frente a grupo <b class="font-mono text-base-content">{{ $row->bandLabel() }}</b></span>
+                                        <span data-testid="tile-band" class="whitespace-nowrap">frente a grupo <b class="font-mono text-base-content">{{ $row->bandLabel() }}</b></span>
                                     @else
                                         <span>base <b class="font-mono text-base-content">{{ $row->baseHours }}</b></span>
                                     @endif

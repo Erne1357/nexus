@@ -42,7 +42,7 @@
         </span>
     </span>
     <span @class(['line-clamp-2 min-h-[2.6em] font-medium leading-snug', 'text-neutral' => $state === 'clash']) title="{{ $card['subject_name'] }}">{{ $card['subject_name'] }}</span>
-    <span class="flex min-w-0 items-center gap-2 text-[13.5px]">
+    <span class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px]">
         @if ($state === 'mine')
             <b class="text-info">Tú</b>
         @elseif ($card['taken'])
