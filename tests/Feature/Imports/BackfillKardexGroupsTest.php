@@ -1,8 +1,10 @@
 <?php
 
+use App\Modules\Imports\Actions\BackfillKardexGroups;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 use Illuminate\Support\Facades\DB;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | imports:backfill-kardex-groups (MP-04): rellena el grupo del SII del kárdex ya migrado desde `sii_archivo`. Las pruebas
@@ -52,4 +54,29 @@ it('con --dry-run no escribe, y repetirlo no cambia lo ya rellenado', function (
     $this->artisan('imports:backfill-kardex-groups')->assertSuccessful();
 
     expect($row->fresh()->sii_group_code)->toBe('K');
+});
+
+it('MP-04: un renglón presente en la selección y en la historia se cuenta una vez, también en --dry-run', function () {
+    kardexGroupRow($this->student, '20263', 'QU1');
+    DB::table('sii_archivo.seleccion_materias')->insert(['periodo' => '20263', 'no_de_control' => 'B1', 'materia' => 'QU1', 'grupo' => 'K']);
+    DB::table('sii_archivo.historia_alumno')->insert(['periodo' => '20263', 'no_de_control' => 'B1', 'materia' => 'QU1', 'grupo' => 'K']);
+
+    $report = app(BackfillKardexGroups::class)->handle(dryRun: true);
+
+    expect($report['total'])->toBe(1)->and($report['filled'])->toBe(['seleccion_materias' => ['20263' => 1]]);
+});
+
+it('MP-04: deja una sola entrada de bitácora con los conteos por fuente y periodo, y ninguna en --dry-run', function () {
+    kardexGroupRow($this->student, '20263', 'QU1');
+    kardexGroupRow($this->student, '20261', 'CD1');
+    DB::table('sii_archivo.seleccion_materias')->insert(['periodo' => '20263', 'no_de_control' => 'B1', 'materia' => 'QU1', 'grupo' => 'K']);
+    DB::table('sii_archivo.historia_alumno')->insert(['periodo' => '20261', 'no_de_control' => 'B1', 'materia' => 'CD1', 'grupo' => 'B']);
+
+    app(BackfillKardexGroups::class)->handle(dryRun: true);
+    expect(Activity::query()->where('event', 'backfilled')->count())->toBe(0);
+
+    app(BackfillKardexGroups::class)->handle();
+    $log = Activity::query()->where('event', 'backfilled')->sole();
+
+    expect($log->properties->toArray())->toBe(['filled' => ['historia_alumno' => ['20261' => 1], 'seleccion_materias' => ['20263' => 1]], 'total' => 2]);
 });

@@ -92,10 +92,12 @@ final class CampusMapQuery
             ->leftJoin('departments', 'departments.id', '=', 'careers.department_id')
             ->where('students.user_id', $userId)
             ->whereNull('students.deleted_at')
-            ->first(['students.id', 'departments.code as department']);
+            ->first(['students.id', 'students.campus_id', 'departments.code as department']);
 
         // Las clases de la carga publicada de Nexus no tienen inscripción todavía (fase 9): el alumno no las ve (supuesto por confirmar).
-        $keys = $student === null || $map['source'] !== 'sii' ? [] : $this->studentGroupKeys($student->id, $term);
+        $campusId = $this->mapCampusId();
+        // La llave materia·grupo no lleva campus: el alumno de otro campus no cursa los grupos del campus del mapa (MP-04).
+        $keys = $student === null || $map['source'] !== 'sii' || $student->campus_id !== $campusId ? [] : $this->studentGroupKeys($student->id, $term, $campusId);
         $classes = array_values(array_filter($map['classes'], fn (array $class): bool => isset($keys[$class['group']])));
         $subjects = array_flip(array_column($classes, 'subject'));
         $teachers = array_flip(array_filter(array_column($classes, 'prof')));
@@ -116,7 +118,7 @@ final class CampusMapQuery
      *
      * @return array<string, true>
      */
-    private function studentGroupKeys(string $studentId, Term $term): array
+    private function studentGroupKeys(string $studentId, Term $term, ?string $campusId): array
     {
         return DB::table('kardex_records as kr')
             ->join('historical_groups as hg', function ($join): void {
@@ -129,9 +131,19 @@ final class CampusMapQuery
             ->where('kr.term_code', $term->code)
             ->whereNull('kr.deleted_at')
             ->where('hg.source', 'sii')
+            // La llave materia·grupo no lleva campus: sin esto, el grupo «A» de otro campus entraría (MP-04).
+            ->where('hg.campus_id', $campusId)
             ->get(['subjects.code', 'hg.group_code'])
             ->mapWithKeys(fn (object $row): array => [$this->groupKey($row->code, $row->group_code) => true])
             ->all();
+    }
+
+    /**
+     * El campus del mapa: el de los edificios con `map_key`.
+     */
+    private function mapCampusId(): ?string
+    {
+        return DB::table('buildings')->whereNotNull('map_key')->whereNull('deleted_at')->value('campus_id');
     }
 
     /**
@@ -160,7 +172,7 @@ final class CampusMapQuery
      */
     private function cachedMap(?Term $term): array
     {
-        $campusId = DB::table('buildings')->whereNotNull('map_key')->whereNull('deleted_at')->value('campus_id');
+        $campusId = $this->mapCampusId();
 
         if ($term === null || $campusId === null) {
             return $this->build($term, $campusId, null);

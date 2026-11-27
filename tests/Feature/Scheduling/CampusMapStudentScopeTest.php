@@ -115,3 +115,21 @@ it('MP-04: un alumno nunca ve los grupos de otro alumno', function () {
 
     expect(mapFor($this->user, Role::Alumno)['classes'])->toBe([]);
 });
+
+it('MP-04: el alumno de otro campus con el mismo grupo «A» no ve el «A» del campus del mapa', function () {
+    $other = Campus::factory()->create(['code' => 'C2']);
+    $this->student->update(['campus_id' => $other->id]);
+    KardexRecord::factory()->create(['student_id' => $this->student->id, 'subject_id' => $this->subject2->id, 'term_code' => '20263', 'sii_subject_code' => '2CA', 'sii_group_code' => 'A']);
+
+    expect(mapFor($this->user, Role::Alumno)['classes'])->toBe([]);
+});
+
+it('MP-04: el selector de salón pasa por forActor: un alumno nunca recibe el mapa completo', function () {
+    KardexRecord::factory()->create(['student_id' => $this->student->id, 'subject_id' => $this->subject1->id, 'term_code' => '20263', 'sii_subject_code' => '1PR', 'sii_group_code' => 'C']);
+    config(['nexus.campus_map_3d' => true]);
+    actingAsRole($this->user, Role::Alumno);
+
+    $map = Livewire\Livewire::test('scheduling::components.map-picker')->viewData('map');
+
+    expect($map['scope'])->toBe('student')->and(array_column($map['classes'], 'group'))->toBe(['AED-1285·C']);
+});
