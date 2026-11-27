@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Queries\RoomLoansQuery;
+use App\Modules\AcademicLoad\Rules\AgreementSettings;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -91,7 +92,16 @@ final class SyncSessionLoans
                 $this->cancel->handle($loan, $actor, replaced: self::replacedBy($loan, $replacing));
             }
 
-            return $this->requestAll($group, $room, $day, $requests, $actor);
+            $unavailable = false;
+
+            if (! AgreementSettings::roomLoansEnabled()) {
+                // Tarea 1.53: los aceptados que siguen cubriendo se conservan; el hueco nuevo que pediría un préstamo se
+                // rechaza (el estricto lo detiene en RequestRoomLoan) o, en una sesión que ya estaba, le quita el salón.
+                $unavailable = $this->dropUncoverable($group, $room, $day, $sessions, $requests, $actor);
+                $requests = $requests->filter(fn (array $gap): bool => $gap[2])->values();
+            }
+
+            return $this->requestAll($group, $room, $day, $requests, $actor)->and(new LoanSyncResult(unavailable: $unavailable));
         });
     }
 
@@ -197,6 +207,31 @@ final class SyncSessionLoans
             ->where('starts_at', '<', Minutes::format($end))
             ->where('ends_at', '>', Minutes::format($start))
             ->exists();
+    }
+
+    /**
+     * Con los préstamos apagados, quita el salón a las sesiones que ya estaban y cuyo hueco (no estricto) pediría un
+     * préstamo nuevo (tarea 1.53; decisión del coordinador): la sesión queda sin salón y se suelta lo que ya no toca.
+     *
+     * @param  Collection<string, array{int, int}>  $sessions
+     * @param  Collection<int, array{int, int, bool}>  $requests
+     */
+    private function dropUncoverable(Group $group, Room $room, int $day, Collection $sessions, Collection $requests, User $actor): bool
+    {
+        $loose = $requests->reject(fn (array $gap): bool => $gap[2]);
+        $ids = $sessions->filter(fn (array $session): bool => $loose->contains(fn (array $gap): bool => Minutes::overlap($gap[0], $gap[1], ...$session)))->keys()->all();
+
+        if ($ids === []) {
+            return false;
+        }
+
+        GroupSession::query()->whereKey($ids)->update(['room_id' => null]);
+        activity()->causedBy($actor)->performedOn($group)->event('room_dropped_no_loans')
+            ->withProperties(['room_id' => $room->getKey(), 'sessions' => $ids])
+            ->log('Quitó el salón de '.count($ids).' sesión(es) de '.$group->code.': '.AgreementSettings::ROOM_LOANS_UNAVAILABLE);
+        $this->releaseUntouched($group, $room, $day, $actor);
+
+        return true;
     }
 
     /**

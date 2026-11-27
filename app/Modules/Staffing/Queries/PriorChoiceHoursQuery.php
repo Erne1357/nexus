@@ -3,8 +3,6 @@
 namespace App\Modules\Staffing\Queries;
 
 use App\Modules\Core\Models\Term;
-use App\Modules\Faculty\Queries\TeacherBaseHoursQuery;
-use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
 use App\Modules\Staffing\Rules\LoadBand;
@@ -24,7 +22,7 @@ final class PriorChoiceHoursQuery
 {
     public function __construct(
         private readonly SelectionGroupsQuery $groups,
-        private readonly TeacherBaseHoursQuery $baseHours,
+        private readonly TeachingTargetQuery $targets,
     ) {}
 
     /**
@@ -41,13 +39,12 @@ final class PriorChoiceHoursQuery
         }
 
         $hours = $this->groups->hoursByTeacher($selection, $entries->pluck('teacher_id')->all());
-        $appended = $entries->where('source', SelectionEntrySource::Appended)->pluck('teacher_id')->all();
-        $nexusBase = $appended === [] ? [] : $this->baseHours->forTerm($this->termWithDates($selection, $term), $appended);
+        $targets = $this->targets->forTerm($this->termWithDates($selection, $term), $entries->pluck('base_hours', 'teacher_id')->map(fn ($csv): int => (int) $csv)->all());
         $result = [];
 
         foreach ($entries as $entry) {
             $taken = (int) ($hours[$entry->teacher_id] ?? 0);
-            $base = $entry->source === SelectionEntrySource::Appended ? (int) ($nexusBase[$entry->teacher_id] ?? 0) : $entry->base_hours;
+            $base = (int) ($targets[$entry->teacher_id] ?? 0);
             $band = LoadBand::classify($taken, $base);
 
             $result[$entry->getKey()] = [
@@ -64,7 +61,7 @@ final class PriorChoiceHoursQuery
     }
 
     /**
-     * El periodo con su fecha de inicio, que es la que mide la base de Nexus (TeacherBaseHoursQuery). El que trae quien
+     * El periodo con su fecha de inicio, que es la que mide la base de Nexus (TeachingTargetQuery). El que trae quien
      * llama o la relación ya cargada solo sirven si traen `starts_on`: la pantalla «Oferta» carga el periodo sin sus
      * fechas (solo id, clave y nombre), así que en ese caso se busca completo.
      */

@@ -78,10 +78,19 @@ it('emite una fila por tipo de plaza con las horas sumadas y sin vigencia', func
     $run = positionsStepRun($this->dir);
 
     expect($run['rows'])->toBe([
-        ['rfc' => 'PRUE800101AB1', 'kind' => 'tres_cuartos', 'base_hours' => 30, 'valid_from' => '', 'valid_to' => ''],
-        ['rfc' => 'PRUE800101AB1', 'kind' => 'asignatura', 'base_hours' => 10, 'valid_from' => '', 'valid_to' => ''],
+        ['rfc' => 'PRUE800101AB1', 'kind' => 'tres_cuartos', 'base_hours' => 30, 'category' => 'E3717', 'valid_from' => '', 'valid_to' => ''],
+        ['rfc' => 'PRUE800101AB1', 'kind' => 'asignatura', 'base_hours' => 10, 'category' => 'E3525', 'valid_from' => '', 'valid_to' => ''],
     ])
         ->and(positionsLineIncidents($run['incidents']))->toBe([]);
+});
+
+it('PL-01: cada fila lleva la clave de categoría de su plaza (la primera, en asignatura) y vacía si no se migra', function () {
+    SiiFixtures::writeStaff($this->dir, [positionsStaffRow('PRUE800101AB1')], [
+        positionsStaff2Row('PRUE800101AB1', '1403 E381300.0100001 1403 E351904.0100002 1403 E352103.0100003', '47'),
+    ]);
+
+    expect(array_map(fn (array $row): array => [$row['kind'], $row['base_hours'], $row['category']], positionsStepRun($this->dir)['rows']))
+        ->toBe([['tiempo_completo', 40, 'E3813'], ['asignatura', 7, 'E3519']]);
 });
 
 it('una plaza de apoyo cuenta con sus 36 horas como cualquier otra plaza (confirmado el 6 de noviembre de 2026)', function () {
@@ -101,7 +110,7 @@ it('las plazas del RFC viejo (estatus 04) pasan al docente del RFC nuevo', funct
     ]);
 
     expect(positionsStepRun($this->dir)['rows'])->toBe([
-        ['rfc' => 'PRUE800101NEW', 'kind' => 'tiempo_completo', 'base_hours' => 40, 'valid_from' => '', 'valid_to' => ''],
+        ['rfc' => 'PRUE800101NEW', 'kind' => 'tiempo_completo', 'base_hours' => 40, 'category' => 'E3817', 'valid_from' => '', 'valid_to' => ''],
     ]);
 });
 
@@ -142,7 +151,7 @@ it('señala por archivo y línea, sin RFC, las plazas que no cuadran, no se enti
         ->and($lines['docentes2.csv:5'])->toContain('trae 61 horas en la clave')
         ->and(collect($run['incidents'])->map(fn (array $i): string => $i['ref'].' '.$i['message'])->implode("\n"))->not->toContain('PRUE')
         ->and(collect($run['rows'])->where('rfc', 'PRUE800103AB1')->values()->all())->toBe([
-            ['rfc' => 'PRUE800103AB1', 'kind' => 'tiempo_completo', 'base_hours' => 40, 'valid_from' => '', 'valid_to' => ''],
+            ['rfc' => 'PRUE800103AB1', 'kind' => 'tiempo_completo', 'base_hours' => 40, 'category' => 'E3817', 'valid_from' => '', 'valid_to' => ''],
         ]);
 });
 
@@ -176,7 +185,7 @@ it('si el RFC viejo y el nuevo están en docentes2, toma las plazas del renglón
 
     $run = positionsStepRun($this->dir);
 
-    expect($run['rows'])->toBe([['rfc' => 'PRUE800101NEW', 'kind' => 'tiempo_completo', 'base_hours' => 40, 'valid_from' => '', 'valid_to' => '']])
+    expect($run['rows'])->toBe([['rfc' => 'PRUE800101NEW', 'kind' => 'tiempo_completo', 'base_hours' => 40, 'category' => 'E3817', 'valid_from' => '', 'valid_to' => '']])
         ->and(collect($run['incidents'])->pluck('message')->implode("\n"))->toContain('1 renglones de docentes2 repiten un docente');
 });
 

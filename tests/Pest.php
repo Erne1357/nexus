@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
+use App\Modules\AcademicLoad\Rules\AgreementSettings;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogOwner;
@@ -20,13 +21,16 @@ use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use App\Modules\Facilities\Models\Room;
 use Database\Seeders\DemoSeeder;
 use Dom\Element;
 use Dom\HTMLDocument;
@@ -53,6 +57,22 @@ use Tests\TestCase;
 */
 
 pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature', 'Browser');
+
+/*
+| Los préstamos de salón están apagados por omisión (tarea 1.53, `academic_load.room_loans_enabled`). Las pruebas corren con
+| el valor de producción; las de préstamos los encienden con `beforeEach(fn () => roomLoans())` en su archivo, y la que
+| quiere el comportamiento por omisión llama roomLoans(false).
+*/
+function roomLoans(bool $enabled = true): void
+{
+    $key = AgreementSettings::ROOM_LOANS_SETTING;
+
+    if ($enabled) {
+        Setting::query()->updateOrCreate(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => $key], ['value' => true]);
+    } else {
+        Setting::query()->where('key', $key)->delete();
+    }
+}
 
 /*
 | Los browser tests cargan el CSS y el JS compilados (`npm run build`), porque la banda, la credencial
@@ -510,6 +530,37 @@ function validateGeneralCatalogs(string $termId, string $departmentId, array $ex
             $review->update(['status' => ReviewStatus::Validated, 'validated_by' => User::factory()->create()->id, 'validated_at' => now()]);
         }
     }
+}
+
+/**
+ * Deja confirmados `$rooms` en la revisión de salones validada de `$departmentId` en el periodo (tarea 1.53, SEL-01): los
+ * pone del departamento y en la foto de la revisión, que crea validada si falta (y vuelve a validar si no lo estaba). Los
+ * salones que ya estaban en la foto se conservan.
+ *
+ * @param  list<Room>  $rooms
+ */
+function confirmRooms(string $termId, string $departmentId, array $rooms): CatalogReview
+{
+    $review = CatalogReview::query()->firstOrNew(['term_id' => $termId, 'department_id' => $departmentId, 'catalog' => Catalog::Rooms]);
+    $review->campus_id = null;
+    $review->status = ReviewStatus::Validated;
+    $review->validated_by ??= User::factory()->create()->id;
+    $review->validated_at ??= now();
+
+    foreach ($rooms as $room) {
+        $room->update(['department_id' => $departmentId]);
+    }
+
+    $snapshot = collect($review->snapshot ?? [])->keyBy('id');
+
+    foreach ($rooms as $room) {
+        $snapshot[$room->id] = ['id' => $room->id, 'code' => $room->code, 'name' => $room->name];
+    }
+
+    $review->snapshot = $snapshot->values()->all();
+    $review->save();
+
+    return $review;
 }
 
 /**

@@ -67,7 +67,7 @@ function kardexStepRun(string $dir, array $subjectFor = ['CD1' => 'ACF-0901', 'C
     foreach ((new KardexStep)->batches($migration) as $batch) {
         expect($batch->template)->toBe('kardex');
         $rows = array_values([...$batch->rows]);
-        $out = ['rows' => $withSiiCode ? $rows : array_map(fn (array $row): array => array_diff_key($row, ['sii_subject_code' => true]), $rows), 'incidents' => $batch->incidents];
+        $out = ['rows' => $withSiiCode ? $rows : array_map(fn (array $row): array => array_diff_key($row, ['sii_subject_code' => true, 'sii_group_code' => true]), $rows), 'incidents' => $batch->incidents];
     }
 
     return $out;
@@ -377,6 +377,24 @@ it('lleva la clave del SII a la materia de la retícula del alumno y guarda la c
     ]);
 });
 
+it('MP-04: guarda el grupo del SII de la historia y de la selección, en mayúsculas y nulo si viene vacío', function () {
+    $plan = StudyPlan::factory()->create(['code' => 'ISIC-2010-224']);
+    Student::factory()->for($plan)->create(['control_number' => 'S7', 'career_id' => $plan->career_id]);
+    SiiFixtures::write($this->dir.'/historia_alumno.csv', SiiFile::HistoriaAlumno, [SiiFixtures::line(SiiFile::HistoriaAlumno, [
+        'periodo' => "'20221'", 'no_de_control' => "'S7'", 'materia' => "'QU1'", 'grupo' => "' b2 '", 'calificacion' => '80', 'tipo_evaluacion' => "'O1'", 'estatus_materia' => "'A'",
+    ])]);
+    SiiFixtures::write($this->dir.'/seleccion_materias.csv', SiiFile::SeleccionMaterias, [SiiFixtures::line(SiiFile::SeleccionMaterias, [
+        'periodo' => "'20263'", 'no_de_control' => "'S7'", 'materia' => "'CD1'", 'grupo' => "'k'", 'repeticion' => "'N'", 'status_seleccion' => "'I'", 'calificacion' => '', 'tipo_evaluacion' => "''",
+    ])]);
+
+    $run = kardexStepRun($this->dir, withSiiCode: true);
+
+    expect(array_map(fn (array $row): array => [$row['term_code'], $row['sii_subject_code'], $row['sii_group_code']], $run['rows']))->toBe([
+        ['20221', 'QU1', 'B2'],
+        ['20263', 'CD1', 'K'],
+    ]);
+});
+
 it('sin historia no migra el kárdex y lo avisa', function () {
     $run = kardexStepRun($this->dir);
 
@@ -394,8 +412,8 @@ it('sin selección migra la historia y avisa que no hay materias en curso', func
 });
 
 it('solo lee las columnas que usa: ni el usuario ni las fechas', function () {
-    expect(KardexStep::HISTORY_COLUMNS)->toEqualCanonicalizing(['periodo', 'no_de_control', 'materia', 'calificacion', 'tipo_evaluacion', 'estatus_materia'])
-        ->and(KardexStep::SELECTION_COLUMNS)->toEqualCanonicalizing(['periodo', 'no_de_control', 'materia', 'repeticion', 'status_seleccion']);
+    expect(KardexStep::HISTORY_COLUMNS)->toEqualCanonicalizing(['periodo', 'no_de_control', 'materia', 'grupo', 'calificacion', 'tipo_evaluacion', 'estatus_materia'])
+        ->and(KardexStep::SELECTION_COLUMNS)->toEqualCanonicalizing(['periodo', 'no_de_control', 'materia', 'grupo', 'repeticion', 'status_seleccion']);
 });
 
 it('el paso de materias debe correr antes, también su mapa por plan', function () {

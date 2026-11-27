@@ -588,6 +588,14 @@ final class Actor
     }
 
     /**
+     * Si el puesto activo es el de alumno: el mapa del Inicio le recorta las clases a las de sus grupos (MP-04).
+     */
+    public function actsAsStudent(): bool
+    {
+        return $this->activeRole() === Role::Alumno;
+    }
+
+    /**
      * Si el puesto activo trabaja la carga y por eso ve el selector «Carga» (TP-04): todos menos docente y alumno
      * (supuesto por confirmar). Sin usuario, no.
      */

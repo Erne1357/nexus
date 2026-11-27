@@ -6,15 +6,14 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\GrantHourAllowance;
 use App\Modules\Faculty\Models\Teacher;
-use App\Modules\Faculty\Queries\TeacherBaseHoursQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Actions\Selection\Concerns\GuardsSelectionTurn;
-use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
 use App\Modules\Staffing\Queries\SelectionGroupsQuery;
+use App\Modules\Staffing\Queries\TeachingTargetQuery;
 use App\Modules\Staffing\Rules\LoadBand;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
@@ -40,13 +39,13 @@ final class FinishMyLoad
 {
     use GuardsSelectionTurn;
 
-    public const string OUT_OF_BAND = 'Es responsabilidad del docente cubrir sus horas de acuerdo con su base: marca la casilla para continuar.';
+    public const string OUT_OF_BAND = 'Es responsabilidad del docente cubrir sus horas frente a grupo de acuerdo con su plaza: marca la casilla para continuar.';
 
     public const string NOT_UNRESOLVED = 'Solo confirma su carga quien quedó sin resolver al terminar la selección.';
 
     public function __construct(
         private readonly SelectionGroupsQuery $groups,
-        private readonly TeacherBaseHoursQuery $baseHours,
+        private readonly TeachingTargetQuery $targets,
         private readonly GrantHourAllowance $grantHours,
         private readonly ScheduleValidator $validator,
     ) {}
@@ -103,9 +102,7 @@ final class FinishMyLoad
             ->where('groups.teacher_id', $teacher->getKey())
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->sum(DB::raw('subjects.theory_hours + subjects.practice_hours'));
-        $base = $entry->source === SelectionEntrySource::Appended
-            ? ($this->baseHours->forTerm($term, [$teacher->getKey()])[$teacher->getKey()] ?? 0)
-            : $entry->base_hours;
+        $base = $this->targets->forTerm($term, [$teacher->getKey() => (int) $entry->base_hours])[$teacher->getKey()] ?? 0;
         $band = LoadBand::classify($hours, $base);
 
         if ($band !== 'within' && ! $acknowledged) {
@@ -133,8 +130,8 @@ final class FinishMyLoad
             ->event($confirmation ? 'selection_load_confirmed' : 'selection_load_finished')
             ->withProperties(['selection_id' => $selection->getKey(), 'teacher_id' => $teacher->getKey(), 'hours' => $hours, 'base_hours' => $base, 'band' => $band, 'acknowledged' => $acknowledged, 'status' => $status->value])
             ->log($confirmation
-                ? "{$teacher->name} confirmó su carga con {$hours} h de su base de {$base} h después de la selección"
-                : "{$teacher->name} terminó su carga con {$hours} h de su base de {$base} h");
+                ? "{$teacher->name} confirmó su carga con {$hours} h (frente a grupo: {$base} h) después de la selección"
+                : "{$teacher->name} terminó su carga con {$hours} h (frente a grupo: {$base} h)");
 
         return $entry;
     }
@@ -150,7 +147,7 @@ final class FinishMyLoad
         $total = $count === null ? 0 : $count['assigned_hours'] + $count['external_hours'];
 
         if ($total > 0) {
-            $this->grantHours->handle($teacher, $term, $total, "Cerró su carga con {$total} h de HC-08 (asignadas y externas) y base de {$base} h en la orden de selección (SEL-05).", $actor);
+            $this->grantHours->handle($teacher, $term, $total, "Cerró su carga con {$total} h de HC-08 (asignadas y externas) y {$base} h frente a grupo en la orden de selección (SEL-05).", $actor);
             $this->validator->forget();
         }
     }

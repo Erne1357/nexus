@@ -38,6 +38,23 @@ enum Role: string
     public const HEADSHIPS = [self::JefeDepartamento, self::JefeProyectoDocente];
 
     /**
+     * Los puestos administrativos del personal, la única lista (tarea 1.54, SEL-07; supuesto por confirmar): todo puesto del
+     * personal que no es de docente ni de alumno, salvo el del administrador del sistema. Quien lo ocupa pasa primero en la
+     * orden de selección. Un puesto nuevo del personal se agrega aquí.
+     *
+     * @var list<self>
+     */
+    public const ADMINISTRATIVE = [self::Subdireccion, self::Directivo, self::JefeDepartamento, self::JefeProyectoDocente, self::Coordinador, self::Personal];
+
+    /**
+     * Si es un puesto administrativo (ADMINISTRATIVE).
+     */
+    public function isAdministrative(): bool
+    {
+        return in_array($this, self::ADMINISTRATIVE, true);
+    }
+
+    /**
      * Nombre para la interfaz (la credencial y la página de inicio), como lo nombran PROJECT.md y el
      * glosario.
      */

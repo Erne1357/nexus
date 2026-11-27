@@ -111,7 +111,7 @@ final class UpdateGroupSession
         [$session, $group, $roomDropped, $loans] = $moved;
         $this->validator->forget();
 
-        return new SessionResult($session, $this->validator->validateGroup($group), $roomDropped, $loans->requested, $loans->blocked);
+        return new SessionResult($session->refresh(), $this->validator->validateGroup($group), $roomDropped || $loans->unavailable, $loans->requested, $loans->blocked, $loans->unavailable);
     }
 
     /**

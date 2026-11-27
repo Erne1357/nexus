@@ -71,10 +71,10 @@
                         </div>
                     </dl>
 
-                    @if ($card['teacher'] !== null && ! $card['mine'])
+                    @if ($card['taken'] && ! $card['mine'])
                         <p class="flex items-center gap-2 text-sm" data-testid="selection-owner">
-                            <x-icon name="o-user" class="h-4 w-4 text-neutral" aria-hidden="true" />
-                            <span>{{ $assigning ? 'Hoy lo tiene' : 'Lo tiene' }} <b>{{ $card['teacher'] }}</b>@if ($card['rooms'] !== []) · salón <b class="font-mono">{{ implode(', ', $card['rooms']) }}</b>@endif.@if ($assigning) Si lo asignas a otro, se le quita.@endif</span>
+                            <x-icon name="o-lock-closed" class="h-4 w-4 text-neutral" aria-hidden="true" />
+                            <span>@if ($card['teacher'] !== null){{ $assigning ? 'Hoy lo tiene' : 'Lo tiene' }} <b>{{ $card['teacher'] }}</b>@else<span class="badge badge-neutral badge-sm font-semibold" data-testid="selection-taken">Asignado</span> Este grupo ya fue asignado@endif@if ($card['rooms'] !== []) · salón <b class="font-mono">{{ implode(', ', $card['rooms']) }}</b>@endif.@if ($assigning) Si lo asignas a otro, se le quita.@endif</span>
                         </p>
                     @endif
 
@@ -109,7 +109,7 @@
                                 </div>
                             </div>
                         @endif
-                        @if ($entry !== null && ! $card['in_profile'] && ($card['teacher_id'] === null || $card['mine']))
+                        @if ($entry !== null && ! $card['in_profile'] && (! $card['taken'] || $card['mine']))
                             <div role="note" class="alert alert-warning alert-soft items-start text-sm" data-testid="selection-out-of-profile">
                                 <x-icon name="o-exclamation-triangle" class="mt-0.5 h-5 w-5" aria-hidden="true" />
                                 <div>
@@ -152,7 +152,7 @@
                             @php($band = LoadBand::classify($after, $hours['base']))
                             <p class="flex items-start gap-2 text-sm" data-testid="selection-after">
                                 <x-icon name="o-calculator" class="mt-0.5 h-4 w-4 flex-none text-neutral" aria-hidden="true" />
-                                <span>Con este grupo llevarías <b class="font-mono">{{ $after }}</b> h · tu base <b class="font-mono">{{ $hours['base'] }}</b> (±2):
+                                <span>Con este grupo llevarías <b class="font-mono">{{ $after }}</b> h · frente a grupo: <b class="font-mono">{{ $hours['base'] }}</b> h ({{ $hours['base'] - 2 }} a {{ $hours['base'] + 2 }}):
                                     <b @class(['text-success' => $band === 'within', 'text-warning' => $band !== 'within'])>{{ match ($band) {
                                         'under' => 'te faltan de '.($hours['base'] - 2 - $after).' a '.($hours['base'] + 2 - $after).' h',
                                         'over' => 'pasas tu margen por '.($after - $hours['base'] - 2).' h',
@@ -187,7 +187,7 @@
                                     Queda en la bitácora con tu nombre.
                                 @endif
                             </p>
-                            @if ($card['teacher_id'] !== null)
+                            @if ($card['taken'])
                                 <x-button label="Quitar docente" icon="o-user-minus" class="btn-ghost text-error max-md:h-11" wire:click="confirmUnassign" spinner="confirmUnassign" data-testid="selection-unassign-open" />
                             @endif
                             @if ($entry !== null && $inTurn)

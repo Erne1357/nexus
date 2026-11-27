@@ -321,12 +321,12 @@ describe('Oferta', function () {
             ->assertDontSee('B-202')
             ->assertDontSee('Redes de Computadoras');
 
-        expect(publishedViewText($page, '[data-testid="offer-group-'.$taught->id.'"]'))->toContain('A-101')->toContain('Óscar Nájera')
+        expect(publishedViewText($page, '[data-testid="offer-group-'.$taught->id.'"]'))->toContain('A-101')->toContain('Asignado')->not->toContain('Óscar Nájera')
             ->and(publishedViewText($page, '[data-testid="offer-group-'.$taught->id.'"] [data-testid="offer-position"]'))->toBe('3 de 2')
             ->and(publishedViewText($page, '[data-testid="offer-group-'.$open->id.'"] [data-testid="offer-position"]'))->toBe('Sin lugar')
             ->and(publishedViewText($page, '[data-testid="offer-published"]'))->toBe('Publicado el 8 dic. 2026 · v1');
 
-        expect(publishedViewText($page->call('open', $taught->id), '[data-testid="offer-drawer"] dl'))->toContain('SalónA-101 CampusC2 Campus II Docente Óscar Nájera');
+        expect(publishedViewText($page->call('open', $taught->id), '[data-testid="offer-drawer"] dl'))->toContain('SalónA-101 CampusC2 Campus II Docente Asignado')->not->toContain('Óscar Nájera');
     });
 
     it('sin publicar muestra lo vivo y no dice que esté publicada', function () {

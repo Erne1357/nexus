@@ -23,6 +23,9 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
+// Estas pruebas piden préstamos de salón, apagados por omisión (tarea 1.53).
+beforeEach(fn () => roomLoans());
+
 /*
 | AssignSessionRoom (tarea 3.7): asigna o quita el salón de una sesión. Un salón ocupado por otro grupo (HC-02) no se
 | guarda y da el mensaje del validador; uno muy chico (HC-05), de otro tipo (HC-06) o bloqueado (HC-11) se guarda y

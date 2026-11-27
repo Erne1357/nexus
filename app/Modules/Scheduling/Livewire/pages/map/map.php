@@ -26,6 +26,6 @@ new #[Layout('layouts::app', ['fullBleed' => true])] #[Title('Inicio')] class ex
      */
     public function with(CampusMapQuery $query, Actor $context): array
     {
-        return ['map' => $query->forTerm($context->viewTerm())];
+        return ['map' => $query->forActor($context)];
     }
 };
