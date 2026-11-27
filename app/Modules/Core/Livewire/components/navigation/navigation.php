@@ -21,7 +21,7 @@ use Livewire\Component;
  * Inicio no es una entrada del registro: es el primer icono de la franja, lo ve cualquier usuario activo y
  * en Inicio lleva aria-current. El área actual es la de la entrada de la pantalla (Navigation::forRoute)
  * si el usuario la ve; si no, la primera que ve. Su columna se muestra cerrada y su icono se marca, salvo
- * en Inicio, donde la columna muestra la primera área sin marcarla. La entrada activa es la de la pantalla.
+ * en Inicio (MN-07), donde no hay columna: el mapa muestra solo la franja de iconos. La entrada activa es la de la pantalla.
  *
  * El icono de cada área es un enlace: el del área actual lleva a su primera entrada (la principal); el de
  * las demás, a la última página que el usuario visitó de esa área (RecentPages) si una entrada que hoy ve en
@@ -61,7 +61,7 @@ new class extends Component
     }
 
     /**
-     * @return array{home: array{href: string, current: bool}, areas: list<array{area: NavigationArea, current: bool, marked: bool, headings: bool, href: string, iconStyle: string, nameStyle: string, hidden: ?array{why: string, id: string, note: ?string}, groups: list<array{group: ?NavigationGroup, style: ?string, hidden: ?array{why: string, reasons: string, note: ?string}, entries: list<array{item: NavigationItem, active: bool, page: bool, style: string, hidden: ?array{why: string, id: string, badge: bool, note: ?string}}>}>}>, grid: array{firstRow: int, columnRows: int}}
+     * @return array{home: array{href: string, current: bool}, bare: bool, areas: list<array{area: NavigationArea, current: bool, marked: bool, headings: bool, href: string, iconStyle: string, nameStyle: string, hidden: ?array{why: string, id: string, note: ?string}, groups: list<array{group: ?NavigationGroup, style: ?string, hidden: ?array{why: string, reasons: string, note: ?string}, entries: list<array{item: NavigationItem, active: bool, page: bool, style: string, hidden: ?array{why: string, id: string, badge: bool, note: ?string}}>}>}>, grid: array{firstRow: int, columnRows: int}}
      */
     public function with(Navigation $navigation, Actor $context, RecentPages $recentPages): array
     {
@@ -72,9 +72,10 @@ new class extends Component
         // Sin área propia (el Inicio, que es el mapa, o una pantalla fuera del menú), la columna abre la primera área que no
         // sea Mi espacio: «Resumen» vive ahí para todos los que tienen puesto (tarea 1.24.1) y no debe ganarle a lo que el
         // puesto hace (para un jefe, Académico). Si solo tiene Mi espacio, esa.
-        $currentArea = in_array($routeItem?->area, $visibleAreas, true)
+        // MN-07: en Inicio (el mapa) no hay columna de área: solo la franja de iconos.
+        $currentArea = $onHome ? null : (in_array($routeItem?->area, $visibleAreas, true)
             ? $routeItem->area
-            : (array_values(array_filter($visibleAreas, fn (NavigationArea $area): bool => $area !== NavigationArea::MiEspacio))[0] ?? $visibleAreas[0] ?? null);
+            : (array_values(array_filter($visibleAreas, fn (NavigationArea $area): bool => $area !== NavigationArea::MiEspacio))[0] ?? $visibleAreas[0] ?? null));
 
         $shape = array_map(fn (array $area): array => [
             'headings' => $area['headings'],
@@ -156,6 +157,7 @@ new class extends Component
 
         return [
             'home' => ['href' => route('home'), 'current' => $onHome],
+            'bare' => $onHome,
             'areas' => $areas,
             'grid' => ['firstRow' => MenuGrid::FIRST_ROW, 'columnRows' => MenuGrid::COLUMN_ROWS],
         ];

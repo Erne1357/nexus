@@ -85,7 +85,7 @@ it('el icono de otra área lleva a la última página que visitaste de ella, con
         ->assertNoJavaScriptErrors();
 });
 
-it('Inicio, el primer icono de la franja, lleva al inicio; ahí la columna muestra la primera área sin marcar su icono', function () {
+it('MN-07: Inicio, el primer icono de la franja, lleva al inicio; ahí no hay columna de ninguna área y el mapa ocupa su lugar', function () {
     signInFromBrowser('admin')
         ->navigate('/campus')
         ->assertVisible('a[data-label="Campus"]')
@@ -93,8 +93,10 @@ it('Inicio, el primer icono de la franja, lleva al inicio; ahí la columna muest
         ->assertPathIs('/')
         ->assertAttribute('#nexus-menu [data-menu-home]', 'aria-current', 'page')
         ->assertNotPresent('#nexus-menu [data-area-current]')
-        ->assertVisible('a[data-label="Validación de catálogos"]')
+        ->assertMissing('a[data-label="Validación de catálogos"]')
         ->assertMissing('a[data-label="Campus"]')
+        ->assertScript('document.querySelector("#nexus-menu").getBoundingClientRect().width === 64')
+        ->assertScript('document.getElementById("nexus-content").getBoundingClientRect().left === 64')
         ->assertScript('document.querySelector("#nexus-menu [data-menu-home]").getBoundingClientRect().top < document.querySelector(\'[data-menu-area="academico"] [data-menu-flip="icon"]\').getBoundingClientRect().top')
         ->assertNoJavaScriptErrors();
 });
@@ -178,4 +180,14 @@ it('cambia entre el tema claro y el oscuro desde la credencial', function () {
         ->assertRadioSelected('nexus-theme', 'nexus-dark')
         ->radio('nexus-theme', 'nexus')
         ->assertScript('document.documentElement.dataset.theme', 'nexus');
+});
+
+it('MN-07: en el celular el menú no se abre solo en Inicio; abierto muestra las áreas como siempre', function () {
+    signInFromBrowser('admin')
+        ->resize(390, 844)
+        ->navigate('/')
+        ->assertScript('window.Alpine?.$data(document.body).menuOpen === false')
+        ->assertMissing('a[data-label="Validación de catálogos"]')
+        ->assertScript('document.getElementById("nexus-content").getBoundingClientRect().left === 0')
+        ->assertNoJavaScriptErrors();
 });

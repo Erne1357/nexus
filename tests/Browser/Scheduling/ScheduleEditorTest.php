@@ -64,6 +64,7 @@ it('el coordinador entra por el menú, acomoda las horas de tres grupos del seme
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
+        ->click('@hare')
         ->click('#nexus-menu a[href$="/scheduling/editor"]')
         ->waitForText('Grupos del semestre')
         ->assertSee('ACF-0901 · A')
