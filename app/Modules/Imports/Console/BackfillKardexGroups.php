@@ -11,14 +11,14 @@ use Illuminate\Console\Command;
  */
 final class BackfillKardexGroups extends Command
 {
-    protected $signature = 'imports:backfill-kardex-groups {--dry-run : Solo cuenta lo que rellenaría}';
+    protected $signature = 'imports:backfill-kardex-groups {--dry-run : Solo cuenta lo que rellenaría} {--term= : Limita la corrida a un periodo (p. ej. 20263)}';
 
     protected $description = 'Rellena el grupo del SII en el kárdex ya migrado desde sii_archivo (seleccion_materias e historia_alumno)';
 
     public function handle(BackfillKardexGroupsAction $backfill): int
     {
         $dry = (bool) $this->option('dry-run');
-        $report = $backfill->handle($dry);
+        $report = $backfill->handle($dry, $this->option('term') ?: null);
 
         foreach ($report['missing'] as $table) {
             $this->warn("sii_archivo.{$table} no existe: se omite.");
