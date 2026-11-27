@@ -460,6 +460,16 @@ describe('evaluar un periodo', function () {
         expect(ForecastEvaluation::query()->count())->toBe(0);
     });
 
+    it('«Evaluar un periodo» abre aunque haya kárdex sin periodo', function () {
+        KardexRecord::factory()->for(Student::query()->firstOrFail())->for($this->calculus)->create(['term_code' => null, 'result' => KardexResult::Aprobada]);
+
+        Livewire::actingAs($this->subdireccion)->test('academic-load::pages.forecast-accuracy')
+            ->call('openEvaluate')
+            ->assertHasNoErrors()
+            ->assertSet('showEvaluate', true)
+            ->assertSee('Ene-Jun 2026');
+    });
+
     it('solo ofrece los periodos con kárdex de la modalidad', function () {
         Term::factory()->create(['code' => '20253', 'name' => 'Ago-Dic 2025']);
 
