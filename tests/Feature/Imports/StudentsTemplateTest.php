@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -204,4 +205,23 @@ it('advierte solo de los alumnos existentes y activos al validar varias filas, s
         ->and($warns('19111002'))->toBeFalse()
         ->and($warns('19119999'))->toBeFalse()
         ->and($warns('19111001'))->toBeTrue();
+});
+
+it('guarda la especialidad que el SII asignó al alumno, buscada por su clave en el plan (1.69)', function () {
+    $specialty = Specialty::factory()->for($this->plan)->create(['code' => 'LARU']);
+    $row = studentRow(['specialty' => 'LARU']);
+
+    expect($this->template->validate($row, $this->context)->warnings)->toBe([])
+        ->and($this->template->apply($row, $this->context)->specialty_id)->toBe($specialty->id);
+});
+
+it('una especialidad que el plan no tiene deja un aviso y el alumno sin ella; un cambio no la pisa con vacío (1.69)', function () {
+    $specialty = Specialty::factory()->for($this->plan)->create(['code' => 'LARU']);
+    $student = $this->template->apply(studentRow(['specialty' => 'LARU']), $this->context);
+
+    $row = studentRow(['specialty' => 'NOEXISTE']);
+
+    expect($this->template->validate($row, $this->context)->warnings)->toHaveKey('specialty')
+        ->and($this->template->apply($row, $this->context)->specialty_id)->toBe($specialty->id)
+        ->and($student->specialty_id)->toBe($specialty->id);
 });

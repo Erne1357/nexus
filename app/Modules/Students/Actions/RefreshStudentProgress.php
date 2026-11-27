@@ -58,7 +58,7 @@ final class RefreshStudentProgress
 
         Student::query()
             ->when($studyPlanId !== null, fn ($query) => $query->where('study_plan_id', $studyPlanId))
-            ->select(['id', 'study_plan_id', 'current_semester'])
+            ->select(['id', 'study_plan_id', 'current_semester', 'specialty_id'])
             ->chunkById(self::CHUNK_STUDENTS, function (Collection $students) use (&$grids): void {
                 $kardex = KardexRecord::query()
                     ->whereIn('student_id', $students->modelKeys())
@@ -85,6 +85,7 @@ final class RefreshStudentProgress
                         $records->where('result', KardexResult::Aprobada->value)->pluck('subject_id')->unique()->values()->all(),
                         $records->where('result', KardexResult::Cursando->value)->pluck('subject_id')->unique()->values()->all(),
                         $student->current_semester,
+                        $student->specialty_id,
                     );
 
                     $rows[] = [

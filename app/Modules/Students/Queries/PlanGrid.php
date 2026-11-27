@@ -30,6 +30,7 @@ final readonly class PlanGrid
      * @param  array<string, int>  $creditShare  id de materia → porcentaje de los créditos del plan que pide
      * @param  int|null  $totalCredits  créditos totales del plan, si están capturados
      * @param  array<string, int>  $unplaced  id de materia → créditos, de las que esperan semestre en «Por validar», por su renglón y su clave
+     * @param  list<string>  $inactiveSpecialties  ids de las especialidades del plan que no están activas (1.69)
      */
     public function __construct(
         public array $credits,
@@ -39,6 +40,7 @@ final readonly class PlanGrid
         public array $creditShare = [],
         public ?int $totalCredits = null,
         public array $unplaced = [],
+        public array $inactiveSpecialties = [],
     ) {}
 
     /**
@@ -49,8 +51,10 @@ final readonly class PlanGrid
      * faltan ni se ofrecen, porque no están en la retícula (decidido el 10 de noviembre de 2026).
      *
      * La especialidad del alumno sale de su kardex: si aprobó o está cursando materias de una especialidad,
-     * las de las otras ya no le faltan. Mientras no toma ninguna, le faltan las de todas, porque puede elegir
-     * cualquiera (confirmado el 29 de octubre de 2026).
+     * las de las otras ya no le faltan (confirmado el 29 de octubre de 2026). Si el kardex no la dice, vale la que
+     * le asignó el SII (`$assignedSpecialty`; supuesto por confirmar, 1.69). Mientras no tiene ninguna, le faltan
+     * solo las de las especialidades activas, porque puede elegir cualquiera de ellas (confirmado el 26 de
+     * noviembre de 2026; antes, las de todas).
      *
      * Puede cursar las materias de su semestre y de hasta dos más, y las de semestres anteriores que le faltan;
      * sin semestre (un egresado) no hay límite. Una materia que pide un porcentaje de créditos queda disponible
@@ -60,12 +64,13 @@ final readonly class PlanGrid
      * @param  list<string>  $approved  ids de las materias que aprobó, de cualquier plan
      * @param  list<string>  $taking  ids de las materias que está cursando
      * @param  int|null  $semester  el semestre del alumno, como lo trae el SII
+     * @param  string|null  $assignedSpecialty  id de la especialidad que le asignó el SII, si la hay
      * @return array{credits_approved: int, subjects_approved: int, subjects_pending: list<string>, subjects_available: list<string>}
      */
-    public function progressFor(array $approved, array $taking = [], ?int $semester = null): array
+    public function progressFor(array $approved, array $taking = [], ?int $semester = null, ?string $assignedSpecialty = null): array
     {
         $passed = array_fill_keys($approved, true);
-        $chosen = $this->specialtiesOf([...$approved, ...$taking]);
+        $chosen = $this->specialtiesOf([...$approved, ...$taking], $assignedSpecialty);
         $credits = 0;
         $count = 0;
         $pending = [];
@@ -78,7 +83,7 @@ final readonly class PlanGrid
                 continue;
             }
 
-            if ($chosen !== [] && isset($this->specialtyOf[$subject]) && ! isset($chosen[$this->specialtyOf[$subject]])) {
+            if (isset($this->specialtyOf[$subject]) && ! $this->offered($this->specialtyOf[$subject], $chosen)) {
                 continue;
             }
 
@@ -105,20 +110,31 @@ final readonly class PlanGrid
 
     /**
      * Los créditos totales del plan para un alumno que aprobó o cursa `$subjects`: los capturados en el plan o,
-     * si no están, los de la retícula con su especialidad (o la de más créditos si todavía no elige).
+     * si no están, los de la retícula con su especialidad (o la de más créditos entre las activas si todavía no elige).
      *
      * @param  list<string>  $subjects
      */
-    public function totalFor(array $subjects): int
+    public function totalFor(array $subjects, ?string $assignedSpecialty = null): int
     {
-        return $this->totalCredits ?? $this->gridCredits($this->specialtiesOf($subjects));
+        return $this->totalCredits ?? $this->gridCredits($this->specialtiesOf($subjects, $assignedSpecialty));
+    }
+
+    /**
+     * Si una especialidad se le ofrece al alumno: la que eligió (si ya eligió) o, mientras no elige, cualquiera
+     * de las activas (1.69).
+     *
+     * @param  array<string, true>  $chosen
+     */
+    private function offered(string $specialty, array $chosen): bool
+    {
+        return $chosen === [] ? ! in_array($specialty, $this->inactiveSpecialties, true) : isset($chosen[$specialty]);
     }
 
     /**
      * @param  list<string>  $subjects
-     * @return array<string, true> las especialidades de las materias de especialidad que tomó
+     * @return array<string, true> las especialidades de las materias de especialidad que tomó o, si no tomó ninguna, la asignada por el SII
      */
-    private function specialtiesOf(array $subjects): array
+    private function specialtiesOf(array $subjects, ?string $assignedSpecialty = null): array
     {
         $specialties = [];
 
@@ -126,6 +142,10 @@ final readonly class PlanGrid
             if (isset($this->specialtyOf[$subject])) {
                 $specialties[$this->specialtyOf[$subject]] = true;
             }
+        }
+
+        if ($specialties === [] && $assignedSpecialty !== null && in_array($assignedSpecialty, $this->specialtyOf, true)) {
+            $specialties[$assignedSpecialty] = true;
         }
 
         return $specialties;
@@ -151,7 +171,7 @@ final readonly class PlanGrid
             }
         }
 
-        $candidates = $chosen === [] ? $bySpecialty : array_intersect_key($bySpecialty, $chosen);
+        $candidates = $chosen === [] ? array_diff_key($bySpecialty, array_flip($this->inactiveSpecialties)) : array_intersect_key($bySpecialty, $chosen);
 
         return $common + ($candidates === [] ? 0 : max($candidates));
     }
