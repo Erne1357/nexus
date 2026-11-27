@@ -75,6 +75,7 @@
             </p>
         @elseif ($ranking !== null)
             @include('staffing::assign.ranking', ['group' => $group, 'ranking' => $ranking, 'currentTeacherId' => $group->teacher_id])
+            @include('staffing::assign.search')
         @endif
     </div>
 </section>
