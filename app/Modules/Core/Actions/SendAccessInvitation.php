@@ -29,6 +29,10 @@ use LogicException;
  * correo (y `by_admin` en la del admin); el correo sale de la cola después del commit.
  * Con `$unlessInvited`, si el usuario ya tiene una invitación vigente no hace nada: se revisa con el usuario
  * bloqueado, así dos corridas a la vez no le mandan dos. Devuelve si la mandó.
+ *
+ * CE-01: la invitación sale solo a un correo institucional; `$personalMailRule` es la excepción declarada que deja
+ * mandarla a uno personal (SEL-13, la de la cola de una orden de selección y su reenvío, InviteTeacherAccess). Sin ella,
+ * a un correo personal la guardia no la deja salir (GuardMailRecipient).
  */
 final class SendAccessInvitation
 {
@@ -43,7 +47,7 @@ final class SendAccessInvitation
      * @throws ValidationException si el usuario ya tiene acceso, está inactivo, tiene otro puesto (salvo `$byAdmin`) o el
      *                             correo es de otro usuario
      */
-    public function handle(User $user, string $email, ?User $actor = null, bool $unlessInvited = false, bool $byAdmin = false): bool
+    public function handle(User $user, string $email, ?User $actor = null, bool $unlessInvited = false, bool $byAdmin = false, ?string $personalMailRule = null): bool
     {
         $email = mb_strtolower(trim($email));
 
@@ -51,7 +55,7 @@ final class SendAccessInvitation
             throw new LogicException('La invitación del admin necesita a quien la manda.');
         }
 
-        return DB::transaction(function () use ($user, $email, $actor, $unlessInvited, $byAdmin): bool {
+        return DB::transaction(function () use ($user, $email, $actor, $unlessInvited, $byAdmin, $personalMailRule): bool {
             $user = User::query()->lockForUpdate()->findOrFail($user->getKey());
 
             if ($unlessInvited && $user->access_invited_at !== null && $this->link->expiresAt($user)->isFuture()) {
@@ -101,6 +105,7 @@ final class SendAccessInvitation
                 $user->name,
                 $this->link->url($user),
                 $this->link->expiresAt($user),
+                $personalMailRule,
             ));
 
             return true;

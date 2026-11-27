@@ -79,6 +79,9 @@ Route::middleware('auth')->group(function () {
     Route::livewire('/configuracion/parametros', 'core::pages.settings')->name('core.settings');
     // 1.22-G Correos y colas
     Route::livewire('/configuracion/correos-y-colas', 'core::pages.mail-and-queues')->name('core.mail-and-queues');
+
+    // Buzones de puesto (CE-02, tarea 1.63): solo el admin.
+    Route::livewire('/configuracion/buzones-de-puesto', 'core::pages.position-mailboxes')->name('core.position-mailboxes');
     // 1.29 El regreso de Microsoft al conectar la cuenta de envío (Redirect URI de la app de Azure; ADR-0032).
     Route::get('/configuracion/correo/microsoft/callback', MicrosoftMailCallback::class)->name('core.mail-connection.callback');
 });

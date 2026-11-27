@@ -397,7 +397,7 @@ it('MN-01: el admin ve Académico con la validación, Carga académica por etapa
             'institucion' => ['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos'],
             'catalogos' => ['Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones'],
             'datos' => ['Importaciones'],
-            'configuracion' => ['Orden de selección', 'Puestos y permisos', 'Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas'],
+            'configuracion' => ['Orden de selección', 'Puestos y permisos', 'Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas', 'Buzones de puesto'],
         ])
         ->and(navigationGroupsFor($admin, NavigationArea::ServiciosEscolares))->toBe(['—' => ['Alumnos', 'Materias por colocar']])
         ->and(navigationGroupsFor($admin, NavigationArea::RecursosHumanos))->toBe(['—' => ['Docentes']]);
@@ -518,7 +518,7 @@ describe('menú', function () {
             ->{'Carga académica'}->toContain('Propuesta de carrera', 'Horarios publicados')->not->toContain('Campus', 'Materias', 'Validación de catálogos')
             ->{'Servicios escolares'}->toContain('Alumnos', 'Saludo')
             ->{'Recursos humanos'}->toContain('Docentes', 'Elementos')
-            ->{'Administración'}->toBe(['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones', 'Orden de selección', 'Puestos y permisos', 'Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas']);
+            ->{'Administración'}->toBe(['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones', 'Orden de selección', 'Puestos y permisos', 'Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas', 'Buzones de puesto']);
     });
 
     it('muestra al docente «Mi carga» y «Oferta» en Mi espacio, sin grupo (MN-05, desde el 20 de noviembre de 2026)', function () {

@@ -18,8 +18,13 @@ use Symfony\Component\Mailer\Transport\AbstractTransport;
 /*
 | Registro de correos (CF-S8): cada correo que sale queda con destinatario, asunto, tipo, usuario y hora, sin el cuerpo,
 | que lleva enlaces con token. MessageSent solo se dispara con un envío de verdad, así que las pruebas usan el
-| mailer `array` y no Notification::fake().
+| mailer `array` y no Notification::fake(). Los destinatarios son de un dominio de prueba que se declara institucional,
+| para que la guardia del correo (CE-01) los deje salir.
 */
+
+beforeEach(function () {
+    config(['nexus.institutional_email_domains' => ['itcj.test']]);
+});
 
 final class MailLogProbeNotification extends Notification
 {

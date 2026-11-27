@@ -48,6 +48,9 @@ it('RecipientsQuery no conserva for()', function () {
 | listar, sembrar, mostrar). Cada archivo de la lista debe seguir necesitando su entrada.
 */
 const ROLE_NAMING_EXCEPTIONS = [
+    // Los buzones de puesto (CE-02) son de un puesto: su pantalla, su Query y sus reglas nombran los puestos y el comando
+    // crea los de las jefaturas.
+    'app/Modules/Academic/Console/PositionMailboxesFromDepartmentsCommand.php',
     'app/Modules/Academic/Database/Seeders/DemoStaffSeeder.php',
     'app/Modules/CatalogValidation/Database/Seeders/CatalogValidationDemoSeeder.php',
     // «Personal» de Comunicación y Difusión nombra y termina el puesto de personal de área (CO-02).
@@ -61,6 +64,7 @@ const ROLE_NAMING_EXCEPTIONS = [
     'app/Modules/Core/Livewire/components/context-switcher/context-switcher.php',
     'app/Modules/Core/Livewire/components/org-unit-panel/org-unit-panel.php',
     'app/Modules/Core/Livewire/pages/people/people.php',
+    'app/Modules/Core/Livewire/pages/position-mailboxes/position-mailboxes.php',
     'app/Modules/Core/Livewire/pages/permissions/permissions.php',
     'app/Modules/Core/Livewire/pages/person/person.php',
     'app/Modules/Core/Notifications/NotificationMessage.php',
@@ -70,8 +74,10 @@ const ROLE_NAMING_EXCEPTIONS = [
     'app/Modules/Core/Queries/PeopleQuery.php',
     'app/Modules/Core/Queries/PermissionCatalogQuery.php',
     'app/Modules/Core/Queries/PermissionSetsQuery.php',
+    'app/Modules/Core/Queries/PositionMailboxQuery.php',
     'app/Modules/Core/Queries/PositionsQuery.php',
     'app/Modules/Core/Rules/PermissionSetRules.php',
+    'app/Modules/Core/Rules/PositionMailboxRules.php',
     'app/Modules/Core/Rules/RoleAssignmentRules.php',
     'app/Modules/Faculty/Actions/SyncTeacherAccess.php',
     'app/Modules/Faculty/Database/Seeders/FacultyDemoSeeder.php',

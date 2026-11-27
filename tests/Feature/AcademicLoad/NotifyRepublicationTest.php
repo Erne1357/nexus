@@ -190,9 +190,23 @@ it('RA-06: va por la campana y el correo institucional; sin correo o con la cuen
     app(NotifyRepublication::class)->handle($this->load, 2);
 
     Notification::assertSentTo($this->movedUser, LoadRepublished::class, fn (LoadRepublished $notice, array $channels): bool => $channels === ['database', 'mail']);
-    Notification::assertSentTo($this->iscCoordinator, LoadRepublished::class, fn (LoadRepublished $notice, array $channels): bool => $channels === ['database', 'mail']);
-    Notification::assertSentTo($this->igeCoordinator, LoadRepublished::class, fn (LoadRepublished $notice, array $channels): bool => $channels === ['database']);
     Notification::assertSentTo($this->inactiveUser, LoadRepublished::class, fn (LoadRepublished $notice, array $channels): bool => $channels === ['database']);
+});
+
+it('CE-02: el aviso a la coordinación de una carrera es de su puesto: lleva el correo, que va al buzón o espera', function () {
+    Notification::fake();
+    republicationScenario();
+
+    app(NotifyRepublication::class)->handle($this->load, 2);
+
+    foreach ([$this->iscCoordinator, $this->igeCoordinator] as $coordinator) {
+        Notification::assertSentTo($coordinator, LoadRepublished::class, fn (LoadRepublished $notice, array $channels): bool => $channels === ['database', 'mail']
+            && $notice->position()?->role === Role::Coordinador
+            && $notice->position()->modalityId === $this->load->modality_id
+            && $coordinator->routeNotificationFor('mail', $notice) === null);
+    }
+
+    Notification::assertSentTo($this->iscCoordinator, LoadRepublished::class, fn (LoadRepublished $notice): bool => $notice->position()->careerId === $this->isc->id);
 });
 
 it('RA-06: el docente sin usuario recibe el correo en su institucional; sin correo institucional no recibe nada', function () {

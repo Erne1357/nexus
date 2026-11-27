@@ -11,6 +11,8 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AcademicLoadNotice;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
+use App\Modules\Core\Notifications\PositionNotice;
+use App\Modules\Core\Notifications\PositionRef;
 use App\Modules\Core\Notifications\RoutesMailAddress;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -39,8 +41,12 @@ use Illuminate\Support\Str;
  * institucional (una notificación por ruta, `Notification::route('mail', …)`, que no tiene campana). Sale de la cola,
  * después del commit; la campana se guarda en el momento (`viaConnections`, conexión `sync`). Mientras el admin tiene
  * oculta la carga académica, el correo no sale (AcademicLoadNotice, MN-05).
+ *
+ * CE-02 (confirmado el 26 de noviembre de 2026): los avisos a la coordinación de una carrera y a la jefatura de otro
+ * departamento compiten al puesto (PositionNotice): su correo va al buzón del nombramiento por el que lo recibe cada quien
+ * y, sin buzón, espera; la campana llega igual. El aviso al docente es de persona.
  */
-final class LoadRepublished extends NexusNotification implements AcademicLoadNotice, RoutesMailAddress, ShouldQueue
+final class LoadRepublished extends NexusNotification implements AcademicLoadNotice, PositionNotice, RoutesMailAddress, ShouldQueue
 {
     use Queueable;
 
@@ -81,7 +87,16 @@ final class LoadRepublished extends NexusNotification implements AcademicLoadNot
             return ['mail'];
         }
 
-        return $notifiable instanceof User && $this->mailAddressFor($notifiable) !== null ? ['database', 'mail'] : ['database'];
+        return $this->positionChannels()
+            ?? ($notifiable instanceof User && $this->mailAddressFor($notifiable) !== null ? ['database', 'mail'] : ['database']);
+    }
+
+    /**
+     * CE-02: el puesto de la coordinación o la jefatura que lo recibe, con el alcance de su nombramiento; null para el docente.
+     */
+    public function position(): ?PositionRef
+    {
+        return $this->audience === RepublicationAudience::Teacher ? null : $this->holderPosition();
     }
 
     /**

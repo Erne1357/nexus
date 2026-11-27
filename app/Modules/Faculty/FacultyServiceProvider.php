@@ -10,8 +10,10 @@ use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Notifications\PersonMailAddresses;
 use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Faculty\Console\DeriveQualificationsCommand;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
@@ -67,6 +69,12 @@ final class FacultyServiceProvider extends ModuleServiceProvider
         }
 
         Event::listen(DepartmentDeleting::class, BlockDepartmentDeletionWithTeachers::class);
+
+        // CE-01: el correo institucional de la persona que no lo tiene en su usuario es el de su ficha de docente (AC-06;
+        // una ficha borrada no cuenta, como en CV11). Core no conoce a Faculty.
+        $this->app->make(PersonMailAddresses::class)->extend(
+            static fn (User $user): ?string => Teacher::query()->where('user_id', $user->getKey())->value('institutional_email'),
+        );
     }
 
     public function navigation(): array

@@ -205,7 +205,7 @@ test('CO-09: citar, reprogramar, lista, entregada y rechazada mandan la campana 
     Notification::assertSentToTimes($user, CredentialRequestUpdated::class, 5);
     Notification::assertSentTo($user, CredentialRequestUpdated::class, function (CredentialRequestUpdated $notification) use ($user, $student): bool {
         return $notification->via($user) === ['database', 'mail']
-            && $notification->mailAddressFor($user) === ($user->email ?: InstitutionalEmail::of($student->control_number))
+            && $notification->mailAddressFor($user) === InstitutionalEmail::of($student->control_number)
             && $notification->message($user)->route === 'students.my-record'
             && $notification->message($user)->parameters === ['tab' => 'credencial'];
     });
@@ -214,6 +214,18 @@ test('CO-09: citar, reprogramar, lista, entregada y rechazada mandan la campana 
     $again = CredentialRequest::factory()->for($student)->create(['wants_reposition' => true, 'wants_photo' => false, 'status' => S::Solicitada]);
     app(CancelCredentialRequest::class)->handle($again, $user);
     Notification::assertNothingSent();
+});
+
+test('CO-09 y CE-01: el aviso va al correo de su usuario solo si es institucional; si no, al de su número de control', function () {
+    config(['nexus.institutional_email_domain' => 'cdjuarez.tecnm.mx']);
+    [$student, $user] = studentWithUser(['control_number' => '21110002']);
+    $notice = new CredentialRequestUpdated(CredentialRequest::factory()->for($student)->create(), CredentialRequestUpdated::READY);
+
+    $user->forceFill(['email' => 'alumno@gmail.com'])->save();
+    expect($notice->mailAddressFor($user))->toBe('l21110002@cdjuarez.tecnm.mx');
+
+    $user->forceFill(['email' => 'Otro.Correo@cdjuarez.tecnm.mx'])->save();
+    expect($notice->mailAddressFor($user))->toBe('otro.correo@cdjuarez.tecnm.mx');
 });
 
 test('CO-01: otro jefe no administra solicitudes', function () {

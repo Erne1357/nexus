@@ -11,8 +11,8 @@ use Symfony\Component\Mime\Address;
 
 /*
 | A qué correo le llega un aviso a un usuario (CV11, tarea 1.21): una notificación que implementa RoutesMailAddress
-| elige la dirección, y null es que ese usuario no recibe el correo; las demás siguen yendo a `users.email`, como
-| PasswordResetLink. La invitación de acceso no pasa por el usuario: va al correo que se le da (AC-07).
+| elige la dirección, y null es que ese usuario no recibe el correo; las demás van a su correo institucional (CE-01),
+| como PasswordResetLink. La invitación de acceso no pasa por el usuario: va al correo que se le da (AC-07).
 */
 
 /**
@@ -74,11 +74,13 @@ it('CV11: si el aviso no elige ninguna dirección, no sale correo', function () 
     expect(routedRecipients())->toBe([]);
 });
 
-it('los demás correos siguen yendo al correo del usuario: el restablecimiento (AC-16)', function () {
+it('CE-01: los demás correos van al correo institucional de la persona, nunca al personal: el restablecimiento (AC-16)', function () {
     $reset = new PasswordResetLink($this->user->username, $this->user->name, 'https://nexus.test/reset', 60);
+    $institutional = User::factory()->create(['email' => 'luis.diaz@cdjuarez.tecnm.mx']);
 
-    expect($this->user->routeNotificationFor('mail', $reset))->toBe('ana.perez@gmail.com')
-        ->and($this->user->routeNotificationFor('mail'))->toBe('ana.perez@gmail.com');
+    expect($this->user->routeNotificationFor('mail', $reset))->toBeNull()
+        ->and($this->user->routeNotificationFor('mail'))->toBeNull()
+        ->and($institutional->routeNotificationFor('mail', $reset))->toBe('luis.diaz@cdjuarez.tecnm.mx');
 });
 
 it('la invitación de acceso (AC-07) sigue yendo al correo que se le da', function () {

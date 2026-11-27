@@ -301,6 +301,30 @@ final class Actor
     }
 
     /**
+     * Los nombramientos por los que cubre `$target` con `$permission`: los de rolesAllowing(), en su orden y, dentro de
+     * un puesto, del más específico (más dimensiones fijas) al más amplio. Para saber el puesto de quien recibe un aviso
+     * con su alcance (CE-02, el buzón del puesto). Solo permisos de gestión.
+     *
+     * @return list<AssignmentScope>
+     */
+    public function assignmentsAllowing(Permission $permission, Target $target): array
+    {
+        $scopes = [];
+        $fixed = fn (AssignmentScope $scope): int => count(array_filter([$scope->campusId, $scope->unitId, $scope->careerId, $scope->modalityId], fn (?string $value): bool => $value !== null));
+
+        foreach ($this->rolesAllowing($permission, $target) as $role) {
+            $covering = array_values(array_filter(
+                $this->contributing($permission, [$role]),
+                fn (AssignmentScope $scope): bool => $this->coversTarget($scope, $permission, $target),
+            ));
+            usort($covering, fn (AssignmentScope $a, AssignmentScope $b): int => $fixed($b) <=> $fixed($a));
+            array_push($scopes, ...$covering);
+        }
+
+        return $scopes;
+    }
+
+    /**
      * Si puede `$permission` sobre algo: para el menú y la entrada a una pantalla de lista, que luego se filtra con
      * constrain(). Uno personal lo da cualquier puesto que tenga; uno de gestión, un puesto efectivo; en los dos, el
      * puesto debe concederlo con un nombramiento que lo aporte (AZ-02, AZ-S16; rolesGranting()).

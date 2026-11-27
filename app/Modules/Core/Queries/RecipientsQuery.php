@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\AssignmentScope;
 use App\Modules\Core\Authorization\GrantTable;
 use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\Target;
@@ -31,9 +32,10 @@ final class RecipientsQuery
     /**
      * A quién le llega un aviso por permiso: los usuarios activos que, con alguno de sus puestos vigentes (no solo el
      * activo), tienen `$permission` y cubren `$target` (Actor::rolesAllowing). El admin no entra por serlo.
-     * Cada persona va una vez, con el primer puesto del enum que cubre. Ordenados por nombre.
+     * Cada persona va una vez, con el primer puesto del enum que cubre y el nombramiento por el que lo cubre (`scope`, el
+     * más específico de ese puesto; CE-02, el buzón del puesto). Ordenados por nombre.
      *
-     * @return list<array{user: User, role: Role}>
+     * @return list<array{user: User, role: Role, scope: AssignmentScope}>
      */
     public function holders(Permission $permission, Target $target): array
     {
@@ -47,7 +49,7 @@ final class RecipientsQuery
      * @template TKey of array-key
      *
      * @param  array<TKey, Target>  $targets
-     * @return array<TKey, list<array{user: User, role: Role}>>
+     * @return array<TKey, list<array{user: User, role: Role, scope: AssignmentScope}>>
      */
     public function holdersByKey(Permission $permission, array $targets): array
     {
@@ -66,10 +68,10 @@ final class RecipientsQuery
 
         foreach ($candidates as $user) {
             foreach ($targets as $key => $target) {
-                $role = $this->context->forUser($user)->rolesAllowing($permission, $target)[0] ?? null;
+                $scope = $this->context->forUser($user)->assignmentsAllowing($permission, $target)[0] ?? null;
 
-                if ($role !== null) {
-                    $holders[$key][] = ['user' => $user, 'role' => $role];
+                if ($scope !== null) {
+                    $holders[$key][] = ['user' => $user, 'role' => $scope->role, 'scope' => $scope];
                 }
             }
         }
