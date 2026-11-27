@@ -20,7 +20,7 @@ use Carbon\CarbonInterface;
  *
  * Cada semana de Nexus se parte por el departamento del grupo (tarea 1.59, B3): `departments` trae primero los de
  * adscripción del docente (`home`, el principal antes) y luego los demás con grupos, cada uno con su jefe vigente
- * (el titular vigente de la unidad, OrgChartQuery::titularNames), sus horas y sus grupos, y cada bloque de `days` lleva su
+ * (el titular vigente de la unidad, OrgChartQuery::titularNames), sus horas (las de la materia de cada grupo, como el encabezado de «Mi carga») y sus grupos, con o sin sesiones, y cada bloque de `days` lleva su
  * `department_id` y su `tone` (1 a 12, el color del departamento). La semana que sale del SII no sabe el departamento
  * del grupo en Nexus: lleva `departments` vacío y se muestra sin partir (supuesto por confirmar).
  */
@@ -91,18 +91,24 @@ final class TeacherWeeklyLoadQuery implements TeacherWeeklyLoad
         $heads = $this->orgChart->titularNames($used);
         $tones = array_flip($order);
 
+        // Las secciones salen de los grupos, no de los bloques: un grupo sin sesiones también cuenta, con las horas de su materia
+        // como las cuenta «Mi carga» y su encabezado. Los bloques solo llevan el departamento y su color.
         $sections = [];
+
+        foreach ($groups as $group) {
+            $sections[$byGroup[$group['id']] ?? '']['groups'][$group['id']] = [
+                'code' => $group['code'],
+                'subject_code' => $group['subject_code'],
+                'subject_name' => $group['subject_name'],
+                'hours' => (int) $group['hours'],
+            ];
+        }
 
         foreach ($days as $number => $day) {
             foreach ($day['blocks'] as $index => $block) {
                 $department = $byGroup[$block['group_id']] ?? null;
                 $days[$number]['blocks'][$index]['department_id'] = $department;
                 $days[$number]['blocks'][$index]['tone'] = ($tones[$department] ?? count($tones)) % 12 + 1;
-                $hours = ($block['end'] - $block['start']) / 60;
-                $group = &$sections[$department ?? '']['groups'][$block['group_id']];
-                $group ??= ['code' => $block['group_code'], 'subject_code' => $block['subject_code'], 'subject_name' => $block['subject_name'], 'hours' => 0.0];
-                $group['hours'] += $hours;
-                unset($group);
             }
         }
 
@@ -121,14 +127,14 @@ final class TeacherWeeklyLoadQuery implements TeacherWeeklyLoad
                 'home' => in_array($id, $homeIds, true),
                 'head' => $heads[$id] ?? null,
                 'tone' => $tones[$id] % 12 + 1,
-                'hours' => (int) round(array_sum(array_column($groupsOf, 'hours'))),
-                'groups' => array_map(fn (array $group): array => [...$group, 'hours' => (int) round($group['hours'])], $groupsOf),
+                'hours' => array_sum(array_column($groupsOf, 'hours')),
+                'groups' => $groupsOf,
             ];
         }
 
         if (isset($sections[''])) {
             $groupsOf = array_values($sections['']['groups']);
-            $departments[] = ['id' => null, 'name' => 'Sin departamento', 'home' => false, 'head' => null, 'tone' => count($tones) % 12 + 1, 'hours' => (int) round(array_sum(array_column($groupsOf, 'hours'))), 'groups' => array_map(fn (array $group): array => [...$group, 'hours' => (int) round($group['hours'])], $groupsOf)];
+            $departments[] = ['id' => null, 'name' => 'Sin departamento', 'home' => false, 'head' => null, 'tone' => count($tones) % 12 + 1, 'hours' => array_sum(array_column($groupsOf, 'hours')), 'groups' => $groupsOf];
         }
 
         return ['days' => $days, 'departments' => $departments];

@@ -69,7 +69,7 @@ final class AcademicLoadVisibility
     /**
      * Las rutas de la carga académica que se bloquean mientras está oculta, por nombre: las de la propuesta, la bandeja (con
      * Paralelos), la demanda y la precisión de la proyección, las versiones publicadas, los horarios y los choques, los acuerdos
-     * (préstamos de salón y grupos compartidos), el re-análisis, la asignación docente, la carga por docente, las solicitudes
+     * (préstamos de salón y grupos compartidos), el re-análisis, la carga actual, la asignación docente, la carga por docente, las solicitudes
      * de cambio, el cierre y su avance, las corridas del motor, y la consulta publicada con sus PDF y
      * exportes. Las que piden sesión responden 403; las públicas, 404.
      *
@@ -104,6 +104,13 @@ final class AcademicLoadVisibility
     ];
 
     /**
+     * Todas las etapas: las pantallas que el jefe y el JPD ven siempre.
+     *
+     * @var list<Stage>
+     */
+    public const array EVERY_STAGE = [Stage::CatalogValidation, Stage::Proposal, Stage::Scheduling, Stage::Staffing, Stage::Rooms, Stage::Closing, Stage::Publication, Stage::Reanalysis];
+
+    /**
      * Las etapas de cada ruta de ROUTES (MN-06, supuesto por confirmar): el jefe y el JPD la ven y la abren si su carga está
      * en alguna. Toda ruta de ROUTES lleva la suya (una prueba lo revisa); una ruta sin etapas no la ven nunca, y una que se
      * ve en cualquier etapa las lista todas. Las corridas del motor no tienen ninguna «por ahora» (confirmado el 26 de
@@ -116,15 +123,15 @@ final class AcademicLoadVisibility
         'academic-load.inbox' => [Stage::Proposal],
         'academic-load.demand' => [Stage::Proposal],
         'academic-load.forecast-accuracy' => [Stage::Proposal],
-        'academic-load.versions' => [Stage::Publication, Stage::Reanalysis],
-        'published.index' => [Stage::Publication],
-        'published.semester' => [Stage::Publication],
-        'published.teacher' => [Stage::Publication],
-        'published.room' => [Stage::Publication],
-        'published.semester.pdf' => [Stage::Publication],
-        'published.teacher.pdf' => [Stage::Publication],
-        'published.room.pdf' => [Stage::Publication],
-        'published.export' => [Stage::Publication],
+        'academic-load.versions' => self::EVERY_STAGE,
+        'published.index' => self::EVERY_STAGE,
+        'published.semester' => self::EVERY_STAGE,
+        'published.teacher' => self::EVERY_STAGE,
+        'published.room' => self::EVERY_STAGE,
+        'published.semester.pdf' => self::EVERY_STAGE,
+        'published.teacher.pdf' => self::EVERY_STAGE,
+        'published.room.pdf' => self::EVERY_STAGE,
+        'published.export' => self::EVERY_STAGE,
         'scheduling.editor' => [Stage::Scheduling, Stage::Rooms],
         'scheduling.conflicts' => [Stage::Scheduling, Stage::Rooms],
         'scheduling.agreements' => [Stage::Scheduling, Stage::Rooms],
@@ -136,8 +143,9 @@ final class AcademicLoadVisibility
         // Se publica y se cierra el re-análisis desde «Cierre de la carga»: la pantalla sigue abierta al jefe en publicación.
         'staffing.closing' => [Stage::Closing, Stage::Publication],
         'staffing.closing-board' => [Stage::Closing],
-        // «Carga actual» (tarea 1.57, SEL-18): la carga del departamento en cualquier etapa.
-        'staffing.current-load' => [Stage::CatalogValidation, Stage::Proposal, Stage::Scheduling, Stage::Staffing, Stage::Rooms, Stage::Closing, Stage::Publication, Stage::Reanalysis],
+        // «Carga actual» (tarea 1.57, SEL-18): la carga del departamento en cualquier etapa. Las versiones y los horarios
+        // publicados (con sus PDF y exportes) también, como «Mi carga» y «Oferta» (MN-04, confirmado el 12 de noviembre de 2026).
+        'staffing.current-load' => self::EVERY_STAGE,
         'solver.runs' => [],
     ];
 
@@ -272,7 +280,7 @@ final class AcademicLoadVisibility
             'core',
             'Módulos',
             label: 'Mostrar la carga académica',
-            help: 'Apagado, la carga académica (propuesta, demanda, horarios y choques, acuerdos, asignación docente, carga por docente, solicitudes de cambio, corridas del motor, cierre, publicación, sin «Mi carga», «Oferta» ni el horario de la orden de selección, que siempre se ven) sale del menú y sus pantallas no abren, ni la consulta pública de horarios, para nadie más que el admin y, si el parámetro siguiente lo deja, los jefes de departamento y los JPD en las pantallas de su etapa. No se borra ni se detiene nada.',
+            help: 'Apagado, la carga académica (propuesta, demanda, horarios y choques, acuerdos, carga actual, asignación docente, carga por docente, solicitudes de cambio, corridas del motor, cierre, publicación, sin «Mi carga», «Oferta» ni el horario de la orden de selección, que siempre se ven) sale del menú y sus pantallas no abren, ni la consulta pública de horarios, para nadie más que el admin y, si el parámetro siguiente lo deja, los jefes de departamento y los JPD en las pantallas de su etapa. No se borra ni se detiene nada.',
             type: SettingType::Boolean,
             default: self::DEFAULT_VISIBLE,
             permission: CorePermission::AcademicLoadToggle,

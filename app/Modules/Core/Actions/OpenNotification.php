@@ -73,8 +73,11 @@ final class OpenNotification
 
         // La etapa del jefe (MN-06) es la del periodo del aviso, que queda en su credencial al abrirlo.
         $noticeTerm = $message->termId === null ? null : KeyLookup::find(Term::query(), $message->termId);
+        // Sin periodo (o uno que ya no existe) cuenta el periodo de carga de la sesión, como en la campana: el contexto de
+        // otro puesto (asRole) no trae sesión y caería al periodo vigente.
+        $stageTerm = $noticeTerm ?? $this->context->loadTerm();
 
-        if (AcademicLoadVisibility::isLoadRoute($message->route) && $this->visibility->closesFor($context, $message->route, $noticeTerm)) {
+        if (AcademicLoadVisibility::isLoadRoute($message->route) && $this->visibility->closesFor($context, $message->route, $stageTerm)) {
             return NotificationTarget::unavailable('La carga académica no está disponible por ahora.');
         }
 

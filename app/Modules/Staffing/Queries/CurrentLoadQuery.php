@@ -12,9 +12,11 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Support\WeekGrid;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Models\ScheduleConflict;
 use App\Modules\Staffing\Rules\SessionChips;
 use Illuminate\Database\Eloquent\Builder;
@@ -103,6 +105,34 @@ final class CurrentLoadQuery
     {
         /** @var Group */
         return KeyLookup::findOrFail($this->groupsQuery($termId, $modalityId, $departmentId, $campusId), $groupId);
+    }
+
+    /**
+     * Una sesión del grupo por un id del cliente, con su salón (aunque esté desactivado); 404 si no es de ese grupo.
+     */
+    public function sessionOrFail(Group $group, string $sessionId): GroupSession
+    {
+        /** @var GroupSession */
+        return KeyLookup::findOrFail(
+            GroupSession::query()->where('group_id', $group->getKey())->with(['group', 'room' => fn ($relation) => $relation->withTrashed()]),
+            $sessionId,
+        );
+    }
+
+    /**
+     * La retícula de bloques del perfil de la modalidad del grupo (aunque la modalidad esté desactivada).
+     */
+    public function gridOf(Group $group): WeekGrid
+    {
+        return WeekGrid::of($group->modality()->withTrashed()->firstOrFail()->profile);
+    }
+
+    /**
+     * La carga del departamento del grupo en su periodo y modalidad; null si no hay.
+     */
+    public function loadOf(Group $group): ?AcademicLoad
+    {
+        return AcademicLoad::query()->ofDepartment($group->term_id, $group->modality_id, $group->department_id)->first();
     }
 
     /**

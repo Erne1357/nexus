@@ -4,6 +4,7 @@ use App\Modules\Academic\Actions\SetSubjectRequiredSpace;
 use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
@@ -172,7 +173,7 @@ new #[Title('Carga actual')] class extends Component
     #[On('current-load-changed')]
     public function refreshed(): void {}
 
-    public function with(CurrentLoadQuery $query, CampusGroupCountsQuery $counts): array
+    public function with(CurrentLoadQuery $query, CampusGroupCountsQuery $counts, Actor $context): array
     {
         $modality = $this->modalityId === null ? null : $this->modalityOptions()->first(fn (Modality $option): bool => $option->getKey() === $this->modalityId);
         $scope = [
@@ -185,6 +186,9 @@ new #[Title('Carga actual')] class extends Component
         if ($this->departmentId === null) {
             return ['board' => null, ...$scope];
         }
+
+        // Una petición puede llegar de una página que abrió otro puesto o que ya perdió el alcance: se vuelve a autorizar.
+        abort_unless($context->allows(AcademicLoadPermission::LoadView, Target::of(modality: (string) $this->modalityId, unit: $this->departmentId)), 403);
 
         $board = $query->board((string) $this->termId, (string) $this->modalityId, $this->departmentId, $this->campusId);
         $visible = $board->filtered($this->state, $this->careerFilter, $this->search);

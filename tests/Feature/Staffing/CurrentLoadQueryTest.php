@@ -4,7 +4,9 @@ use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\ScheduleConflict;
 use App\Modules\Staffing\Queries\CurrentLoadQuery;
+use App\Modules\Staffing\Queries\TeacherSearchQuery;
 use App\Modules\Staffing\Rules\SessionChips;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Tests\Support\Staffing\AssignmentWorld;
 
 /*
@@ -75,4 +77,19 @@ it('SessionChips junta días seguidos con las mismas horas y salón, y separa lo
     expect(array_column(SessionChips::of([$session(1), $session(2), $session(3), $session(4), $session(5)]), 'label'))->toBe(['Lu–Vi 10–11'])
         ->and(array_column(SessionChips::of([$session(1), $session(3)]), 'label'))->toBe(['Lu/Mi 10–11'])
         ->and(SessionChips::of([$session(1), $session(2, '704')]))->toHaveCount(2);
+});
+
+it('SEL-18: el cajón lee por la Query: la sesión es del grupo (404 si no), la retícula es la de su modalidad y la carga la de su departamento', function () {
+    $query = app(CurrentLoadQuery::class);
+    $session = $this->g1->sessions()->first();
+
+    expect($query->sessionOrFail($this->g1, $session->id)->is($session))->toBeTrue()
+        ->and($query->gridOf($this->g1)->blocks)->not->toBeEmpty()
+        ->and($query->loadOf($this->g1)?->department_id)->toBe($this->world->department->id);
+
+    expect(fn () => $query->sessionOrFail($this->g2, $session->id))->toThrow(ModelNotFoundException::class);
+});
+
+it('HC-21: la búsqueda de docente resuelve el grupo por la Query', function () {
+    expect(app(TeacherSearchQuery::class)->groupOrFail($this->g1->id)->is($this->g1))->toBeTrue();
 });
