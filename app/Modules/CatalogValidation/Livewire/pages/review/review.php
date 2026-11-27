@@ -23,6 +23,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogRecordsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\CatalogValidation\Queries\DraftLoadsQuery;
 use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Queries\RoomClaimQuery;
 use App\Modules\CatalogValidation\Rules\CatalogReviewRules;
@@ -270,6 +271,9 @@ new #[Title('Validación de catálogos')] class extends Component
         $state = $this->state();
         $data = ['departments' => $state['departments'], 'department' => $state['department'], 'term' => $state['term'], 'viewOnly' => $this->viewOnlyOn($state['department']?->id)];
 
+        // CV17: con alguna revisión validada y la carga en borrador, se sugiere ir a la Bandeja.
+        $data['inboxLinks'] = ! $data['viewOnly'] && $state['reviews']->contains(fn (CatalogReview $review): bool => $review->status === ReviewStatus::Validated) ? $this->inboxLinks() : [];
+
         $empty = match (true) {
             $state['department'] === null => 'department',
             $state['term'] === null => 'term',
@@ -410,7 +414,8 @@ new #[Title('Validación de catálogos')] class extends Component
         } else {
             $this->authorize('validate', $review);
             $validateReview->handle($review, $this->user());
-            $this->success('Revisión validada', e($review->heading));
+            $hasDraftLoad = $this->inboxLinks() !== [];
+            $this->success('Revisión validada', e($review->heading.($hasDraftLoad ? '. Sigue: validar la propuesta de carrera en «Bandeja del departamento» (aunque ya haya grupos con docente).' : '')));
         }
 
         /*
@@ -886,6 +891,16 @@ new #[Title('Validación de catálogos')] class extends Component
                 ->each(fn (CatalogReview $review) => $review->setRelation('term', $term));
 
         return $this->resolved = compact('departments', 'department', 'term', 'reviews');
+    }
+
+    /**
+     * @return list<array{modality: string, url: string}>
+     */
+    private function inboxLinks(): array
+    {
+        $state = $this->state();
+
+        return $state['department'] === null || $state['term'] === null ? [] : app(DraftLoadsQuery::class)->inboxLinks($state['term'], $state['department']);
     }
 
     private function user(): User

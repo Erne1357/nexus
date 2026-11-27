@@ -150,6 +150,28 @@ describe('sesiones y salones', function () {
         expect($this->d->sessions()->count())->toBe(2);
     });
 
+    it('1.62: con la carga en borrador el jefe edita, agrega y quita sesiones y elige salón, pero no asigna docente', function () {
+        $this->world->load->update(['status' => LoadStatus::Draft]);
+        $session = $this->d->sessions()->orderBy('day')->first();
+
+        loadDrawer($this->jefe)
+            ->call('edit', $session->id)->set('startsAt', '11:00')->set('endsAt', '12:00')->call('saveSession')->assertHasNoErrors()
+            ->call('startAdding')->set('day', '5')->set('startsAt', '16:00')->set('endsAt', '17:00')->call('addSession')->assertHasNoErrors();
+
+        $added = $this->d->sessions()->where('day', 5)->sole();
+
+        loadDrawer($this->jefe)->call('removeSession', $added->id)->assertHasNoErrors();
+        Livewire::actingAs($this->jefe)->test('scheduling::components.session-room', ['sessionId' => $session->id])
+            ->call('assign', $this->room->id)->assertDispatched('session-room-saved');
+
+        expect(substr((string) $session->fresh()->starts_at, 0, 5))->toBe('11:00')
+            ->and($this->d->sessions()->count())->toBe(2)
+            ->and($session->fresh()->room_id)->toBe($this->room->id);
+
+        loadDrawer($this->jefe)->call('setTab', 'docente')->call('assign', $this->teachers[0]->id)->assertHasErrors();
+        expect($this->d->fresh()->teacher_id)->toBeNull();
+    });
+
     it('con la carga que no acepta ediciones el jefe la ve de solo lectura con el motivo', function () {
         $this->world->load->update(['status' => LoadStatus::Published]);
 

@@ -1390,3 +1390,32 @@ describe('revisión por registro (opción A)', function () {
             ->assertSee('Al guardar, queda revisado.');
     });
 });
+
+describe('sugerencia de la Bandeja (CV17, 1.62)', function () {
+    beforeEach(function () {
+        $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Draft)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->sis->id]);
+    });
+
+    it('CV17: al validar con la carga en borrador, el aviso y la pantalla sugieren ir a la Bandeja aunque haya grupos con docente', function () {
+        reviewMarkAll(Catalog::Teachers);
+
+        $page = reviewPage()->call('confirm', 'validate', 'teachers')->call('confirmed')->assertHasNoErrors();
+
+        expect(reviewOf(Catalog::Teachers)->status)->toBe(ReviewStatus::Validated)
+            ->and(lastToastOf($page)['description'])->toContain('Bandeja del departamento');
+
+        $page->assertSeeHtml('data-testid="review-inbox-suggestion"')
+            ->assertSeeHtml(route('academic-load.inbox', ['modalidad' => 'PRES', 'depto' => 'SIS']))
+            ->assertSee('aunque algunos grupos ya tengan docente');
+    });
+
+    it('CV17: sin revisión validada, o con la carga fuera de borrador, o en lectura para admin, no sugiere nada', function () {
+        reviewPage()->assertDontSeeHtml('data-testid="review-inbox-suggestion"');
+
+        reviewOf(Catalog::Teachers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+        reviewPage(User::factory()->admin()->create(), ['department' => $this->sis->id])->assertDontSeeHtml('data-testid="review-inbox-suggestion"');
+
+        $this->load->update(['status' => LoadStatus::Proposed]);
+        reviewPage()->assertDontSeeHtml('data-testid="review-inbox-suggestion"');
+    });
+});
