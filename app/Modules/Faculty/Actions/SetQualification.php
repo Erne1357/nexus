@@ -15,7 +15,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
  * Declara que un docente puede dar una materia, como apto o preferente (S17, supuesto por confirmar): crea el
- * perfil, cambia el nivel o las notas del que ya tiene o restaura el que se había quitado. Quién puede lo decide
+ * experiencia académica, cambia el nivel o las notas del que ya tiene o restaura el que se había quitado. Quién puede lo decide
  * TeacherPolicy (`manageQualification`, con la materia) antes de llamarla.
  *
  * En una transacción bloquea al docente y deja en la bitácora el nivel anterior y el nuevo. Si nada cambió, no
@@ -52,7 +52,7 @@ final class SetQualification
                     'source' => QualificationSource::Manual,
                 ]);
 
-                return $this->log($qualification, ActivityEvent::Created, "Declaró la materia {$subject->code} en el perfil del docente {$locked->rfc}", attributes: $this->logged($qualification));
+                return $this->log($qualification, ActivityEvent::Created, "Declaró la materia {$subject->code} en la experiencia académica del docente {$locked->rfc}", attributes: $this->logged($qualification));
             }
 
             $old = $this->logged($existing);
@@ -69,7 +69,7 @@ final class SetQualification
             return $this->log(
                 $existing,
                 $restoring ? ActivityEvent::Created : ActivityEvent::Updated,
-                ($restoring ? 'Volvió a declarar' : 'Cambió').' la materia '.$subject->code." en el perfil del docente {$locked->rfc}",
+                ($restoring ? 'Volvió a declarar' : 'Cambió').' la materia '.$subject->code." en la experiencia académica del docente {$locked->rfc}",
                 attributes: $this->logged($existing),
                 old: $restoring ? null : $old,
             );

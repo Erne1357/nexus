@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * D-02: toda materia que un docente impartió en los últimos 6 semestres (periodos del SII que terminan en 1 o 3,
- * contados hacia atrás desde el periodo dado, inclusive) es «Apto» en su perfil, con `source = history`. «Preferente»
+ * contados hacia atrás desde el periodo dado, inclusive) es «Apto» en su experiencia académica, con `source = history`. «Preferente»
  * sigue siendo manual: nunca toca una fila `manual`, esté viva o quitada. Las derivadas que salieron de la ventana se
  * quitan (borrado lógico) y una derivada quitada que vuelve a entrar se restaura. Idempotente. Materias inactivas o
  * borradas no se derivan. Una sola entrada de bitácora con los conteos.
@@ -102,7 +102,7 @@ final class DeriveQualificationsFromHistory
             activity()
                 ->causedBy($actor)
                 ->withProperties($counts + ['term' => $currentTermCode, 'window' => $terms])
-                ->log("D-02: perfil derivado del historial al periodo {$currentTermCode}");
+                ->log("D-02: experiencia académica derivada del historial al periodo {$currentTermCode}");
 
             return $counts;
         });

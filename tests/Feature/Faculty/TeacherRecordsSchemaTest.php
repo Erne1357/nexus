@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /*
-| Integridad de disponibilidad, horas externas, historial, perfil y evaluaciones (docs/dominio/modelo-de-datos.md,
+| Integridad de disponibilidad, horas externas, historial, experiencia académica y evaluaciones (docs/dominio/modelo-de-datos.md,
 | "Faculty"). La disponibilidad no se traslapa por docente, periodo y día; las claves naturales cuentan también
 | los borrados. Escala de evaluación y una fila por grupo: confirmados el 30 de octubre de 2026; S16, supuesto.
 */
@@ -180,7 +180,7 @@ describe('historial', function () {
     });
 });
 
-describe('perfil', function () {
+describe('experiencia académica', function () {
     it('es único por docente y materia, también contra uno borrado', function () {
         $teacher = Teacher::factory()->create();
         $subject = Subject::factory()->create();

@@ -205,10 +205,10 @@ final class StaffingDemoSeeder extends Seeder
         'Acuerdo de academia: rotación de la materia.',
         'El primer lugar pidió no tomar grupos de 7:00.',
         'Continuidad con el grupo del semestre anterior.',
-        'Perfil preferente en la especialidad.',
+        'Experiencia académica preferente en la especialidad.',
     ];
 
-    private const string HONORARIOS_REASON = 'Perfil preferente en la especialidad: es el único con experiencia en la industria en esta materia.';
+    private const string HONORARIOS_REASON = 'Experiencia académica preferente en la especialidad: es el único con experiencia en la industria en esta materia.';
 
     private const array REPLACEMENT_REASONS = [
         'El docente asignado pidió el cambio: se le empalma con su plaza en la universidad.',

@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Perfil apto, declarado por un usuario nuevo.
+ * Experiencia académica apta, declarada por un usuario nuevo.
  *
  * @extends Factory<TeacherSubjectQualification>
  */

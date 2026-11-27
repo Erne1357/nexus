@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Quita una materia del perfil de un docente (S17, supuesto por confirmar): borrado lógico, con su nivel en la
+ * Quita una materia de la experiencia académica de un docente (S17, supuesto por confirmar): borrado lógico, con su nivel en la
  * bitácora. Quién puede lo decide TeacherPolicy (`manageQualification`) antes de llamarla. Una ya quitada es un
  * error en `qualification`. Después del commit avisa con QualificationChanged.
  */
@@ -23,7 +23,7 @@ final class RemoveQualification
     {
         DB::transaction(function () use ($qualification): void {
             $locked = TeacherSubjectQualification::query()->lockForUpdate()->find($qualification->getKey())
-                ?? throw ValidationException::withMessages(['qualification' => 'Esa materia ya se quitó del perfil.']);
+                ?? throw ValidationException::withMessages(['qualification' => 'Esa materia ya se quitó de la experiencia académica.']);
 
             // Quitar una derivada la vuelve manual para que la derivación (D-02) no la restaure.
             $locked->forceFill(['source' => QualificationSource::Manual])->save();
@@ -34,7 +34,7 @@ final class RemoveQualification
                 ->event(ActivityEvent::Deleted)
                 ->withChanges(['old' => ['subject_id' => $locked->subject_id, 'level' => $locked->level->value, 'notes' => $locked->notes]])
                 ->withProperties(['teacher_id' => $locked->teacher_id])
-                ->log('Quitó una materia del perfil del docente');
+                ->log('Quitó una materia de la experiencia académica del docente');
 
             QualificationChanged::dispatch($locked, auth()->user());
         });
