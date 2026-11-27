@@ -116,6 +116,7 @@ use Illuminate\Support\Facades\Route;
 use Livewire\ComponentHookRegistry;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
+use Throwable;
 
 final class CoreServiceProvider extends ModuleServiceProvider
 {
@@ -265,8 +266,17 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $startedAt = hrtime(true);
             $add = fn () => $metrics->addExternal((hrtime(true) - $startedAt) / 1e6);
 
-            // También cuando falla: un timeout es justo la llamada lenta que hay que contar.
-            return $handler($request, $options)->then(
+            // También cuando falla: un timeout es justo la llamada lenta que hay que contar. Un handler (o un fake) puede
+            // lanzar de forma síncrona en vez de devolver una promesa rechazada.
+            try {
+                $promise = $handler($request, $options);
+            } catch (Throwable $e) {
+                $add();
+
+                throw $e;
+            }
+
+            return $promise->then(
                 function ($response) use ($add) {
                     $add();
 

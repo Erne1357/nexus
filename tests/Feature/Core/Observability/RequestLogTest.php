@@ -147,10 +147,13 @@ it('mide también la llamada saliente que falla', function () {
 
 it('acumula en la app de la petición y no en la base del worker (Octane)', function () {
     $base = app();
+    // Como Octane: la base olvida los scoped antes de clonar, y cada sandbox arranca sin acumulador.
+    $base->forgetScopedInstances();
     $sandbox = clone $base;
     CurrentApplication::set($sandbox);
 
     try {
+        expect($sandbox->make(OperationMetrics::class))->not->toBe($base->make(OperationMetrics::class));
         $sandbox->make(OperationMetrics::class)->start();
         DB::select('select 1');
         Http::fake();
