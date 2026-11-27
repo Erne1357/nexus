@@ -46,10 +46,10 @@ use RuntimeException;
 final class KardexStep implements SiiStep
 {
     /** @var list<string> las únicas columnas de `historia_alumno` que lee este paso */
-    public const array HISTORY_COLUMNS = ['periodo', 'no_de_control', 'materia', 'calificacion', 'tipo_evaluacion', 'estatus_materia'];
+    public const array HISTORY_COLUMNS = ['periodo', 'no_de_control', 'materia', 'grupo', 'calificacion', 'tipo_evaluacion', 'estatus_materia'];
 
     /** @var list<string> las únicas columnas de `seleccion_materias` que lee este paso */
-    public const array SELECTION_COLUMNS = ['periodo', 'no_de_control', 'materia', 'repeticion', 'status_seleccion'];
+    public const array SELECTION_COLUMNS = ['periodo', 'no_de_control', 'materia', 'grupo', 'repeticion', 'status_seleccion'];
 
     /** El valor que gana una llave: huella (15 bits) | si es aprobada (128) y la calificación (8 bits) | línea (40 bits). */
     private const int LINE_BITS = 40;
@@ -225,6 +225,7 @@ final class KardexStep implements SiiStep
                     'result' => $result->value,
                     'attempt' => $attempt ?? 1,
                     'sii_subject_code' => $row['materia'],
+                    'sii_group_code' => self::group($row['grupo']),
                 ],
             ];
         }
@@ -288,6 +289,7 @@ final class KardexStep implements SiiStep
                 'result' => KardexResult::Cursando->value,
                 'attempt' => $entry['attempt'],
                 'sii_subject_code' => $entry['materia'],
+                'sii_group_code' => $entry['group'],
             ];
         }
 
@@ -299,7 +301,7 @@ final class KardexStep implements SiiStep
      *
      * @param  array<string|int, string>  $students  plan de Nexus por número de control
      * @param  array<int, int>  $best
-     * @return Generator<int, array{term: string, controlNumber: string, materia: string, student: bool, subject: string|null, key: int, inHistory: bool, enrolled: bool, attempt: int}>
+     * @return Generator<int, array{term: string, controlNumber: string, materia: string, group: string|null, student: bool, subject: string|null, key: int, inHistory: bool, enrolled: bool, attempt: int}>
      */
     private function selection(SiiExport $export, KardexSubjects $subjects, array $students, array $best): Generator
     {
@@ -321,6 +323,7 @@ final class KardexStep implements SiiStep
                 'term' => $row['periodo'],
                 'controlNumber' => $row['no_de_control'],
                 'materia' => $row['materia'],
+                'group' => self::group($row['grupo']),
                 'student' => isset($students[$row['no_de_control']]),
                 'subject' => $subject,
                 'key' => $key,
@@ -494,6 +497,16 @@ final class KardexStep implements SiiStep
             fn (?string $plan): string => $plan === null ? '' : (string) ($plans[$plan] ?? ''),
             Student::query()->pluck('study_plan_id', 'control_number')->all(),
         );
+    }
+
+    /**
+     * La clave del grupo del SII (`grupo`) con la que se cursó, en mayúsculas; nula si viene vacía (MP-04).
+     */
+    private static function group(string $value): ?string
+    {
+        $value = strtoupper(trim($value));
+
+        return $value === '' ? null : $value;
     }
 
     /**
