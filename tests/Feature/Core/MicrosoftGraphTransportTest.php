@@ -296,6 +296,9 @@ it('en una petición web no espera: ante un 429 falla en el acto', function () {
 });
 
 it('lleva su propio ritmo en la caché compartida (5 correos cada 15 s): en la cola, el sexto espera su lugar', function () {
+    // Con el reloj quieto, los cinco lugares se toman en el mismo segundo: si el segundo cambiaba entre el primero y el
+    // sexto, la espera salía en dos tramos (14 s y 1 s) y la prueba fallaba de vez en cuando en la CI.
+    $this->freezeSecond();
     Sleep::fake(syncWithCarbon: true);
     app(QueueJobScope::class)->begin();
     MailConnection::factory()->create();
