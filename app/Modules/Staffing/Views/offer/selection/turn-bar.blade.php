@@ -22,13 +22,13 @@
         'border-info/40 bg-[color-mix(in_oklab,var(--color-info)_7%,var(--color-base-100))]' => $kind === 'mine',
         'border-base-300 bg-base-100' => $kind !== 'mine',
     ])>
-    <div @class(['flex min-w-0 items-center gap-3', 'max-md:flex-1' => $kind === 'mine'])>
+    <div @class(['flex min-w-0 items-center gap-3', 'max-md:basis-full' => $kind === 'mine'])>
         @if ($kind === 'mine')
             <span class="relative flex h-3 w-3 flex-none" aria-hidden="true">
                 <span class="absolute inline-flex h-full w-full rounded-full bg-info opacity-40 motion-safe:animate-ping"></span>
                 <span class="relative inline-flex h-3 w-3 rounded-full bg-info"></span>
             </span>
-            <div>
+            <div class="max-md:flex max-md:flex-wrap max-md:items-baseline max-md:gap-x-3">
                 <p class="leading-tight"><b>Es tu turno</b> <span class="text-neutral">· hasta las {{ $bar['until'] }}</span></p>
                 <p class="flex items-baseline gap-1.5">
                     <span class="font-mono text-[26px] font-semibold leading-tight tabular-nums" role="timer" aria-live="off" data-testid="selection-countdown" data-ends-at="{{ $bar['ends_at'] }}" wire:key="countdown-{{ $bar['ends_at'] }}"
