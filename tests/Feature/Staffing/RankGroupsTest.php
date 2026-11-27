@@ -11,6 +11,7 @@ use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
@@ -82,8 +83,9 @@ it('Ranking docente: ordena a los candidatos de cada grupo del departamento como
             'from_other_department' => false,
             'history_count' => 0,
             'qualification' => 'preferente',
-            'remaining_after_hours' => 5,
-            'remaining_hours' => 10,
+            // HC-08 (tarea 1.50): 10 h frente a grupo + 2; con el grupo de 5 h le quedarían 7.
+            'remaining_after_hours' => 7,
+            'remaining_hours' => 12,
         ]);
 });
 
@@ -98,19 +100,23 @@ it('cada fila del ranking copia la modalidad de su grupo (ampliación de la rond
         ->and(StaffingRanking::query()->pluck('modality_id')->unique()->all())->toBe([$group->modality_id]);
 });
 
-it('HC-08: un candidato sin horas para el grupo queda marcado «sin horas» y baja al bloque final', function () {
+it('HC-08: un candidato que con el grupo pasa su banda queda marcado «sin_horas» (pasa su banda) y baja a su bloque, debajo de los demás', function () {
     $group = ($this->group)();
-    ($this->teacher)('Ana', 4);
+    $ana = ($this->teacher)('Ana', 10);
+    TeacherExternalLoad::query()->create(['teacher_id' => $ana->id, 'term_id' => $this->term->id, 'source' => 'UACJ', 'hours' => 8]);
     ($this->teacher)('Beatriz', 6);
 
     ($this->rank)();
 
-    $ana = StaffingRanking::query()->where('group_id', $group->id)->whereHas('teacher', fn ($query) => $query->where('name', 'Ana'))->sole();
+    $row = StaffingRanking::query()->where('group_id', $group->id)->where('teacher_id', $ana->id)->sole();
 
+    // Ana: 10 h frente a grupo + 2 = 12, menos 8 externas; con el grupo de 5 h pasa su banda por 1 h: aunque tiene más
+    // horas base, va debajo de Beatriz (tarea 1.50).
     expect(($this->ranking)($group))->toBe(['Beatriz', 'Ana'])
-        ->and($ana->breakdown['flags'])->toContain('sin_horas')
-        ->and($ana->breakdown['remaining_hours'])->toBe(4)
-        ->and($ana->breakdown['remaining_after_hours'])->toBe(-1);
+        ->and($row->rank)->toBe(2)
+        ->and($row->breakdown['flags'])->toContain('sin_horas')
+        ->and($row->breakdown['remaining_hours'])->toBe(4)
+        ->and($row->breakdown['remaining_after_hours'])->toBe(-1);
 });
 
 it('Ranking docente: marca a un preferente de otro departamento', function () {

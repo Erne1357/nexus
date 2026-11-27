@@ -28,11 +28,11 @@
     <div class="flex items-end justify-between gap-3">
         <span class="grid text-[12.5px] leading-snug">
             <span class="flex flex-wrap gap-x-3">
-                <span>Base <span class="font-mono font-semibold tabular-nums">{{ $candidate->baseHours }}</span> h</span>
+                <span class="whitespace-nowrap">Base <span class="font-mono font-semibold tabular-nums">{{ $candidate->baseHours }}</span> h</span>
                 <span>Puntaje <span class="font-mono font-semibold tabular-nums">{{ $candidate->scoreLabel() }}</span></span>
             </span>
             @if ($candidate->remainingLabel() !== null)
-                <span>Quedan <span class="font-mono font-semibold tabular-nums">{{ $candidate->remainingLabel() }}</span></span>
+                <span class="whitespace-nowrap">Quedan <span class="font-mono font-semibold tabular-nums">{{ $candidate->remainingLabel() }}</span></span>
             @endif
         </span>
         @if ($canAssign)

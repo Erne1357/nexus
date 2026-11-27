@@ -23,8 +23,9 @@ use App\Modules\Solver\Models\SolverRun;
 | de prueba (la cola es síncrona: vuelve lista), revisa la semana con los cambios y la acepta desde el modal con el resumen;
 | el horario queda escrito. A 1280 y a 390 px, sin desplazar la página de lado ni errores. Hasta la tarea 1.56 lo hacía el
 | jefe: desde entonces el motor no se muestra ni se abre para el jefe ni el JPD por ahora (MN-06), y lo corre el admin.
-| El motor de prueba se elige en el drawer: el predeterminado es la heurística, y con este escenario (la docente no tiene
-| horas que le queden) reporta HC-08 en los tres grupos, así que al aceptar se quedarían como están (ApplyPlan).
+| El motor de prueba se elige en el drawer: el predeterminado es la heurística. La docente no tiene plazas: desde la
+| tarea 1.50 lo que ya tiene asignado de más no es problema de la entrada (sus grupos movibles caben), así que HC-08 ya
+| no los retiene.
 */
 
 beforeEach(function () {

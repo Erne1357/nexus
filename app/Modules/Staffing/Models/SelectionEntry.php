@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Renglón de un docente en la cola de una selección: sus datos del CSV, su lugar y turno, y cómo cerró (tarea 1.33).
  */
-#[Fillable(['selection_id', 'teacher_id', 'source', 'csv_name', 'csv_line', 'base_hours', 'auto_eval', 'prior_compliance', 'partials_1', 'partials_2', 'seniority_years', 'hired_on', 'plaza_tier', 'failed_criteria', 'tier', 'position', 'slot_index', 'slot_starts_at', 'slot_ends_at', 'extra_slot_starts_at', 'extra_slot_ends_at', 'status', 'closed_at', 'closed_hours', 'out_of_band_acknowledged_at', 'notified_soon_at', 'notified_start_at', 'notified_extra_at', 'prior_choice_at', 'prior_choice_confirm_required_at'])]
+#[Fillable(['selection_id', 'teacher_id', 'source', 'csv_name', 'csv_line', 'base_hours', 'auto_eval', 'prior_compliance', 'partials_1', 'partials_2', 'seniority_years', 'hired_on', 'plaza_tier', 'failed_criteria', 'tier', 'position', 'slot_index', 'slot_starts_at', 'slot_ends_at', 'extra_slot_starts_at', 'extra_slot_ends_at', 'status', 'closed_at', 'closed_hours', 'out_of_band_acknowledged_at', 'notified_soon_at', 'notified_start_at', 'notified_extra_at', 'prior_choice_at', 'prior_choice_confirm_required_at', 'administrative_post'])]
 #[UseFactory(SelectionEntryFactory::class)]
 class SelectionEntry extends Model
 {

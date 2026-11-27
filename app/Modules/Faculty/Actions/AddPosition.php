@@ -23,7 +23,7 @@ final class AddPosition
     public function __construct(private readonly PositionRules $rules) {}
 
     /**
-     * @param  array{kind?: string, base_hours?: int|string|null, valid_from?: ?string, valid_to?: ?string}  $data
+     * @param  array{kind?: string, category?: ?string, base_hours?: int|string|null, valid_from?: ?string, valid_to?: ?string}  $data
      *
      * @throws ValidationException
      */

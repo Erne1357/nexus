@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Exceptions;
 
 use RuntimeException;
+use Throwable;
 
 /**
  * Una foto que no se pudo escribir en el disco (CO-03, CO-06): permisos, disco lleno o el montaje sin escritura. A
@@ -13,8 +14,8 @@ final class PhotoNotSaved extends RuntimeException
 {
     public const string MESSAGE = 'No se pudo guardar la foto. Avisa al administrador.';
 
-    public function __construct(string $detail = '')
+    public function __construct(string $detail = '', ?Throwable $previous = null)
     {
-        parent::__construct($detail === '' ? self::MESSAGE : self::MESSAGE.' ('.$detail.')');
+        parent::__construct($detail === '' ? self::MESSAGE : self::MESSAGE.' ('.$detail.')', 0, $previous);
     }
 }

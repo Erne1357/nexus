@@ -4,15 +4,21 @@ use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\ReviewStatus;
+use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Queries\SelectionRoomOptionsQuery;
 
@@ -40,9 +46,19 @@ beforeEach(function () {
     GroupSession::factory()->for($this->group)->on(3, '09:00', '10:00')->create();
 });
 
-function selectionRoom(string $code, array $attributes = []): Room
+/**
+ * Un salón del departamento de la selección, confirmado en su revisión de salones validada del periodo (SEL-01, tarea
+ * 1.53). Con `$confirm` en false, o de otro departamento, queda fuera de la foto de la revisión.
+ */
+function selectionRoom(string $code, array $attributes = [], bool $confirm = true): Room
 {
-    return Room::factory()->create(['building_id' => test()->building->id, 'code' => $code, 'type' => RoomType::Aula, 'capacity' => 40, ...$attributes]);
+    $room = Room::factory()->create(['department_id' => test()->dept->id, 'building_id' => test()->building->id, 'code' => $code, 'type' => RoomType::Aula, 'capacity' => 40, ...$attributes]);
+
+    if ($confirm && $room->department_id === test()->dept->id) {
+        confirmRooms(test()->term->id, test()->dept->id, [$room]);
+    }
+
+    return $room;
 }
 
 function offeredCodes(): array
@@ -52,7 +68,7 @@ function offeredCodes(): array
 
 it('SEL-01: ofrece los salones libres del campus del grupo', function () {
     selectionRoom('A1');
-    selectionRoom('A2', ['department_id' => $this->dept->id]);
+    selectionRoom('A2');
     selectionRoom('A3', ['is_active' => false]);
 
     expect(offeredCodes())->toBe(['A1', 'A2']);
@@ -63,6 +79,76 @@ it('SEL-01: no ofrece salones de otro departamento', function () {
     selectionRoom('OTRO', ['department_id' => Department::factory()->create()->id]);
 
     expect(offeredCodes())->toBe(['A1']);
+});
+
+it('SEL-01: no ofrece un salón sin dueño aunque esté libre', function () {
+    selectionRoom('A1');
+    selectionRoom('HUERFANO', ['department_id' => null], confirm: false);
+
+    expect(offeredCodes())->toBe(['A1']);
+});
+
+it('SEL-01: no ofrece un salón del departamento que no está en la foto de la revisión validada', function () {
+    selectionRoom('A1');
+    selectionRoom('NUEVO', confirm: false);
+
+    expect(offeredCodes())->toBe(['A1']);
+});
+
+it('SEL-01: no ofrece un salón con una observación abierta, pero sí cuando se resuelve', function () {
+    $room = selectionRoom('A1');
+    selectionRoom('A2');
+    $flag = CatalogReviewFlag::factory()->on($room)->create(['review_id' => CatalogReview::query()->where('catalog', Catalog::Rooms)->value('id')]);
+
+    expect(offeredCodes())->toBe(['A2']);
+
+    $flag->update(['resolved_at' => now(), 'resolved_by' => User::factory()->create()->id]);
+
+    expect(offeredCodes())->toBe(['A1', 'A2']);
+});
+
+it('SEL-01: sin la revisión de salones del departamento validada no ofrece ningún salón y lo dice', function () {
+    selectionRoom('A1');
+    CatalogReview::query()->where('catalog', Catalog::Rooms)->update(['status' => ReviewStatus::InReview, 'validated_by' => null, 'validated_at' => null]);
+
+    $result = app(SelectionRoomOptionsQuery::class)->forGroup($this->selection, $this->group->fresh());
+
+    expect($result['eligible'])->toBe([])
+        ->and($result['validated'])->toBeFalse();
+});
+
+it('SEL-01: con la selección viva, una revisión reabierta sigue valiendo la foto de su última validación (supuesto por confirmar)', function () {
+    selectionRoom('A1');
+    CatalogReview::query()->where('catalog', Catalog::Rooms)->update(['status' => ReviewStatus::InReview, 'validated_by' => null, 'validated_at' => null]);
+
+    expect(offeredCodes())->toBe([]);
+
+    $this->selection->update(['status' => SelectionStatus::Running]);
+
+    expect(offeredCodes())->toBe(['A1']);
+});
+
+it('SEL-01: con la selección viva y una revisión que nunca se validó no ofrece ninguno', function () {
+    selectionRoom('A1');
+    CatalogReview::query()->where('catalog', Catalog::Rooms)->update(['status' => ReviewStatus::InReview, 'validated_by' => null, 'validated_at' => null, 'snapshot' => null]);
+    $this->selection->update(['status' => SelectionStatus::Running]);
+
+    expect(offeredCodes())->toBe([]);
+});
+
+it('SEL-01: la revisión validada de otro periodo no confirma salones de este', function () {
+    $room = selectionRoom('A1', confirm: false);
+    confirmRooms(Term::factory()->create()->id, $this->dept->id, [$room]);
+
+    expect(offeredCodes())->toBe([]);
+});
+
+it('SEL-01: la revisión validada de otro departamento no confirma salones de este', function () {
+    $room = selectionRoom('A1', confirm: false);
+    confirmRooms($this->term->id, Department::factory()->create()->id, [$room]);
+
+    // confirmRooms lo pasó al otro departamento: ya no es del de la selección.
+    expect(offeredCodes())->toBe([]);
 });
 
 it('SEL-01: no ofrece un salón libre solo en algunas sesiones', function () {
@@ -90,7 +176,7 @@ it('SEL-01: no ofrece salones bloqueados', function () {
 it('SEL-01: no ofrece salones de otro campus', function () {
     selectionRoom('A1');
     $far = Building::factory()->create();
-    Room::factory()->create(['building_id' => $far->id, 'code' => 'LEJOS', 'capacity' => 40]);
+    confirmRooms($this->term->id, $this->dept->id, [Room::factory()->create(['building_id' => $far->id, 'code' => 'LEJOS', 'capacity' => 40])]);
 
     expect(offeredCodes())->toBe(['A1']);
 });

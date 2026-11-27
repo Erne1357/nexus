@@ -225,6 +225,25 @@ final class ConflictBoardQuery
     }
 
     /**
+     * Cuántos docentes pasan su banda de horas frente a grupo (HC-08, aviso desde la tarea 1.50) en cada carga del
+     * periodo, por «modalidad|departamento», de los choques vigentes guardados: uno por docente, aunque tenga varios
+     * grupos en la carga. Una consulta para todas las cargas («Avance del cierre»).
+     *
+     * @return array<string, int>
+     */
+    public function hourNoticesByLoad(Term $term): array
+    {
+        return ScheduleConflict::query()->open()->toBase()
+            ->where('term_id', $term->id)
+            ->where('rule', 'HC-08')
+            ->groupBy('modality_id', 'department_id')
+            ->selectRaw("modality_id || '|' || department_id as load_key, count(distinct subject_id) as total")
+            ->pluck('total', 'load_key')
+            ->map(fn ($total): int => (int) $total)
+            ->all();
+    }
+
+    /**
      * Cuántos grupos activos de la modalidad y periodo ve el usuario en cada campus, por clave: la cifra de cada botón
      * del filtro de campus (maqueta U2, opción A). Sin los que no tienen campus (una modalidad sin salones, MS4).
      *

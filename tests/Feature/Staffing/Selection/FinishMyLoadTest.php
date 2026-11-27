@@ -4,6 +4,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherHourAllowance;
+use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
@@ -26,7 +27,7 @@ use Tests\Support\Staffing\SelectionWorld;
 | (HC-08 justificado); con menos pasa a la ronda extra, y en la ronda extra termina.
 */
 
-const FINISH_OUT_OF_BAND = 'Es responsabilidad del docente cubrir sus horas de acuerdo con su base: marca la casilla para continuar.';
+const FINISH_OUT_OF_BAND = 'Es responsabilidad del docente cubrir sus horas frente a grupo de acuerdo con su plaza: marca la casilla para continuar.';
 
 beforeEach(function () {
     $this->freezeTime();
@@ -55,6 +56,14 @@ function finishLoadHoursViolations(SelectionWorld $world, Teacher $teacher): arr
     return $validator->validateTeacher($teacher, $world->term)->forRule('HC-08');
 }
 
+/**
+ * Los avisos de HC-08 que siguen pidiendo el oficio de conformidad: los que la casilla (SEL-12) no cubre (tarea 1.50).
+ */
+function finishLoadPendingHours(SelectionWorld $world, Teacher $teacher): array
+{
+    return array_values(array_filter(finishLoadHoursViolations($world, $teacher), fn ($violation): bool => ! $violation->related['accepted']));
+}
+
 function finishLoadErrors(Closure $callback): array
 {
     try {
@@ -80,10 +89,11 @@ it('SEL-05: dentro de su base ±2 termina sin la casilla', function () {
         ->and(TeacherHourAllowance::query()->sole()->hours)->toBe(5);
 });
 
-it('SEL-12: cerrar dentro de la banda con más horas que su límite de Nexus no deja choque duro de HC-08', function () {
+it('SEL-12 y HC-08: sin plazas en Nexus, HC-08 mide con las horas del CSV como la banda de la selección: dentro de ella no avisa, antes ni después de cerrar', function () {
     [$world, $teacher] = finishLoadWorld(base: 3, entry: ['base_hours' => 5]);
+    TeacherPosition::query()->where('teacher_id', $teacher->id)->delete(); // sin plazas en Nexus la banda sale del CSV (PL-01)
 
-    expect(finishLoadHoursViolations($world, $teacher))->not->toBeEmpty();
+    expect(finishLoadHoursViolations($world, $teacher))->toBe([]);
 
     finishLoadFor($world, $teacher, false);
 
@@ -92,6 +102,7 @@ it('SEL-12: cerrar dentro de la banda con más horas que su límite de Nexus no 
 
 it('SEL-12: las horas autorizadas son todo lo que HC-08 le cuenta al cerrar: otras modalidades y horas externas', function () {
     [$world, $teacher] = finishLoadWorld(base: 2, entry: ['base_hours' => 5]);
+    TeacherPosition::query()->where('teacher_id', $teacher->id)->delete(); // sin plazas en Nexus la banda sale del CSV (PL-01)
     $elsewhere = Group::factory()->create(['term_id' => $world->term->id, 'modality_id' => Modality::factory()->create()->id, 'teacher_id' => $teacher->id]);
     GroupSession::factory()->for($elsewhere)->on(4, '16:00', '18:00')->create();
     TeacherExternalLoad::factory()->create(['teacher_id' => $teacher->id, 'term_id' => $world->term->id, 'hours' => 2]);
@@ -100,12 +111,13 @@ it('SEL-12: las horas autorizadas son todo lo que HC-08 le cuenta al cerrar: otr
 
     expect($entry->fresh()->closed_hours)->toBe(5)
         ->and(TeacherHourAllowance::query()->sole()->hours)->toBe(12)
-        ->and(finishLoadHoursViolations($world, $teacher))->toBe([]);
+        ->and(finishLoadHoursViolations($world, $teacher))->not->toBeEmpty()
+        ->and(finishLoadPendingHours($world, $teacher))->toBe([]);
 
     $extra = $world->group('B', [[2, '11:00', '12:00']], theory: 1, practice: 0);
     app(AssignTeacher::class)->handle($extra, $teacher, $world->admin);
 
-    expect(finishLoadHoursViolations($world, $teacher))->not->toBeEmpty();
+    expect(finishLoadPendingHours($world, $teacher))->not->toBeEmpty();
 });
 
 it('SEL-05: cerrar fuera de ±2 sin la casilla se rechaza', function () {
@@ -161,10 +173,34 @@ it('SEL-05: con horas de más y la casilla termina y le da al docente esas horas
         ->granted_by->toBe($teacher->user_id);
 });
 
-it('un docente fuera del CSV se mide contra su base de Nexus', function () {
+it('un docente fuera del CSV se mide contra sus horas frente a grupo de Nexus', function () {
     [$world, $teacher] = finishLoadWorld(base: 5, entry: ['source' => SelectionEntrySource::Appended, 'base_hours' => 0]);
 
     expect(finishLoadFor($world, $teacher, false)->fresh()->status)->toBe(SelectionEntryStatus::Done);
+});
+
+it('PL-01 y SEL-05: la banda se mide contra las horas frente a grupo de sus plazas, no contra las horas de la plaza ni las del CSV', function () {
+    // Tiempo completo (40 h de plaza) = 22 h frente a grupo; sus 5 h quedan muy abajo, aunque el CSV diga 5.
+    [$world, $teacher] = finishLoadWorld(base: 5, entry: ['base_hours' => 5]);
+    TeacherPosition::query()->where('teacher_id', $teacher->id)->delete();
+    TeacherPosition::factory()->for($teacher)->tiempoCompleto()->create(['category' => 'E3817']);
+
+    expect(finishLoadErrors(fn () => finishLoadFor($world, $teacher, false)))->toHaveKey('acknowledged');
+
+    finishLoadFor($world, $teacher, true);
+
+    $logged = Activity::query()->where('event', 'selection_load_finished')->sole()->properties;
+
+    expect([$logged['band'], $logged['base_hours']])->toBe(['under', 22]);
+});
+
+it('PL-01 y SEL-05: sin plazas en Nexus la banda sale de las horas del CSV (40 es 22)', function () {
+    [$world, $teacher] = finishLoadWorld(base: 5, entry: ['base_hours' => 40]);
+    TeacherPosition::query()->where('teacher_id', $teacher->id)->delete();
+
+    finishLoadFor($world, $teacher, true);
+
+    expect(Activity::query()->where('event', 'selection_load_finished')->sole()->properties['base_hours'])->toBe(22);
 });
 
 it('fuera de su turno no cierra su carga', function () {
@@ -174,21 +210,23 @@ it('fuera de su turno no cierra su carga', function () {
     expect(finishLoadErrors(fn () => finishLoadFor($world, $teacher, false))['group'])->toBe(['No es tu turno.']);
 });
 
-it('SEL-12: las horas de más aceptadas con la casilla no son choque duro de HC-08; agregarle más sí', function () {
+it('SEL-12 y HC-08: las horas de más aceptadas con la casilla quedan como «aceptado por el docente»; agregarle más vuelve a pedir el oficio', function () {
     [$world, $teacher] = finishLoadWorld(base: 2);
-    $hoursViolations = fn (): array => finishLoadHoursViolations($world, $teacher);
+    $pending = fn (): array => finishLoadPendingHours($world, $teacher);
 
-    expect($hoursViolations())->not->toBeEmpty();
+    expect($pending())->not->toBeEmpty();
 
     finishLoadFor($world, $teacher, true);
 
-    expect($hoursViolations())->toBe([]);
+    expect($pending())->toBe([])
+        ->and(finishLoadHoursViolations($world, $teacher)[0]->message)->toEndWith('aceptado por el docente (casilla).');
 
     $extra = $world->group('B', [[2, '11:00', '12:00']]);
     app(AssignTeacher::class)->handle($extra, $teacher, $world->admin);
 
-    expect($hoursViolations())->not->toBeEmpty()
-        ->and(collect($hoursViolations())->every(fn ($violation) => $violation->severity->value === 'hard'))->toBeTrue()
+    expect($pending())->not->toBeEmpty()
+        ->and(collect($pending())->every(fn ($violation) => $violation->severity->value === 'soft'))->toBeTrue()
+        ->and($pending()[0]->message)->toEndWith('Requiere oficio de conformidad del docente (pendiente).')
         ->and(Group::query()->where('teacher_id', $teacher->id)->count())->toBe(2);
 });
 
@@ -208,16 +246,16 @@ function unresolvedAfterSelection(int $base): array
     return [$world, $teacher];
 }
 
-it('SEL-14: sin resolver, con la selección terminada, confirma su carga con la casilla; autoriza HC-08 y quita el choque duro', function () {
+it('SEL-14: sin resolver, con la selección terminada, confirma su carga con la casilla; autoriza HC-08 y su aviso queda aceptado', function () {
     [$world, $teacher] = unresolvedAfterSelection(base: 2);
 
-    expect(finishLoadHoursViolations($world, $teacher))->not->toBeEmpty();
+    expect(finishLoadPendingHours($world, $teacher))->not->toBeEmpty();
 
     $missing = finishLoadErrors(fn () => app(FinishMyLoad::class)->confirm($world->selection, $teacher, false, $teacher->user));
 
     expect($missing['acknowledged'])->toBe([FINISH_OUT_OF_BAND])
         ->and($world->entryOf($teacher)->status)->toBe(SelectionEntryStatus::Unresolved)
-        ->and(finishLoadHoursViolations($world, $teacher))->not->toBeEmpty();
+        ->and(finishLoadPendingHours($world, $teacher))->not->toBeEmpty();
 
     $entry = app(FinishMyLoad::class)->confirm($world->selection, $teacher, true, $teacher->user);
 
@@ -226,7 +264,7 @@ it('SEL-14: sin resolver, con la selección terminada, confirma su carga con la 
         ->closed_hours->toBe(5)
         ->out_of_band_acknowledged_at->not->toBeNull()
         ->and(TeacherHourAllowance::query()->sole()->hours)->toBe(5)
-        ->and(finishLoadHoursViolations($world, $teacher))->toBe([])
+        ->and(finishLoadPendingHours($world, $teacher))->toBe([])
         ->and(Activity::query()->where('event', 'selection_load_confirmed')->sole()->properties['band'])->toBe('over');
 });
 

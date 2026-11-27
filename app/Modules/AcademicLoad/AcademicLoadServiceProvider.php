@@ -59,6 +59,7 @@ use App\Modules\AcademicLoad\Queries\ReanalysisAvailabilityQuery;
 use App\Modules\AcademicLoad\Queries\ReanalysisChangesQuery;
 use App\Modules\AcademicLoad\Queries\ReanalysisCycleQuery;
 use App\Modules\AcademicLoad\Queries\TermKardexQuery;
+use App\Modules\AcademicLoad\Rules\AgreementSettings;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
@@ -81,6 +82,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Settings\SettingDefinition;
 use App\Modules\Demand\Events\DemandForecastsComputed;
 use App\Modules\Demand\Rules\TermCode;
 use App\Modules\Faculty\Enums\HistorySource;
@@ -116,6 +118,16 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         ForecastEvaluation::class => ForecastEvaluationPolicy::class,
         DemandBoard::class => DemandBoardPolicy::class,
     ];
+
+    /**
+     * Los parámetros de los acuerdos entre departamentos (CF-S7, tarea 1.53).
+     *
+     * @return list<SettingDefinition>
+     */
+    public function settings(): array
+    {
+        return AgreementSettings::definitions();
+    }
 
     /**
      * Las etapas de la carga del jefe y del JPD, que Core usa para sus pantallas de la carga (MN-06).

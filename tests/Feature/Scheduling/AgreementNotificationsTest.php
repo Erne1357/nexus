@@ -36,6 +36,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 
+// Estas pruebas piden préstamos de salón, apagados por omisión (tarea 1.53).
+beforeEach(fn () => roomLoans());
+
 /*
 | Avisos de los acuerdos (tareas 3.6 y 3.7; supuesto por confirmar): al pedirse, a los titulares de
 | `academic_load.agreement.decide` del departamento al que va dirigido, en el campus; al aceptarse o rechazarse, a los de

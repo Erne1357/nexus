@@ -8,6 +8,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Models\ChangeRequest;
@@ -332,6 +333,32 @@ describe('modalidad y filtro de campus (M1; maqueta U2, opción A)', function ()
 });
 
 describe('cerrar', function () {
+    it('HC-08: un docente que pasa su banda de horas no impide cerrar y queda como aviso en «Para cerrar» (tarea 1.50)', function () {
+        $teacher = $this->world->teacher(name: 'Ana Pérez');
+        $teacher->positions()->update(['base_hours' => 1]);
+        TeacherExternalLoad::query()->create(['teacher_id' => $teacher->id, 'term_id' => $this->world->load->term_id, 'source' => 'UACJ', 'hours' => 5]);
+        $this->world->group(teacher: $teacher);
+
+        $page = closingPage($this->jefe)
+            ->assertSee('Lista para cerrar')
+            ->assertSeeHtml('data-testid="closing-hour-notices"')
+            ->assertSee('1 docente pasa su banda de horas frente a grupo')
+            ->assertSee('aviso, no impide cerrar')
+            ->assertSee('Ana Pérez pasa su banda de horas frente a grupo (1 h, de 0 a 3): lleva 7 h. Requiere oficio de conformidad del docente (pendiente).');
+
+        expect(closingActionDisabled($page, 'close'))->toBeFalse();
+
+        $page->call('askClose')->call('close')->assertSet('showClose', false);
+
+        expect($this->world->load->fresh()->status)->toBe(LoadStatus::Closed);
+    });
+
+    it('HC-08: sin nadie que pase su banda no hay aviso', function () {
+        $this->world->group();
+
+        closingPage($this->jefe)->assertDontSeeHtml('data-testid="closing-hour-notices"');
+    });
+
     it('cierra con la confirmación de los grupos activos y un comentario; queda «Cerrada» y los grupos confirmados', function () {
         $this->world->group();
         $this->world->group();

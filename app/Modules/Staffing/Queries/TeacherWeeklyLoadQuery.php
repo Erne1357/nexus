@@ -9,14 +9,14 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
 use App\Modules\Faculty\Rules\BaseHours;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Rules\TeacherHourLimit;
 use Carbon\CarbonImmutable;
-use Carbon\CarbonInterface;
 
 /**
  * La carga semanal de la ficha del docente (D-03): reutiliza «Mi carga» (MyLoadQuery) para el periodo en curso, que
  * es el que contiene hoy y sale de Nexus o, sin grupos, del SII, y para el siguiente periodo con grupos de Nexus del
  * docente. No usa el periodo activo de la credencial: los periodos se resuelven por fecha. Las horas son las de los
- * grupos que se ven; la base es la de las plazas vigentes hoy (el en curso) o al inicio del periodo (el siguiente).
+ * grupos que se ven; se miden contra las horas frente a grupo del docente con su banda (PL-01, HC-08; las de MyLoadQuery, con el respaldo del CSV de la selección) y, si pasa la banda, trae el aviso de HC-08 (`notice`).
  *
  * Cada semana de Nexus se parte por el departamento del grupo (tarea 1.59, B3): `departments` trae primero los de
  * adscripción del docente (`home`, el principal antes) y luego los demás con grupos, cada uno con su jefe vigente
@@ -44,20 +44,20 @@ final class TeacherWeeklyLoadQuery implements TeacherWeeklyLoad
         $upcoming = $later->first();
 
         return [
-            'current' => $running === null ? null : $this->week($teacher, $running, $positions->all(), $today),
-            'next' => $next === null ? null : $this->week($teacher, $next, $positions->all(), $next->starts_on),
+            'current' => $running === null ? null : $this->week($teacher, $running),
+            'next' => $next === null ? null : $this->week($teacher, $next),
             'upcoming' => $upcoming?->name,
             'base_hours' => BaseHours::onDate($positions, $today),
         ];
     }
 
     /**
-     * @param  list<array{base_hours: int, valid_from: ?string, valid_to: ?string}>  $positions
      * @return array<string, mixed>
      */
-    private function week(Teacher $teacher, Term $term, array $positions, CarbonInterface $day): array
+    private function week(Teacher $teacher, Term $term): array
     {
         $load = $this->loads->forTeacher($teacher, $term);
+        $hours = $load['hours'];
         $split = $load['source'] === 'nexus' && $load['groups'] !== [] ? $this->split($teacher, $load['days'], $load['groups']) : ['days' => $load['days'], 'departments' => []];
 
         return [
@@ -67,9 +67,17 @@ final class TeacherWeeklyLoadQuery implements TeacherWeeklyLoad
             'groups' => $load['groups'],
             'days' => $split['days'],
             'departments' => $split['departments'],
-            'hours' => $load['hours']['assigned'],
-            'base' => BaseHours::onDate($positions, $day),
-            'tolerance' => $load['hours']['tolerance'],
+            'hours' => $hours['assigned'],
+            'teaching' => $hours['teaching'],
+            'band_from' => $hours['band_from'],
+            'band_to' => $hours['band_to'],
+            'honorarios_cap' => $hours['honorarios_cap'],
+            'over_band' => $hours['over_band'],
+            'notice' => TeacherHourLimit::notice([
+                'teaching_hours' => $hours['teaching'], 'band_from' => $hours['band_from'], 'band_to' => $hours['band_to'],
+                'honorarios_cap' => $hours['honorarios_cap'], 'assigned_hours' => $hours['assigned'], 'external_hours' => $hours['external'],
+                'over_band' => $hours['over_band'], 'accepted' => $hours['accepted'],
+            ]),
         ];
     }
 
@@ -101,6 +109,8 @@ final class TeacherWeeklyLoadQuery implements TeacherWeeklyLoad
                 'subject_code' => $group['subject_code'],
                 'subject_name' => $group['subject_name'],
                 'hours' => (int) $group['hours'],
+                // PL-02: una tutoría cuenta 0 h en su carga, aunque ocupe su horario.
+                'counts_teacher_hours' => (bool) ($group['counts_teacher_hours'] ?? true),
             ];
         }
 

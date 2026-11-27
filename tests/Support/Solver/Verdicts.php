@@ -16,7 +16,8 @@ use App\Modules\Solver\Evaluation\ContractState;
  * entrada del motor, con el validador de la fase 3 sobre la foto de la base y con el evaluador en memoria sobre el
  * contrato (con las sesiones actuales de los movibles). Cada lista va ordenada, y los grupos por id. El núcleo sin
  * combinación de HC-03 cuenta de los dos lados: la entrada trae el semestre completo de cada movible y la clave
- * `combination:`.
+ * `combination:`. HC-08 es aviso en la base desde la tarea 1.50 y el motor no la ve en lo asignado de más (sus movibles
+ * caben en `remaining_hours`): de los dos lados cuentan solo las duras.
  */
 final class Verdicts
 {

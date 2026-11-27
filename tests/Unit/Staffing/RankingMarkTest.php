@@ -4,8 +4,8 @@ use App\Modules\Core\Enums\StatusTone;
 use App\Modules\Staffing\Enums\RankingMark;
 
 /*
-| Las marcas que bajan a un docente al bloque final del ranking (reglas-de-negocio.md, «Ranking docente (desempate)»):
-| el mismo nombre, tono e icono en la asignación y en la oferta del docente.
+| Las marcas que bajan a un docente en el ranking (reglas-de-negocio.md, «Ranking docente (desempate)»): el mismo nombre,
+| tono e icono en la asignación y en la oferta del docente. Pasar su banda (HC-08) lo baja a su propio bloque, asignable.
 */
 
 it('cada marca tiene el nombre, el tono y el icono de la asignación', function (RankingMark $mark, string $label, StatusTone $tone, string $icon) {
@@ -14,7 +14,7 @@ it('cada marca tiene el nombre, el tono y el icono de la asignación', function 
         ->and($mark->icon())->toBe($icon);
 })->with([
     'choque (HC-01)' => [RankingMark::Clash, 'Choque', StatusTone::Error, 'o-x-circle'],
-    'sin horas (HC-08)' => [RankingMark::NoHours, 'Sin horas', StatusTone::Warning, 'o-clock'],
+    'pasa su banda (HC-08)' => [RankingMark::NoHours, 'Pasa su banda', StatusTone::Warning, 'o-clock'],
     'no disponible (HC-09)' => [RankingMark::Unavailable, 'No disponible', StatusTone::Draft, 'o-no-symbol'],
 ]);
 

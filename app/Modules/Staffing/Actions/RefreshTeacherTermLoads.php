@@ -10,8 +10,8 @@ use App\Modules\Staffing\Models\TeacherTermLoad;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Recalcula `teacher_term_loads` de un periodo (tarea 3.12): horas base, externas, asignadas, tope y restantes de
- * cada docente activo y no borrado con al menos una adscripción vigente, o solo de los que se piden. La cuenta es la
+ * Recalcula `teacher_term_loads` de un periodo (tarea 3.12): horas base, frente a grupo y tope de su banda (HC-08,
+ * tarea 1.50), externas, asignadas, límite y restantes de cada docente activo y no borrado con al menos una adscripción vigente, o solo de los que se piden. La cuenta es la
  * de HC-08 (TeacherHourLimit) sobre una sola foto del periodo con todos los campus; los docentes sin grupos no
  * vienen en la foto y se completan con una consulta (`ScheduleStateQuery::teachers`), así salen con su base y
  * asignadas en cero. Escribe con un upsert por bloque en una transacción y borra la fila de quien ya no califica.
@@ -59,6 +59,9 @@ final class RefreshTeacherTermLoads
                 'teacher_id' => $id,
                 'term_id' => $term->getKey(),
                 'base_hours' => $hours['base_hours'],
+                'teaching_hours' => $hours['teaching_hours'],
+                'band_limit_hours' => $hours['band_limit'],
+                'honorarios_cap_hours' => $hours['honorarios_cap'],
                 'external_hours' => $hours['external_hours'],
                 'assigned_hours' => $hours['assigned_hours'],
                 'limit_hours' => $hours['limit'],
@@ -77,7 +80,7 @@ final class RefreshTeacherTermLoads
 
             foreach (array_chunk($rows, self::CHUNK) as $chunk) {
                 TeacherTermLoad::query()->upsert($chunk, ['teacher_id', 'term_id'],
-                    ['base_hours', 'external_hours', 'assigned_hours', 'limit_hours', 'remaining_hours', 'groups_count', 'computed_at']);
+                    ['base_hours', 'teaching_hours', 'band_limit_hours', 'honorarios_cap_hours', 'external_hours', 'assigned_hours', 'limit_hours', 'remaining_hours', 'groups_count', 'computed_at']);
             }
         });
 

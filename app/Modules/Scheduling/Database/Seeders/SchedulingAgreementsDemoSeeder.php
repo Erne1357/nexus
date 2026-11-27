@@ -12,11 +12,14 @@ use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\AcademicLoad\Rules\AgreementSettings;
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
+use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\RecipientsQuery;
@@ -181,6 +184,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $ratios = [], ?array $cleanDepartments = null, string $mode = 'mixed', string $modality = 'PRES'): void
     {
         $this->refuseProduction();
+        // La demo de acuerdos pide préstamos: sin el parámetro (apagado por omisión, tarea 1.53) RequestRoomLoan los rechazaría.
+        Setting::query()->updateOrCreate(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => AgreementSettings::ROOM_LOANS_SETTING], ['value' => true]);
         $this->modalityCode = $modality;
         $this->modalityId = null;
 

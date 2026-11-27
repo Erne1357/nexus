@@ -8,6 +8,7 @@
     cambiarlo en esa materia (el jefe de su departamento y el admin): quien ve el catálogo lo tiene en «Acciones»; quien solo
     puede eso (sin `viewCatalog`) lo tiene como único botón visible y no ve «Editar» ni «Acciones»; en la tabla su texto
     aparece desde 1536 px (como la columna «Espacio») y debajo queda solo el icono con su título, para no encimarse con «Estado».
+    «Carga del docente» (PL-02, tarea 1.73) va igual que «Tipo de espacio», con el mismo permiso.
 --}}
 <div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
     @cannot('viewCatalog', \App\Modules\Academic\Models\Subject::class)
@@ -22,6 +23,19 @@
                 spinner="editSpace('{{ $subject->id }}')"
             >
                 <span @class(['max-[1535px]:hidden' => $inTable])>Tipo de espacio</span>
+            </x-button>
+        @endcan
+        @can('setTeacherHours', $subject)
+            <x-button
+                icon="o-clock"
+                wire:click="editTeacherHours('{{ $subject->id }}')"
+                aria-label="Carga del docente de {{ $subject->code }}"
+                :data-testid="$inTable ? 'teacher-hours-'.$subject->code : null"
+                title="Carga del docente"
+                class="btn-ghost btn-sm"
+                spinner="editTeacherHours('{{ $subject->id }}')"
+            >
+                <span @class(['max-[1535px]:hidden' => $inTable])>Carga del docente</span>
             </x-button>
         @endcan
     @endcannot
@@ -44,6 +58,13 @@
                 label="Tipo de espacio"
                 wire:click="editSpace('{{ $subject->id }}')"
                 :spinner="'editSpace(\''.$subject->id.'\')'"
+            />
+        @endcan
+        @can('setTeacherHours', $subject)
+            <x-core::row-menu-item
+                label="Carga del docente"
+                wire:click="editTeacherHours('{{ $subject->id }}')"
+                :spinner="'editTeacherHours(\''.$subject->id.'\')'"
             />
         @endcan
         <x-core::row-menu-item

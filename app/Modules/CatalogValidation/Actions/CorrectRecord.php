@@ -122,7 +122,7 @@ final class CorrectRecord
 
         foreach (array_values($rows) as $index => $row) {
             $id = $row['id'] ?? null;
-            $values = Arr::only($row, ['kind', 'base_hours', 'valid_from', 'valid_to']);
+            $values = Arr::only($row, ['kind', 'category', 'base_hours', 'valid_from', 'valid_to']);
 
             try {
                 if ($id === null || $id === '') {
@@ -159,6 +159,7 @@ final class CorrectRecord
     private function samePosition(TeacherPosition $position, array $values): bool
     {
         return (string) ($values['kind'] ?? '') === $position->kind->value
+            && (string) ($values['category'] ?? '') === (string) $position->category
             && (string) ($values['base_hours'] ?? '') === (string) $position->base_hours
             && (string) ($values['valid_from'] ?? '') === (string) $position->valid_from?->toDateString()
             && (string) ($values['valid_to'] ?? '') === (string) $position->valid_to?->toDateString();

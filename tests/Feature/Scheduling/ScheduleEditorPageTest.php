@@ -22,6 +22,7 @@ use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
 use Dom\Element;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -171,10 +172,15 @@ describe('coordinador de la carrera dueña', function () {
             ->and(lastToastOf($page)['description'])->toContain('ACF-0904 · A', '2 de 2 h');
     });
 
-    it('avisa «Colocada con choque» con cualquier regla dura nueva del grupo, aunque no nombre la sesión (HC-09), y no con las que ya tenía (HC-08)', function () {
+    it('avisa «Colocada con choque» con cualquier regla dura nueva del grupo, aunque no nombre la sesión (HC-09), y no con las que ya tenía (HC-07)', function () {
         $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
         $this->calcGroup->update(['teacher_id' => $teacher->id]);
         TeacherAvailability::factory()->create(['teacher_id' => $teacher->id, 'term_id' => $this->term->id, 'day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00']);
+        // HC-07 no depende de dónde queden las sesiones: el grupo ya lo rompe antes de colocar (cupos de más que su
+        // capacidad). HC-08 es aviso desde la tarea 1.50 y ya no sirve para esto.
+        DB::statement('set constraints group_quotas_check deferred');
+        GroupQuota::factory()->create(['group_id' => $this->calcGroup->id, 'career_id' => $this->iind->id, 'max_seats' => $this->calcGroup->capacity + 10, 'is_owner' => false]);
+        expect(app(ScheduleValidator::class)->validateGroup($this->calcGroup)->forRule('HC-07'))->not->toBe([]);
 
         $page = editorAs($this->coordinator)->call('place', $this->calcGroup->id, 1, '07:00');
 

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing\Queries;
 
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
@@ -50,7 +51,7 @@ final class SelectionGroupsQuery
             ->whereNotNull('groups.teacher_id')
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->groupBy('groups.teacher_id')
-            ->selectRaw('groups.teacher_id, sum(subjects.theory_hours + subjects.practice_hours) as hours');
+            ->selectRaw('groups.teacher_id, sum('.SubjectTeacherHours::SQL.') as hours');
 
         if ($teacherIds !== null) {
             $query->whereIn('groups.teacher_id', $teacherIds);

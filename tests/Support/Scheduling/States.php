@@ -42,9 +42,9 @@ final class States
         return new StateGroup($id, $campus, $modality, $subject ?? "S-{$id}", $department, $career, $plan, $semester, $code ?? $id, $teacher, $capacity, $active, $package, $packageNumber);
     }
 
-    public static function subject(string $id, string $name = 'Materia', int $theory = 3, int $practice = 2, bool $lab = false, bool $active = true): StateSubject
+    public static function subject(string $id, string $name = 'Materia', int $theory = 3, int $practice = 2, bool $lab = false, bool $active = true, bool $countsTeacherHours = true): StateSubject
     {
-        return new StateSubject($id, $id, $name, $theory, $practice, $lab, $active);
+        return new StateSubject($id, $id, $name, $theory, $practice, $lab, $active, $countsTeacherHours);
     }
 
     public static function room(string $id, int $capacity = 35, RoomType $type = RoomType::Aula, ?string $department = null, string $campus = 'C2', bool $active = true): StateRoom
@@ -55,8 +55,8 @@ final class States
     /**
      * @param  list<array{int, int, int}>  $unavailable
      */
-    public static function teacher(string $id, string $name = 'Docente', int $base = 40, int $external = 0, array $unavailable = [], bool $honorarios = false, ?int $allowance = null): StateTeacher
+    public static function teacher(string $id, string $name = 'Docente', int $base = 40, int $external = 0, array $unavailable = [], bool $honorarios = false, ?int $allowance = null, ?int $teaching = null, ?int $engineLimit = null): StateTeacher
     {
-        return new StateTeacher($id, $name, $base, $external, $unavailable, $honorarios, $allowance);
+        return new StateTeacher($id, $name, $base, $external, $unavailable, $honorarios, $allowance, $teaching ?? $base, $engineLimit);
     }
 }

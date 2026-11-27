@@ -26,7 +26,7 @@ const DP=Object.fromEntries(D.DEPTS.map(d=>[d.id,d]));
 const by=k=>{const m={};D.CLASSES.forEach(c=>(m[c[k]]??=[]).push(c));return m};
 const byRoom=by('room'),byProf=by('prof'),byGroup=by('group'),bySubj=by('subject');
 const spacesOf=(bid,fl)=>D.SPACES.filter(s=>s.building===bid&&(fl==null||s.floor===fl));
-const pName=p=>p.title?`${p.title} ${p.name}`:p.name;
+const pName=p=>p.name;
 const pShort=pName;
 const AN=a=>AREAS[a]?.short||'Sin departamento',AL=a=>AREAS[a]?.alias||'',AB=a=>AREAS[a]?.abbr||'·';
 const NOROOM='Sin salón en el mapa';
@@ -48,7 +48,12 @@ const roomLabel=s=>s.name;
 const S={q:'',areas:new Set(),stack:[],view:'3d',occ:false,expanded:{},route:true,open:null,floor:1,origin:D.START.slice()};
 const T0=D.HOURS[0],T1=D.HOURS[D.HOURS.length-1];
 {const n=new Date();let d=n.getDay()-1,h=n.getHours();if(d<0||d>=D.DAYS.length||h<T0||h>T1){d=Math.min(2,D.DAYS.length-1);h=10}S.day=d;S.hour=h;}
-const liveAt=c=>c.days.includes(S.day)&&S.hour>=c.hour&&S.hour<c.end;
+// Tiempo del periodo de consulta (MP-02): solo el periodo en curso tiene «ahora»; en uno pasado o futuro no hay clase en vivo.
+const TIME=D.SRV.time||'current',LIVE=TIME==='current';
+// Con el puesto de alumno el mapa solo trae sus clases (MP-04): lo que dependería de ver todas las clases (ocupación, «Libre», uso semanal) no se muestra.
+const MINE=D.SRV.scope==='student';
+const TT=TIME==='past'?{teach:'Docentes que impartían aquí',home:'Periodo terminado',homeTx:'Estos son los horarios que se impartieron en',occ:'La ocupación por hora solo está disponible en el periodo en curso.'}:{teach:'Docentes que impartirán aquí',home:'Periodo por empezar',homeTx:'Estos son los horarios que se impartirán en',occ:'La ocupación por hora solo está disponible en el periodo en curso.'};
+const liveAt=c=>LIVE&&c.days.includes(S.day)&&S.hour>=c.hour&&S.hour<c.end;
 const nowIn=rid=>rid?(byRoom[rid]||[]).find(liveAt):undefined;
 
 // ---------- escena ----------
@@ -334,7 +339,7 @@ function hit(e){setRay(e);const objs=S.open?[...INT[S.open].floors[S.floor].chil
 stage.addEventListener('pointermove',e=>{if(e.pointerType==='touch')return;const {bid,sid}=hit(e);HL.hover=bid||null;HL.hoverRoom=sid||null;stage.style.cursor=bid||sid||S.picking?'pointer':'';
   if(sid&&PK.on&&(PK.el.has(sid)||PK.rej.has(sid))){const s=SP[sid];tip.innerHTML=PK.el.has(sid)?`<b>${esc(s.name)}</b>Disponible · toca para elegirlo`:`<b>${esc(s.name)}</b>${esc(PK.rej.get(sid))}`}
   else if(sid){const s=SP[sid];const c=nowIn(sid);tip.innerHTML=`<b>${esc(s.name)}</b>${KINDS[s.kind]} · P${s.floor}${c?` · En clase: ${esc(sOf(c))}`:''}`}
-  else if(bid){const b=B[bid];const rs=spacesOf(bid).filter(s=>s.sched);const live=rs.filter(r=>nowIn(r.id)).length;tip.innerHTML=`<b>${esc(b.code)} · ${esc(b.name)}</b>${esc(b.cat)} · ${b.floors} ${b.floors>1?'plantas':'planta'}${rs.length?` · ${live}/${rs.length} en clase`:''}`}
+  else if(bid){const b=B[bid];const rs=spacesOf(bid).filter(s=>s.sched);const live=rs.filter(r=>nowIn(r.id)).length;tip.innerHTML=`<b>${esc(b.code)} · ${esc(b.name)}</b>${esc(b.cat)} · ${b.floors} ${b.floors>1?'plantas':'planta'}${rs.length?(LIVE&&!MINE?` · ${live}/${rs.length} en clase`:` · ${rs.length} con horario`):''}`}
   tip.style.opacity=bid||sid?1:0;{const rr=rootEl.getBoundingClientRect();tip.style.left=e.clientX-rr.left+14+'px';tip.style.top=e.clientY-rr.top+14+'px'}});
 stage.addEventListener('pointerleave',()=>{HL.hover=HL.hoverRoom=null;tip.style.opacity=0});
 stage.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
@@ -397,7 +402,7 @@ function suggestions(){const d=D.DEPTS[0],r=D.SPACES.find(s=>s.sched&&s.kind===3
 function renderHome(){const live=D.CLASSES.filter(liveAt);
   const mini=(arr,title)=>{const a=arr.filter(k=>EK[k]);return a.length?`<div class="ut-sec"><h2><span>${title}</span><span>${a.length}</span></h2>${a.map((k,i)=>itemHTML(EK[k],i,'')).join('')}</div>`:''};
   pb.innerHTML=mini(FAV,'Favoritos')+mini(REC.slice(0,5),'Recientes')+`<div class="ut-sec"><h2>Prueba a buscar</h2><div class="ut-sugg">${suggestions().map(s=>`<button data-q="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>
-  ${!D.CLASSES.length?`<div class="ut-empty" role="status"><b>Sin clases publicadas en ${esc(D.SRV.term?.name||'este periodo')}</b><span>El mapa muestra los edificios, las oficinas y los servicios. Para ver las clases de otro semestre, elige su periodo en tu credencial.</span></div>`:`<div class="ut-sec"><h2><span>En clase ahora · ${D.DAYS_LONG[S.day]} ${S.hour}:00</span><span>${live.length}</span></h2>${live.length?'':'<div class="ut-hint">Ninguna clase a esta hora.</div>'}${live.slice(0,6).map((c,i)=>{const s=SU[c.subject],bb=rBld(c);return `<div class="ut-it" role="button" tabindex="0" data-k="${c.room?'s:'+c.room:'m:'+c.subject}" style="--c:${AC(s?.area)};--on:${onC(AC(s?.area))};animation-delay:${i*25}ms"><div class="ut-bd">${esc(bb?.code||'·')}</div><div class="ut-tx"><div class="ut-t">${esc(sOf(c))}</div><div class="ut-s">${esc(rName(c))} · ${esc(gOf(c))} · ${esc(pOf(c))}</div></div><span class="ut-tag ut-live">${hrs(c)}</span></div>`}).join('')}</div>`}
+  ${!D.CLASSES.length&&MINE?`<div class="ut-empty ut-mine" role="status"><b>No tienes clases inscritas en ${esc(D.SRV.term?.name||'este periodo')}</b><span>Aquí solo aparecen los grupos que cursas. El mapa sigue mostrando los edificios, los salones y las oficinas. Para ver otro semestre, elige su periodo en tu credencial.</span></div>`:!D.CLASSES.length?`<div class="ut-empty" role="status"><b>Sin clases publicadas en ${esc(D.SRV.term?.name||'este periodo')}</b><span>El mapa muestra los edificios, las oficinas y los servicios. Para ver las clases de otro semestre, elige su periodo en tu credencial.</span></div>`:!LIVE?`<div class="ut-sec"><h2>${TT.home}</h2><div class="ut-hint">${TT.homeTx} ${esc(D.SRV.term?.name||'este periodo')}. Busca un salón, un grupo, una materia o un docente para ver su horario.</div></div>`:`<div class="ut-sec"><h2><span>${MINE?'Tu clase ahora':'En clase ahora'} · ${D.DAYS_LONG[S.day]} ${S.hour}:00</span><span>${live.length}</span></h2>${live.length?'':'<div class="ut-hint">Ninguna clase a esta hora.</div>'}${live.slice(0,6).map((c,i)=>{const s=SU[c.subject],bb=rBld(c);return `<div class="ut-it" role="button" tabindex="0" data-k="${c.room?'s:'+c.room:'m:'+c.subject}" style="--c:${AC(s?.area)};--on:${onC(AC(s?.area))};animation-delay:${i*25}ms"><div class="ut-bd">${esc(bb?.code||'·')}</div><div class="ut-tx"><div class="ut-t">${esc(sOf(c))}</div><div class="ut-s">${esc(rName(c))} · ${esc(gOf(c))} · ${esc(pOf(c))}</div></div><span class="ut-tag ut-live">${hrs(c)}</span></div>`}).join('')}</div>`}
   <div class="ut-sec"><h2><span>Edificios</span><span>${D.BUILDINGS.length}</span></h2>${D.BUILDINGS.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((b,i)=>itemHTML(EK['b:'+b.id],i,'')).join('')}</div>`}
 function kbAct(e){if((e.key==='Enter'||e.key===' ')&&e.target.matches('[role=button]')){e.preventDefault();e.target.click();requestAnimationFrame(()=>pb.querySelector('[data-act="back"]')?.focus({preventScroll:true}))}}
 pb.addEventListener('keydown',kbAct);
@@ -424,7 +429,7 @@ function renderDetail(k,keepCam){
     const all=spacesOf(id);const rooms=all.filter(s=>s.sched);const live=rooms.filter(r=>nowIn(r.id));const dept=D.DEPTS.find(d=>d.b===id);
     h+=head(b.code,b.areas.length===1?AC(b.areas[0]):'#B5362C',b.cat,b.name,b.areas.map(a=>`<span style="color:${AC(a)};font-weight:700">● ${esc(AN(a))}</span>`).join(' &nbsp;'));
     h+=photo(b.img);if(b.desc)h+=`<div class="ut-hint" style="padding:0 0 12px">${esc(b.desc)}</div>`;h+=contact(dept||b);
-    h+=`<div class="ut-facts">${fact('Plantas',b.floors)}${fact('Espacios',all.filter(s=>s.kind!==4).length||'—')}${fact('Con horario',rooms.length||'—')}${fact('En clase ahora',rooms.length?`${live.length} de ${rooms.length}`:'—')}</div>`;
+    h+=`<div class="ut-facts">${fact('Plantas',b.floors)}${fact('Espacios',all.filter(s=>s.kind!==4).length||'—')}${fact('Con horario',rooms.length||'—')}${LIVE&&!MINE?fact('En clase ahora',rooms.length?`${live.length} de ${rooms.length}`:'—'):''}</div>`;
     h+=`<div class="ut-acts">${routeBtn()}${rooms.length?`<button class="ut-btn ut-sec2" data-act="bsched">Horario del edificio</button>`:''}</div>`;
     if(dept)h+=`<div class="ut-sec"><h2>Departamento</h2>${itemHTML(EK['d:'+dept.id],0,'')}</div>`;
     if(hasInt){h+=`<div class="ut-sec"><h2><span>Espacios por planta</span><span>${all.length}</span></h2><div class="ut-ftabs">${Object.keys(it.floors).map(f=>`<button data-act="floor" data-f="${f}" class="${+f===fl?'ut-on':''}">Planta ${f}</button>`).join('')}</div>`;
@@ -435,10 +440,10 @@ function renderDetail(k,keepCam){
   else if(t==='s'){const s=SP[id];const b=B[s.building];selB=s.building;selS=id;fl=s.floor;close=true;const c=s.sched&&nowIn(id);const cl=byRoom[id]||[];
     h+=head(s.kind===3&&/^\d+$/.test(s.raw)?s.raw:b.code,s.owner?AC(s.owner):s.sched?'#092d48':(s.kind===6?'#B5362C':'#8C7B6B'),`${KINDS[s.kind]} · Planta ${s.floor}`,s.name,esc(b.name));
     h+=photo(s.img);if(s.desc)h+=`<div class="ut-hint" style="padding:0 0 12px">${esc(s.desc)}</div>`;
-    if(s.sched){h+=c?`<div class="ut-now ut-busy"><span class="ut-pulse"></span><div><b>En clase ahora:</b> ${esc(sOf(c))} · ${esc(gOf(c))} · ${esc(pOf(c))}</div></div>`:`<div class="ut-now ut-free"><span class="ut-pulse"></span><div><b>Libre</b> · ${D.DAYS_LONG[S.day]} ${S.hour}:00</div></div>`;
-      h+=`<div class="ut-facts">${fact('Planta',s.floor)}${fact('Capacidad',s.cap?s.cap+' personas':'—')}${fact('Tipo',s.type==='laboratorio'?'Laboratorio':s.type==='aula'?'Aula':esc(KINDS[s.kind]))}${fact('Uso semanal',`${cl.reduce((a,c)=>a+c.days.length*dur(c),0)} h de ${D.DAYS.length*D.HOURS.length}`)}</div>`;
+    if(s.sched){h+=!LIVE||(MINE&&!c)?'':c?`<div class="ut-now ut-busy"><span class="ut-pulse"></span><div><b>En clase ahora:</b> ${esc(sOf(c))} · ${esc(gOf(c))} · ${esc(pOf(c))}</div></div>`:`<div class="ut-now ut-free"><span class="ut-pulse"></span><div><b>Libre</b> · ${D.DAYS_LONG[S.day]} ${S.hour}:00</div></div>`;
+      h+=`<div class="ut-facts">${fact('Planta',s.floor)}${fact('Capacidad',s.cap?s.cap+' personas':'—')}${fact('Tipo',s.type==='laboratorio'?'Laboratorio':s.type==='aula'?'Aula':esc(KINDS[s.kind]))}${MINE?'':fact('Uso semanal',`${cl.reduce((a,c)=>a+c.days.length*dur(c),0)} h de ${D.DAYS.length*D.HOURS.length}`)}</div>`;
       h+=`<div class="ut-acts"><button class="ut-btn" data-act="sched">Horario semanal</button>${routeBtn()}</div>`;
-      const profs=[...new Set(cl.map(c=>c.prof))].filter(p=>p&&EK['p:'+p]);if(profs.length)h+=`<div class="ut-sec"><h2><span>Docentes que imparten aquí</span><span>${profs.length}</span></h2>${profs.map((p,i)=>itemHTML(EK['p:'+p],i,'')).join('')}</div>`;
+      const profs=[...new Set(cl.map(c=>c.prof))].filter(p=>p&&EK['p:'+p]);if(profs.length)h+=`<div class="ut-sec"><h2><span>${LIVE?'Docentes que imparten aquí':TT.teach}</span><span>${profs.length}</span></h2>${profs.map((p,i)=>itemHTML(EK['p:'+p],i,'')).join('')}</div>`;
       openDrawer('room',id)}
     else{h+=`<div class="ut-facts">${fact('Edificio',esc(b.code))}${fact('Planta',s.floor)}</div><div class="ut-acts">${routeBtn()}<button class="ut-btn ut-sec2" data-k2="b:${b.id}">Ver edificio</button></div>`;
       const near=spacesOf(s.building,s.floor).filter(x=>[8,9,5].includes(x.kind));if(near.length&&![8,9,5].includes(s.kind))h+=`<div class="ut-sec"><h2>Baños en esta planta</h2>${near.map((x,i)=>itemHTML(EK['s:'+x.id],i,'')).join('')}</div>`}
@@ -449,7 +454,7 @@ function renderDetail(k,keepCam){
     const pf=D.PROFS.filter(p=>p.area===d.area);h+=`<div class="ut-sec"><h2><span>Docentes</span><span>${pf.length}</span></h2>${pf.slice(0,S.expanded.dp?99:5).map((p,i)=>itemHTML(EK['p:'+p.id],i,'')).join('')}${pf.length>5&&!S.expanded.dp?`<button class="ut-more" data-act="x:dp">Ver los ${pf.length} →</button>`:''}</div>`}
   else if(t==='m'){const s=SU[id];const cl=(bySubj[id]||[]).slice().sort((a,b)=>a.hour-b.hour);
     h+=head(AB(s.area),AC(s.area),'Materia · '+s.id,s.name,esc([AREAS[s.area]?.name,s.cred?s.cred+' créditos':null].filter(Boolean).join(' · ')));
-    h+=`<div class="ut-facts">${fact('Bloques',cl.length)}${fact('Grupos',new Set(cl.map(c=>c.group)).size)}${fact('Profesores',new Set(cl.map(c=>c.prof).filter(Boolean)).size)}${fact('En clase ahora',cl.filter(liveAt).length)}</div>`;
+    h+=`<div class="ut-facts">${fact('Bloques',cl.length)}${fact('Grupos',new Set(cl.map(c=>c.group)).size)}${fact('Profesores',new Set(cl.map(c=>c.prof).filter(Boolean)).size)}${LIVE?fact('En clase ahora',cl.filter(liveAt).length):fact('Salones',new Set(cl.map(c=>c.room).filter(Boolean)).size)}</div>`;
     h+=`<div class="ut-sec"><h2><span>Grupos y horarios</span><span>${cl.length}</span></h2>${cl.map((c,i)=>clsItem(c,'subject',i)).join('')}</div>`;S.roomFocus=new Set(cl.map(c=>c.room).filter(Boolean))}
   else if(t==='g'){const g=GR[id];const cl=(byGroup[id]||[]).slice().sort((a,b)=>a.hour-b.hour);
     const gs0=SU[g.subject];h+=head(g.code,AC(g.area),'Grupo'+(g.turno?' · '+g.turno:''),`${gs0?.name||g.subject} · grupo ${g.code}`,esc([AREAS[g.area]?.name,g.career].filter(Boolean).join(' · ')));
@@ -457,9 +462,9 @@ function renderDetail(k,keepCam){
     h+=`<div class="ut-sec"><h2>Clases</h2>${cl.map((c,i)=>clsItem(c,'group',i)).join('')||'<div class="ut-hint">Sin clases asignadas en este periodo.</div>'}</div>`;S.roomFocus=new Set(cl.map(c=>c.room).filter(Boolean));openDrawer('group',id)}
   else if(t==='p'){const p=PR[id];const cl=(byProf[id]||[]).slice().sort((a,b)=>a.hour-b.hour);const c=cl.find(liveAt);selB=c&&c.room?bOfRoom(c.room):p.building;selS=c&&c.room?c.room:p.cub;fl=selS?SP[selS].floor:null;
     h+=head(e.badge,AC(p.area),'Docente · '+AN(p.area),pName(p),p.email?`<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>`:esc(AREAS[p.area]?.name||''));
-    h+=c?`<div class="ut-now ut-busy"><span class="ut-pulse"></span><div><b>Ahora en ${esc(rName(c))}</b>${rBld(c)?` (${esc(rBld(c).code)})`:''} · ${esc(sOf(c))} con ${esc(gOf(c))}</div></div>`:`<div class="ut-now ut-free"><span class="ut-pulse"></span><div><b>Sin clase ahora</b>${p.building||p.loc?' · '+esc([p.loc,B[p.building]?.name].filter(Boolean).join(', ')):''}</div></div>`;
-    h+=`<div class="ut-facts">${fact('Departamento',esc(AN(p.area)))}${fact('Horas frente a grupo',cl.reduce((a,c)=>a+c.days.length*dur(c),0)+' h')}${fact('Grupos',new Set(cl.map(c=>c.group)).size)}${fact('Edificios',bids.length)}</div>`;
-    h+=`<div class="ut-acts"><button class="ut-btn" data-act="sched">Horario semanal</button>${routeBtn()}</div>`;
+    h+=!LIVE||(MINE&&!c)?(p.building||p.loc?`<div class="ut-hint" style="padding:0 0 12px">Cubículo · ${esc([p.loc,B[p.building]?.name].filter(Boolean).join(', '))}</div>`:''):c?`<div class="ut-now ut-busy"><span class="ut-pulse"></span><div><b>Ahora en ${esc(rName(c))}</b>${rBld(c)?` (${esc(rBld(c).code)})`:''} · ${esc(sOf(c))} con ${esc(gOf(c))}</div></div>`:`<div class="ut-now ut-free"><span class="ut-pulse"></span><div><b>Sin clase ahora</b>${p.building||p.loc?' · '+esc([p.loc,B[p.building]?.name].filter(Boolean).join(', ')):''}</div></div>`;
+    h+=`<div class="ut-facts">${fact('Departamento',esc(AN(p.area)))}${MINE?'':fact('Horas frente a grupo',cl.reduce((a,c)=>a+c.days.length*dur(c),0)+' h')+fact('Grupos',new Set(cl.map(c=>c.group)).size)}${fact('Edificios',bids.length)}</div>`;
+    h+=`<div class="ut-acts">${MINE&&!cl.length?'':'<button class="ut-btn" data-act="sched">Horario semanal</button>'}${routeBtn()}</div>`;
     h+=`<div class="ut-sec"><h2><span>Clases</span><span>${cl.length}</span></h2>${cl.map((c,i)=>clsItem(c,'prof',i)).join('')}</div>`;openDrawer('prof',id)}
   else if(t==='a'){const a=AREAS[id];const rs=D.SPACES.filter(s=>s.owner===id);const pf=D.PROFS.filter(p=>p.area===id);const sj=D.SUBJECTS.filter(s=>s.area===id);const gs=D.GROUPS.filter(g=>g.area===id);const dp=D.DEPTS.filter(d=>d.area===id);
     h+=head(a.abbr,a.color,'Departamento académico',a.name,'');h+=`<div class="ut-facts">${fact('Edificios',bids.length)}${fact('Grupos',gs.length)}${fact('Docentes',pf.length)}${fact('Materias',sj.length)}</div>`;
@@ -516,7 +521,8 @@ const updOcc=()=>{for(const id in BLD){const o=occOf(id);LBL[id].querySelector('
 const updTime=()=>{S.day=+oday.value;S.hour=+ohour.value;$('#ohl').textContent=S.hour+':00';updOcc();if(S.stack.length)renderDetail(S.stack[S.stack.length-1],true);else render()};
 oday.onchange=updTime;ohour.oninput=updTime;
 $('#vocc').onclick=()=>{S.occ=!S.occ;rootEl.classList.toggle('ut-occ',S.occ);$('#vocc').classList.toggle('ut-on',S.occ);$('#vocc').setAttribute('aria-pressed',S.occ);updOcc()};
-if(!D.CLASSES.length){const b=$('#vocc');b.disabled=true;b.title='Sin clases en este periodo'}
+if(!D.CLASSES.length||!LIVE||MINE){const b=$('#vocc');b.disabled=true;b.title=MINE?'La ocupación de los salones no está disponible: el mapa solo muestra tus clases.':!LIVE?TT.occ:'Sin clases en este periodo';[oday,ohour].forEach(x=>x.disabled=true)}
+rootEl.dataset.time=TIME;
 $('#compass').onclick=()=>{const t=controls.target.clone();const d=camera.position.distanceTo(t);const pol=controls.getPolarAngle();flyRaw(new THREE.Vector3(t.x,t.y+d*Math.cos(pol),t.z+d*Math.sin(pol)),t,700)};
 const lights=scene.children.filter(o=>o.isLight);const DAYL=lights.map(l=>l.intensity);
 function setNight(on){S.night=on;$('#vnight').classList.toggle('ut-on',on);$('#vnight').setAttribute('aria-pressed',on);rootEl.classList.toggle('ut-night',on);stage.style.setProperty('--stage-bg',on?'#151821':'#E9E4DC');

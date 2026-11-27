@@ -23,7 +23,8 @@ use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherHourAllowance;
 use App\Modules\Faculty\Models\TeacherPosition;
-use App\Modules\Faculty\Queries\TeacherBaseHoursQuery;
+use App\Modules\Faculty\Queries\SelectionCsvHours;
+use App\Modules\Faculty\Rules\TeachingHours;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
@@ -51,8 +52,10 @@ use Illuminate\Database\Eloquent\Builder;
  *   los que tienen alguna sesión con salón, porque un salón lo comparten las modalidades de su campus (HC-02);
  * - las materias de esos grupos, los salones de los campus donde la modalidad tiene grupos y los que usan esas
  *   sesiones, y los bloqueos vigentes;
- * - los docentes de esos grupos: nombre, horas base (TeacherBaseHoursQuery), horas externas del periodo, bloques no
- *   disponibles, si es de honorarios y sus horas autorizadas del periodo (`teacher_hour_allowances`, SEL-12);
+ * - los docentes de esos grupos: nombre, horas base (la suma de sus plazas vigentes al inicio del periodo, como
+ *   TeacherBaseHoursQuery), horas frente a grupo (PL-01 por esas plazas, como TeacherTeachingHoursQuery, o el CSV de la
+ *   selección del periodo si no dan, SelectionCsvHours; HC-08 desde la tarea 1.50), horas externas del periodo, bloques
+ *   no disponibles, si es de honorarios y sus horas autorizadas del periodo (`teacher_hour_allowances`, SEL-12);
  * - los perfiles de las modalidades (todas, borradas incluidas; una con perfil guardado inválido toma el perfil por
  *   omisión, ModalityProfile::DEFAULTS, para que un perfil roto no tumbe la foto de todas las modalidades:
  *   Modality::valid_profile), las claves de los campus, las carreras ofrecidas, los planes activos y los parámetros
@@ -64,8 +67,8 @@ final class ScheduleStateQuery
     private const array SETTING_PREFIXES = ['staffing.', 'scheduling.'];
 
     public function __construct(
-        private readonly TeacherBaseHoursQuery $baseHours,
         private readonly RoomLoansQuery $roomLoans,
+        private readonly SelectionCsvHours $csvHours,
     ) {}
 
     /**
@@ -112,9 +115,9 @@ final class ScheduleStateQuery
             ->each(fn (GroupQuota $quota) => $builder->quota(new StateQuota($quota->group_id, $quota->career_id, $quota->max_seats, $quota->is_owner)));
 
         Subject::query()->withTrashed()->whereIn('id', $groups->pluck('subject_id')->unique()->all())
-            ->get(['id', 'code', 'name', 'theory_hours', 'practice_hours', 'needs_lab', 'is_active', 'deleted_at'])
+            ->get(['id', 'code', 'name', 'theory_hours', 'practice_hours', 'needs_lab', 'is_active', 'deleted_at', 'counts_teacher_hours'])
             ->each(fn (Subject $subject) => $builder->subject(new StateSubject($subject->id, $subject->code, $subject->name,
-                $subject->theory_hours, $subject->practice_hours, $subject->needs_lab, $subject->is_active && ! $subject->trashed())));
+                $subject->theory_hours, $subject->practice_hours, $subject->needs_lab, $subject->is_active && ! $subject->trashed(), $subject->counts_teacher_hours)));
 
         $this->addRooms($builder, $term, $campusIds, array_keys($roomIds));
 
@@ -165,7 +168,16 @@ final class ScheduleStateQuery
             return [];
         }
 
-        $base = $this->baseHours->forTerm($term, $teacherIds);
+        // Una lectura de las plazas vigentes al inicio del periodo da las horas base (como TeacherBaseHoursQuery), las
+        // horas frente a grupo (PL-01, como TeacherTeachingHoursQuery) y si es de honorarios.
+        $positions = TeacherPosition::query()->currentOn($term->starts_on)->whereIn('teacher_id', $teacherIds)
+            ->get(['teacher_id', 'kind', 'category', 'base_hours'])->groupBy('teacher_id');
+        $base = $positions->map(fn ($plazas): int => (int) $plazas->sum('base_hours'));
+        $teaching = $positions->map(fn ($plazas): int => TeachingHours::forPositions($plazas->map(fn (TeacherPosition $position): array => [
+            'kind' => $position->kind, 'category' => $position->category, 'base_hours' => $position->base_hours,
+        ])));
+        $honorarios = $positions->filter(fn ($plazas): bool => $plazas->contains(fn (TeacherPosition $position): bool => $position->kind === PositionKind::Honorarios));
+        $csv = $this->csvHours->forTerm($term, $teacherIds);
 
         $external = TeacherExternalLoad::query()->where('term_id', $term->id)->whereIn('teacher_id', $teacherIds)
             ->groupBy('teacher_id')->selectRaw('teacher_id, sum(hours) as hours')
@@ -179,10 +191,6 @@ final class ScheduleStateQuery
             ->each(function (TeacherAvailability $block) use (&$unavailable): void {
                 $unavailable[$block->teacher_id][] = [(int) $block->day, Minutes::of($block->starts_at), Minutes::of($block->ends_at)];
             });
-
-        $honorarios = TeacherPosition::query()->currentOn($term->starts_on)->whereIn('teacher_id', $teacherIds)
-            ->where('kind', PositionKind::Honorarios->value)
-            ->distinct()->pluck('teacher_id')->flip();
 
         return Teacher::query()
             ->whereIn('teachers.id', $teacherIds)
@@ -201,6 +209,7 @@ final class ScheduleStateQuery
                 $unavailable[$teacher->id] ?? [],
                 $honorarios->has($teacher->id),
                 $teacher->allowance_hours === null ? null : (int) $teacher->allowance_hours,
+                ($teaching[$teacher->id] ?? 0) > 0 ? $teaching[$teacher->id] : ($csv[$teacher->id] ?? 0),
             ))
             ->all();
     }

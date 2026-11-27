@@ -436,7 +436,7 @@ it('CR-03: el aviso dice que se aprobó con otro acomodo y cómo queda, a quien 
         fn (ChangeRequestPendingApplication $notice): bool => $notice->message($s['coordinador'])->title === 'Hay un cambio aprobado por aplicar, con otro acomodo');
 });
 
-it('CR-02: una dura previa que no depende del acomodo (HC-08) no deja sin alternativas y sale como problema de la entrada', function () {
+it('CR-02 y HC-08: lo que el docente ya trae asignado de más no deja sin alternativas ni sale como problema de la entrada (tarea 1.50)', function () {
     $s = alternativesScenario();
     TeacherPosition::query()->where('teacher_id', $s['teacher']->id)->delete();
     TeacherPosition::factory()->for($s['teacher'])->asignatura(2)->create();
@@ -444,7 +444,7 @@ it('CR-02: una dura previa que no depende del acomodo (HC-08) no deja sin altern
     $request = alternativesPropose(alternativesRequest($s), $s['jefe']);
 
     expect($request->alternatives['status'])->toBe('ready')
-        ->and(collect($request->alternatives['items'])->flatMap(fn (array $item) => array_column($item['input_problems'], 'rule'))->unique()->values()->all())->toBe(['HC-08'])
+        ->and(collect($request->alternatives['items'])->flatMap(fn (array $item) => array_column($item['input_problems'], 'rule'))->unique()->values()->all())->toBe([])
         ->and(collect($request->alternatives['items'])->flatMap(fn (array $item) => $item['previous_problems'])->all())->toBe([]);
 });
 

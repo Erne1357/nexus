@@ -184,13 +184,14 @@ dataset('one database scenario per hard rule', [
 
         return [$a->id => ['HC-06']];
     }],
-    'HC-08 con horas en otra modalidad' => [function () {
+    // HC-08 (tarea 1.50): lo asignado de más por las personas es aviso en la base y el motor no lo ve como choque.
+    'HC-08 con horas en otra modalidad: aviso, no choque' => [function () {
         $a = equivalenceGroup(test()->prog, ['teacher_id' => test()->t3->id]);
         $ead = equivalenceGroup(test()->calc, ['teacher_id' => test()->t3->id, 'modality_id' => test()->ead->id]);
         equivalenceSession($a, 1, '07:00', '09:00');
         equivalenceSession($ead, 2, '07:00', '09:00');
 
-        return [$a->id => ['HC-08']];
+        return [];
     }],
     'HC-09' => [function () {
         $a = equivalenceGroup(test()->prog, ['teacher_id' => test()->t1->id]);

@@ -2,6 +2,8 @@
 
 namespace App\Modules\Staffing\Queries;
 
+use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedSession;
 use App\Modules\Core\Models\Campus;
@@ -20,6 +22,7 @@ use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Support\PublishedStamps;
 use App\Modules\Staffing\Support\SessionLabels;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 
 /**
  * «Mi carga» (tarea 3.10): los grupos no cancelados del docente en el periodo, de todos los campus, acomodados por día
@@ -83,6 +86,7 @@ final class MyLoadQuery
                     'subject_code' => $group['subject_code'],
                     'campus_code' => $group['campus_code'],
                     'campus_name' => $group['campus_name'],
+                    'counts_teacher_hours' => $group['counts_teacher_hours'] ?? true,
                     'room' => $session['room'],
                     'kind' => $session['kind'],
                     'time' => $session['time'],
@@ -130,6 +134,7 @@ final class MyLoadQuery
                 'subject_name' => $group['subject_name'],
                 'campus_code' => $group['campus_code'],
                 'hours' => $group['hours'],
+                'counts_teacher_hours' => $group['counts_teacher_hours'] ?? true,
                 'schedule' => $group['schedule'],
             ], $groups),
             'days' => $days,
@@ -176,13 +181,20 @@ final class MyLoadQuery
             ->active()
             ->where('term_id', $term->id)
             ->where('teacher_id', $teacher->id)
-            ->with(['subject:id,code,name,theory_hours,practice_hours', 'campus:id,code,name', 'department:id,name', 'sessions' => fn ($sessions) => $sessions->with('room:id,code')])
+            ->with(['subject:id,code,name,theory_hours,practice_hours,counts_teacher_hours', 'campus:id,code,name', 'department:id,name', 'sessions' => fn ($sessions) => $sessions->with('room:id,code')])
             ->get()
             ->reject(fn (Group $group): bool => $published->isPublished($group->modality_id, $group->department_id));
 
+        $publishedGroups = $published->teacher($teacher->id);
+        // PL-02: la versión publicada no guarda si la materia cuenta en la carga del docente; se lee de la materia de hoy.
+        $countsBySubject = $publishedGroups === [] ? collect() : Subject::query()->withTrashed()
+            ->whereIn('id', array_values(array_filter(array_map(fn (array $entry): string => (string) ($entry['group']->subject['id'] ?? ''), $publishedGroups), Str::isUuid(...))))
+            ->pluck('counts_teacher_hours', 'id');
+
         $groups = [
             ...$live->map(self::fromLive(...))->values()->all(),
-            ...array_map(fn (array $entry): array => self::fromPublished($entry['group'], $entry['campus'], $entry['department']['name']), $published->teacher($teacher->id)),
+            ...array_map(fn (array $entry): array => self::fromPublished($entry['group'], $entry['campus'], $entry['department']['name'],
+                (bool) ($countsBySubject[$entry['group']->subject['id']] ?? true)), $publishedGroups),
         ];
 
         usort($groups, fn (array $a, array $b): int => strnatcmp($a['code'], $b['code']) ?: strcmp($a['subject_code'], $b['subject_code']));
@@ -206,6 +218,7 @@ final class MyLoadQuery
             'campus_name' => $group['campus_name'],
             'department' => $group['department'],
             'hours' => $group['hours'],
+            'counts_teacher_hours' => $group['counts_teacher_hours'],
             'schedule' => SessionLabels::lines(array_map(fn (array $s): array => [$s['day'], $s['starts_at'], $s['ends_at']], $group['sessions'])),
             'sessions' => array_map(fn (array $s): array => self::session($s['day'], $s['starts_at'], $s['ends_at'], $s['room'], 'class'), $group['sessions']),
             'published' => null,
@@ -225,7 +238,8 @@ final class MyLoadQuery
             'campus_code' => $group->campus->code,
             'campus_name' => $group->campus->name,
             'department' => (string) $group->department?->name,
-            'hours' => $group->subject->theory_hours + $group->subject->practice_hours,
+            'hours' => $group->subject->teacher_hours,
+            'counts_teacher_hours' => (bool) $group->subject->counts_teacher_hours,
             'schedule' => SessionLabels::schedule($group->sessions),
             'sessions' => $group->sessions
                 ->map(fn (GroupSession $session): array => self::session($session->day, (string) $session->starts_at, (string) $session->ends_at, $session->room?->code, $session->kind->value))
@@ -238,7 +252,7 @@ final class MyLoadQuery
     /**
      * @return array<string, mixed>
      */
-    private static function fromPublished(PublishedGroup $group, ?Campus $campus, string $department): array
+    private static function fromPublished(PublishedGroup $group, ?Campus $campus, string $department, bool $countsTeacherHours = true): array
     {
         return [
             'id' => $group->id,
@@ -248,7 +262,8 @@ final class MyLoadQuery
             'campus_code' => $campus?->code ?? ($group->campus['code'] ?? ''),
             'campus_name' => $campus?->name ?? ($group->campus['name'] ?? ''),
             'department' => $department,
-            'hours' => $group->subject['theory_hours'] + $group->subject['practice_hours'],
+            'hours' => SubjectTeacherHours::of((int) $group->subject['theory_hours'], (int) $group->subject['practice_hours'], $countsTeacherHours),
+            'counts_teacher_hours' => $countsTeacherHours,
             'schedule' => SessionLabels::published($group->sessions),
             'sessions' => array_map(fn (PublishedSession $session): array => self::session($session->day, $session->startsAt, $session->endsAt, $session->room['code'] ?? null, $session->kind), $group->sessions),
             'published' => ['version' => $group->version, 'at' => $group->publishedAt],
@@ -271,9 +286,11 @@ final class MyLoadQuery
     }
 
     /**
-     * La cuenta de horas con las asignadas que se ven: base, externas y límite de ahora (HC-08).
+     * La cuenta de horas con las asignadas que se ven: base, frente a grupo con su banda, externas y límite de ahora
+     * (HC-08, que desde la tarea 1.50 se mide contra las horas frente a grupo: el límite es el tope de su banda o lo que
+     * autorizó su casilla, SEL-12). `over_band` y `accepted` dicen si pasa su banda y si su casilla lo cubre.
      *
-     * @return array{base: int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, sources: list<array{source: string, hours: int}>}
+     * @return array{base: int, teaching: int, band_from: int, band_to: int, band_limit: int, honorarios_cap: ?int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, over_band: bool, accepted: bool, sources: list<array{source: string, hours: int}>}
      */
     private function hours(Teacher $teacher, Term $term, ScheduleState $state, int $assigned): array
     {
@@ -283,15 +300,24 @@ final class MyLoadQuery
         }
 
         $limit = TeacherHourLimit::of($state, $teacher->id)
-            ?? ['base_hours' => 0, 'external_hours' => 0, 'tolerance' => 0, 'limit' => 0];
+            ?? ['base_hours' => 0, 'teaching_hours' => 0, 'band_from' => 0, 'band_to' => 0, 'band_limit' => 0, 'honorarios_cap' => null, 'external_hours' => 0, 'tolerance' => 0, 'limit' => 0, 'allowance_hours' => null];
+        $total = $assigned + $limit['external_hours'];
+        $overBand = $total > $limit['band_limit'];
 
         return [
             'base' => $limit['base_hours'],
+            'teaching' => $limit['teaching_hours'],
+            'band_from' => $limit['band_from'],
+            'band_to' => $limit['band_to'],
+            'band_limit' => $limit['band_limit'],
+            'honorarios_cap' => $limit['honorarios_cap'],
             'limit' => $limit['limit'],
             'tolerance' => $limit['tolerance'],
             'external' => $limit['external_hours'],
             'assigned' => $assigned,
-            'remaining' => $limit['limit'] - $limit['external_hours'] - $assigned,
+            'remaining' => $limit['limit'] - $total,
+            'over_band' => $overBand,
+            'accepted' => $overBand && $limit['allowance_hours'] !== null && $total <= $limit['allowance_hours'],
             'sources' => TeacherExternalLoad::query()->where('term_id', $term->id)->where('teacher_id', $teacher->id)
                 ->orderBy('source')->get(['source', 'hours'])
                 ->map(fn (TeacherExternalLoad $load): array => ['source' => (string) $load->source, 'hours' => (int) $load->hours])->all(),

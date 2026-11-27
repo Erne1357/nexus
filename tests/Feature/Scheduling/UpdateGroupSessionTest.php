@@ -22,6 +22,9 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
+// Estas pruebas piden préstamos de salón, apagados por omisión (tarea 1.53).
+beforeEach(fn () => roomLoans());
+
 /*
 | UpdateGroupSession (tarea 3.5): mueve una sesión de día u hora y le cambia el tipo, con las mismas reglas que
 | colocarla. Conserva su salón si a la nueva hora sigue libre; si otro grupo lo ocupa (HC-02), lo quita y lo dice en
@@ -320,5 +323,40 @@ it('HC-10: si al moverla se le quita el salón porque otro grupo lo ocupa (HC-02
 
     expect($result->roomDropped)->toBeTrue()
         ->and($old->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and(liveLoansOfMove())->toBe([]);
+});
+
+it('1.53: con los préstamos apagados, acortar la sesión conserva su préstamo aceptado y su salón', function () {
+    roomLoans(false);
+    $accepted = inForeignRoomOfMove(AgreementStatus::Accepted);
+
+    $result = moveSession($this->session, 1, '07:00', '08:00');
+
+    expect($result->loanUnavailable)->toBeFalse()
+        ->and($accepted->fresh()->status)->toBe(AgreementStatus::Accepted)
+        ->and($this->session->fresh()->room_id)->not->toBeNull();
+});
+
+it('1.53: con los préstamos apagados, alargar la sesión sobre un préstamo aceptado la deja sin salón con el motivo, y no pide otro', function () {
+    roomLoans(false);
+    inForeignRoomOfMove(AgreementStatus::Accepted);
+
+    $result = moveSession($this->session, 1, '07:00', '10:00');
+
+    expect($result->loanUnavailable)->toBeTrue()
+        ->and($result->roomDropped)->toBeTrue()
+        ->and($result->loanBlocked)->toBeFalse()
+        ->and($this->session->fresh()->room_id)->toBeNull()
+        ->and(liveLoansOfMove())->toBe([]);
+});
+
+it('1.53: con los préstamos apagados, mover la sesión a otra hora en salón ajeno la deja sin salón', function () {
+    roomLoans(false);
+    inForeignRoomOfMove(AgreementStatus::Accepted);
+
+    $result = moveSession($this->session, 3, '10:00', '12:00');
+
+    expect($result->loanUnavailable)->toBeTrue()
+        ->and($this->session->fresh()->room_id)->toBeNull()
         ->and(liveLoansOfMove())->toBe([]);
 });

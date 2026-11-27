@@ -1,6 +1,6 @@
 {{--
     La ficha de un grupo en su renglón de hora (maqueta A, «gc»): clave · grupo, el tipo de espacio y el cupo; la
-    materia en dos renglones; quién lo tiene («Libre», «Tú» o su nombre) con el salón (o «Sin salón») y los días como
+    materia en dos renglones; quién lo tiene («Libre», «Tú» o «Asignado», sin el nombre: SEL-05) con el salón (o «Sin salón») y los días como
     marcas L M Mi J V. Libre con borde punteado; tomado en gris; tuyo en `info`; si te choca, rayado. Para el docente,
     «Fuera de tu experiencia académica» y «Choca con tu …»; para quien asigna, «Asignar a…». Toda la ficha abre el drawer del grupo.
     Espera $card, $days (los del horario) y $inQueue (si quien ve está en la cola).
@@ -15,7 +15,7 @@
     $space = $spaces[$card['required_space']] ?? $spaces['aula'];
     $state = match (true) {
         $card['mine'] => 'mine',
-        $card['teacher'] !== null => 'taken',
+        $card['taken'] => 'taken',
         $card['clashes'] => 'clash',
         default => 'free',
     };
@@ -27,12 +27,12 @@
     @class([
         'grid min-w-0 content-start gap-1.5 rounded-field border px-3 py-2.5 text-start hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary',
         'border-dashed border-base-content/25 bg-base-100' => $state === 'free',
-        'border-base-300 bg-base-200/70' => $state === 'taken',
+        'border-base-content/30 bg-base-300/60' => $state === 'taken',
         'border-info/40 bg-info/10 hover:bg-info/15' => $state === 'mine',
         'border-dashed border-base-content/25 bg-[image:repeating-linear-gradient(135deg,var(--color-base-100)_0_7px,var(--color-base-200)_7px_14px)]' => $state === 'clash',
     ])>
     <span class="flex min-w-0 items-center gap-2">
-        <b @class(['font-mono text-[14.5px] whitespace-nowrap', 'text-neutral' => $state === 'taken'])>{{ $card['subject_code'] }}<span class="mx-1 text-neutral" aria-hidden="true">·</span>{{ $card['group_code'] }}</b>
+        <b @class(['font-mono text-[14.5px] whitespace-nowrap', 'text-base-content' => $state === 'taken'])>{{ $card['subject_code'] }}<span class="mx-1 text-neutral" aria-hidden="true">·</span>{{ $card['group_code'] }}</b>
         @if ($card['time'])
             <span class="font-mono text-[12.5px] whitespace-nowrap text-neutral">{{ $card['time'] }}</span>
         @endif
@@ -41,16 +41,16 @@
             <span class="inline-flex items-center gap-1" title="{{ $card['capacity'] }} lugares"><x-icon name="o-users" class="h-3.5 w-3.5" aria-hidden="true" /><span class="font-mono font-semibold text-base-content">{{ $card['capacity'] }}</span><span class="sr-only"> lugares</span></span>
         </span>
     </span>
-    <span @class(['line-clamp-2 min-h-[2.6em] font-medium leading-snug', 'text-neutral' => in_array($state, ['taken', 'clash'], true)]) title="{{ $card['subject_name'] }}">{{ $card['subject_name'] }}</span>
-    <span class="flex min-w-0 items-center gap-2 text-[13.5px]">
+    <span @class(['line-clamp-2 min-h-[2.6em] font-medium leading-snug', 'text-neutral' => $state === 'clash']) title="{{ $card['subject_name'] }}">{{ $card['subject_name'] }}</span>
+    <span class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px]">
         @if ($state === 'mine')
             <b class="text-info">Tú</b>
-        @elseif ($card['teacher'] !== null)
-            <span class="min-w-0 truncate">{{ $card['teacher'] }}</span>
+        @elseif ($card['taken'])
+            <span class="badge badge-neutral badge-sm gap-1 font-semibold" data-testid="selection-taken"><x-icon name="o-lock-closed" class="h-3 w-3" aria-hidden="true" />Asignado</span>
         @else
             <b>Libre</b>
         @endif
-        @if ($card['teacher'] !== null)
+        @if ($card['taken'])
             @if ($room !== null)
                 <b class="font-mono whitespace-nowrap">{{ $room }}</b>
             @else
@@ -79,7 +79,7 @@
     @endif
     @if ($card['can_assign'])
         <span class="-mx-1 -mb-1 flex justify-end">
-            <span class="inline-flex items-center gap-1.5 rounded-field px-2 py-1 text-sm font-semibold" aria-hidden="true"><x-icon name="o-user-plus" class="h-4 w-4" />{{ $card['teacher'] === null ? 'Asignar a…' : 'Asignar a otro…' }}</span>
+            <span class="inline-flex items-center gap-1.5 rounded-field px-2 py-1 text-sm font-semibold" aria-hidden="true"><x-icon name="o-user-plus" class="h-4 w-4" />{{ $card['taken'] ? 'Asignar a otro…' : 'Asignar a…' }}</span>
             <span class="sr-only">Abre para asignar el docente</span>
         </span>
     @endif

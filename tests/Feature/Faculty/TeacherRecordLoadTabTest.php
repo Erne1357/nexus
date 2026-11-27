@@ -19,7 +19,7 @@ use Livewire\Livewire;
 
 /*
 | Pestaña «Carga» de la ficha del docente (D-03, tarea 1.33): la semana del periodo en curso (del SII si Nexus no tiene
-| grupos en él) y la del siguiente periodo cuando ya tiene grupos en Nexus, con salón y horas contra la base. La ve
+| grupos en él) y la del siguiente periodo cuando ya tiene grupos en Nexus, con salón y horas frente a grupo con su banda (PL-01, HC-08). La ve
 | quien ve la ficha (TeacherPolicy).
 */
 
@@ -61,8 +61,9 @@ it('la ficha muestra la carga del semestre en curso desde el SII con salón y ho
         ->assertSee('AED-1026')
         ->assertSee('701')
         ->assertSeeHtml('data-testid="load-hours-current"')
-        ->assertSee('h de base 40')
-        ->assertSee('Dentro de su margen')
+        ->assertSee('Frente a grupo: 22 h (20 a 24)')
+        ->assertSee('Dentro de su banda')
+        ->assertDontSee('h de base')
         ->assertSee('Todavía no tiene grupos de Ene-Jun 2027');
 });
 
@@ -117,7 +118,20 @@ it('la ficha parte la carga en su departamento y en otros departamentos, con el 
         ->assertSee('Jefe: Héctor Olivas')
         ->assertSee('Cálculo Diferencial')
         ->assertSeeHtml('data-testid="load-legend-next"')
-        ->assertSee('h de base 40');
+        ->assertSee('Frente a grupo: 22 h (20 a 24)');
+});
+
+it('PL-02: una tutoría sale en la semana y en su departamento con «0 h · no cuenta» y no suma en sus horas', function () {
+    loadTabGroupIn($this->dept, 'AED-2000', 'Bases de Datos', 1, '10:00', '12:00');
+    loadTabGroupIn($this->dept, 'TUT-2024', 'Tutorías', 3, '10:00', '11:00');
+    Subject::query()->where('code', 'TUT-2024')->update(['counts_teacher_hours' => false]);
+
+    $html = Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertSee('Tutorías')
+        ->assertSeeHtml('data-testid="load-no-teacher-hours"')
+        ->html();
+
+    expect(trim(strip_tags(domOf($html)->querySelector('[data-testid=load-hours-next] .font-mono')?->textContent ?? '')))->toBe('2');
 });
 
 it('un departamento sin jefe vigente lo dice', function () {
@@ -143,4 +157,16 @@ it('un jefe de otro departamento sigue sin abrir la ficha de un docente fuera de
     $outsider = Teacher::factory()->adscribedTo(Department::factory()->create(['code' => 'II']))->create();
 
     $this->actingAs($other)->get(route('faculty.teachers.show', $outsider->id))->assertForbidden();
+});
+
+it('PL-01 y HC-08: la categoría de la plaza cambia las horas frente a grupo de la pestaña y, si pasa la banda, muestra el aviso', function () {
+    TeacherPosition::query()->where('teacher_id', $this->teacher->id)->update(['category' => 'E3809']);
+    $subject = Subject::factory()->create(['department_id' => $this->dept->id, 'theory_hours' => 30, 'practice_hours' => 0]);
+    Group::factory()->create(['term_id' => $this->next->id, 'campus_id' => $this->campus->id, 'subject_id' => $subject->id, 'code' => 'Z', 'teacher_id' => $this->teacher->id]);
+
+    Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertSee('Frente a grupo: 24 h (22 a 26)')
+        ->assertSee('Pasa su banda')
+        ->assertSeeHtml('data-testid="load-notice-next"')
+        ->assertSee('Pasa su banda de horas frente a grupo (24 h, de 22 a 26): lleva 30 h.');
 });

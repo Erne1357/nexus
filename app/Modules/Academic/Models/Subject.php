@@ -5,8 +5,10 @@ namespace App\Modules\Academic\Models;
 use App\Modules\Academic\Database\Factories\SubjectFactory;
 use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Academic\Enums\SubjectKind;
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,9 +19,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Materia global, con el departamento que la imparte. `code` es la clave natural. Su posición y su
- * seriación son de cada plan. `kind` puede venir vacío: la exportación del SII no lo trae.
+ * seriación son de cada plan. `kind` puede venir vacío: la exportación del SII no lo trae. `counts_teacher_hours` dice
+ * si sus horas cuentan en la carga del docente (PL-02; en falso las tutorías): `teacher_hours` son las que le cuenta.
  */
-#[Fillable(['code', 'name', 'department_id', 'theory_hours', 'practice_hours', 'credits', 'kind', 'needs_lab', 'required_space', 'is_active'])]
+#[Fillable(['code', 'name', 'department_id', 'theory_hours', 'practice_hours', 'credits', 'kind', 'needs_lab', 'required_space', 'counts_teacher_hours', 'is_active'])]
 #[UseFactory(SubjectFactory::class)]
 class Subject extends Model
 {
@@ -38,8 +41,19 @@ class Subject extends Model
             'kind' => SubjectKind::class,
             'needs_lab' => 'boolean',
             'required_space' => RequiredSpace::class,
+            'counts_teacher_hours' => 'boolean',
             'is_active' => 'boolean',
         ];
+    }
+
+    /**
+     * Las horas que la materia le cuenta al docente en su carga (PL-02): teoría más práctica, o 0 si no cuenta.
+     *
+     * @return Attribute<int, never>
+     */
+    protected function teacherHours(): Attribute
+    {
+        return Attribute::get(fn (): int => SubjectTeacherHours::of((int) $this->theory_hours, (int) $this->practice_hours, $this->counts_teacher_hours ?? true));
     }
 
     /**

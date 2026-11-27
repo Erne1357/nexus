@@ -34,7 +34,7 @@ use Mary\Traits\Toast;
  *   toma sin salón. En el Mapa va `scheduling::components.map-picker` en modo «elegir» si ya existe (tarea 1.33, Task
  *   14); al tocar un salón elegible el mapa avisa `room-picked` con su `map_key` y aquí se elige ese salón
  *   (chooseRoomByMapKey). Los grupos que tomó en su turno los suelta (ReleaseSelectionGroup). Fuera de su turno es de
- *   solo lectura. Lo que rechace la Action (otro lo tomó antes: «Ya lo tomó X»; no es su turno) se dice en el drawer.
+ *   solo lectura. Lo que rechace la Action (otro lo tomó antes: «Este grupo ya fue asignado.»; no es su turno) se dice en el drawer.
  * - **Asignar a…** (`mode = assign`), para quien tiene `staffing.teacher.assign` sobre el grupo (el jefe y el JPD), a
  *   cualquier hora: un docente de la cola, con lo que lleva y si le choca, y el salón entre los elegibles para quien
  *   también asigna salones (GroupPolicy::assignRoom); escribe con AssignTeacher y AssignSessionRoom.
@@ -43,7 +43,7 @@ use Mary\Traits\Toast;
  *
  * También abre los grupos de una selección ya terminada (decisión 8: lo que siga sin resolver lo asignan a mano el jefe
  * o el JPD): para el docente es solo consulta; para la jefatura, «Asignar a…» y «Quitar docente» (ya terminada,
- * AssignTeacher sigue sin pedir el motivo de HC-16 y vuelve a exigir HC-08).
+ * AssignTeacher sigue sin pedir el motivo de HC-16; HC-08 es aviso desde la tarea 1.50).
  *
  * Al tomar, soltar, asignar o quitar avisa `selection-changed` para que la página se vuelva a pintar.
  */
@@ -94,7 +94,8 @@ new class extends Component
         $picking = $this->inTurn($selection, $context, $timetable, $turns) && $group->teacher_id === null;
         $this->mode = ! $picking && Gate::allows('create', [GroupTeacherAssignment::class, $group]) ? 'assign' : 'group';
         $this->roomId = $picking ? ($rooms->forGroup($selection, $group)['eligible'][0]['id'] ?? null) : null;
-        $this->teacherId = $group->teacher_id;
+        // SEL-05: el id de quien lo tiene viaja en el estado de Livewire solo si quien abre asigna.
+        $this->teacherId = $this->mode === 'assign' ? $group->teacher_id : null;
         $this->show = true;
     }
 
@@ -292,12 +293,13 @@ new class extends Component
         $user = $context->user() ?? abort(403);
         $teacher = $timetable->activeTeacherOf($user);
         $entry = $teacher === null ? null : $timetable->entryOf($selection, $teacher);
-        $card = $timetable->card($selection, $group, $entry === null ? null : $teacher);
-        $inTurn = $entry !== null && $turns->isTurnOf($selection, $teacher, CarbonImmutable::now()) && Gate::allows('pickOwn', $selection);
-        $pickable = $inTurn && $card['teacher_id'] === null && ! $card['clashes'];
-        $releasable = $inTurn && $card['mine'];
         $canAssign = Gate::allows('create', [GroupTeacherAssignment::class, $group]);
-        $unassigning = $this->mode === 'unassign' && $canAssign && $card['teacher_id'] !== null;
+        // SEL-05: solo quien asigna ve el nombre de quien lo tiene; el docente ve «Asignado».
+        $card = $timetable->card($selection, $group, $entry === null ? null : $teacher, $canAssign);
+        $inTurn = $entry !== null && $turns->isTurnOf($selection, $teacher, CarbonImmutable::now()) && Gate::allows('pickOwn', $selection);
+        $pickable = $inTurn && ! $card['taken'] && ! $card['clashes'];
+        $releasable = $inTurn && $card['mine'];
+        $unassigning = $this->mode === 'unassign' && $canAssign && $card['taken'];
         $assigning = ($this->mode === 'assign' || ($this->mode === 'unassign' && ! $unassigning)) && $canAssign;
         $canAssignRoom = $assigning && Gate::allows('assignRoom', $group);
         $options = $pickable ? $rooms->forGroup($selection, $group) : ['eligible' => [], 'rejected' => []];

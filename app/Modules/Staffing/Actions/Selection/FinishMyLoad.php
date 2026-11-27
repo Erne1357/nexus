@@ -2,19 +2,19 @@
 
 namespace App\Modules\Staffing\Actions\Selection;
 
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\GrantHourAllowance;
 use App\Modules\Faculty\Models\Teacher;
-use App\Modules\Faculty\Queries\TeacherBaseHoursQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Actions\Selection\Concerns\GuardsSelectionTurn;
-use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
 use App\Modules\Staffing\Queries\SelectionGroupsQuery;
+use App\Modules\Staffing\Queries\TeachingTargetQuery;
 use App\Modules\Staffing\Rules\LoadBand;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +23,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * «Terminar mi carga» (tarea 1.33, diseño 6.6, SEL-05 y SEL-12). Quién puede lo decide SelectionPolicy::pickOwn.
  *
- * En su turno y con el candado de la selección, suma las horas (teoría + práctica de la materia) de los grupos del
+ * En su turno y con el candado de la selección, suma las horas que le cuentan (teoría + práctica de la materia, o 0 si no cuenta en su carga, PL-02) de los grupos del
  * docente en las cargas incluidas y las compara con su base: la del CSV o, si no viene en él, la de sus plazas en Nexus
  * al inicio del periodo (TeacherBaseHoursQuery). Dentro de la banda de ±2 (LoadBand) termina. Fuera, solo con la
  * casilla de responsabilidad: con horas de más termina; con menos pasa a la ronda extra (`pending_extra`), y en la
@@ -31,7 +31,7 @@ use Illuminate\Validation\ValidationException;
  *
  * SEL-12: cada cierre que termina (`done`) le autoriza en el periodo (GrantHourAllowance) todo lo que HC-08 le cuenta en
  * ese momento: sus grupos de cualquier carga, modalidad o campus más sus horas externas (ScheduleValidator::
- * teacherTermHours). Así lo que cerró, dentro de la banda o con la casilla, no es choque duro de HC-08 aunque su base de
+ * teacherTermHours). Así lo que cerró, dentro de la banda o con la casilla, queda «aceptado por el docente» en HC-08 aunque su base de
  * Nexus sea menor que la del CSV; lo que le agreguen después sí.
  *
  * SEL-14: confirm() es el mismo cierre para quien quedó sin resolver al terminar la selección («Confirmar mi carga»).
@@ -40,13 +40,13 @@ final class FinishMyLoad
 {
     use GuardsSelectionTurn;
 
-    public const string OUT_OF_BAND = 'Es responsabilidad del docente cubrir sus horas de acuerdo con su base: marca la casilla para continuar.';
+    public const string OUT_OF_BAND = 'Es responsabilidad del docente cubrir sus horas frente a grupo de acuerdo con su plaza: marca la casilla para continuar.';
 
     public const string NOT_UNRESOLVED = 'Solo confirma su carga quien quedó sin resolver al terminar la selección.';
 
     public function __construct(
         private readonly SelectionGroupsQuery $groups,
-        private readonly TeacherBaseHoursQuery $baseHours,
+        private readonly TeachingTargetQuery $targets,
         private readonly GrantHourAllowance $grantHours,
         private readonly ScheduleValidator $validator,
     ) {}
@@ -69,7 +69,7 @@ final class FinishMyLoad
      * (`unresolved`) al terminar la ronda extra, con la selección ya terminada, fuera de cualquier turno. Es el mismo
      * cierre que «Terminar mi carga»: la banda de ±2 y, fuera de ella, la casilla obligatoria; con o sin ella termina
      * (`done`), porque ya no hay ronda, y le autoriza en el periodo el total de HC-08 de ese momento (SEL-12). Hasta
-     * entonces sus horas de más siguen siendo choque duro. No toma ni suelta grupos: eso sigue siendo solo en su turno.
+     * entonces sus horas de más son aviso con el oficio de conformidad pendiente (HC-08, tarea 1.50). No toma ni suelta grupos: eso sigue siendo solo en su turno.
      * Mismo candado de la selección y la misma regla de que solo actúa el propio docente.
      *
      * @throws AuthorizationException si el docente no es el del usuario
@@ -102,10 +102,8 @@ final class FinishMyLoad
         $hours = (int) $this->groups->of($selection)
             ->where('groups.teacher_id', $teacher->getKey())
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->sum(DB::raw('subjects.theory_hours + subjects.practice_hours'));
-        $base = $entry->source === SelectionEntrySource::Appended
-            ? ($this->baseHours->forTerm($term, [$teacher->getKey()])[$teacher->getKey()] ?? 0)
-            : $entry->base_hours;
+            ->sum(DB::raw(SubjectTeacherHours::SQL));
+        $base = $this->targets->forTerm($term, [$teacher->getKey() => (int) $entry->base_hours])[$teacher->getKey()] ?? 0;
         $band = LoadBand::classify($hours, $base);
 
         if ($band !== 'within' && ! $acknowledged) {
@@ -133,8 +131,8 @@ final class FinishMyLoad
             ->event($confirmation ? 'selection_load_confirmed' : 'selection_load_finished')
             ->withProperties(['selection_id' => $selection->getKey(), 'teacher_id' => $teacher->getKey(), 'hours' => $hours, 'base_hours' => $base, 'band' => $band, 'acknowledged' => $acknowledged, 'status' => $status->value])
             ->log($confirmation
-                ? "{$teacher->name} confirmó su carga con {$hours} h de su base de {$base} h después de la selección"
-                : "{$teacher->name} terminó su carga con {$hours} h de su base de {$base} h");
+                ? "{$teacher->name} confirmó su carga con {$hours} h (frente a grupo: {$base} h) después de la selección"
+                : "{$teacher->name} terminó su carga con {$hours} h (frente a grupo: {$base} h)");
 
         return $entry;
     }
@@ -150,7 +148,7 @@ final class FinishMyLoad
         $total = $count === null ? 0 : $count['assigned_hours'] + $count['external_hours'];
 
         if ($total > 0) {
-            $this->grantHours->handle($teacher, $term, $total, "Cerró su carga con {$total} h de HC-08 (asignadas y externas) y base de {$base} h en la orden de selección (SEL-05).", $actor);
+            $this->grantHours->handle($teacher, $term, $total, "Cerró su carga con {$total} h de HC-08 (asignadas y externas) y {$base} h frente a grupo en la orden de selección (SEL-05).", $actor);
             $this->validator->forget();
         }
     }

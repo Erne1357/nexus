@@ -3,6 +3,7 @@
 namespace App\Modules\Staffing\Actions\Selection;
 
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Events\TeachingHoursChanged;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionStatus;
@@ -36,6 +37,7 @@ final class ResolveSelectionEntry
 
             $entry->setRawAttributes(SelectionEntry::query()->findOrFail($entry->getKey())->getAttributes(), sync: true);
             $name = $entry->csv_name;
+            $previous = $entry->teacher_id;
 
             if ($teacher === null) {
                 $entry->delete();
@@ -63,6 +65,9 @@ final class ResolveSelectionEntry
             activity()->performedOn($selection)->causedBy($actor)->event($event)
                 ->withProperties(['entry_id' => (string) $entry->getKey(), 'csv_name' => $name, 'teacher_id' => $teacher?->getKey()])
                 ->log($log);
+
+            // El renglón da las horas frente a grupo de respaldo (HC-08, tarea 1.50) del docente de antes y del de ahora.
+            TeachingHoursChanged::dispatchFor($selection->term_id, array_filter([$previous, $teacher?->getKey()]));
         });
     }
 }

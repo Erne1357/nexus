@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Database\Factories\LoadSnapshotFactory;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Exports\PublishedExports;
@@ -233,6 +234,21 @@ it('la semana de un docente acomoda cada sesión en sus bloques y suma sus horas
         ->and($week['cells'][3][1]['span'])->toBe(2)
         ->and($week['cells'][3][2])->toBe('covered')
         ->and($week['blocks'][0]['label'])->toBe('7:00');
+});
+
+it('PL-02: si una materia no cuenta en la carga del docente, la semana dice además cuántas horas sí cuentan, igual en la pantalla y el PDF', function () {
+    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, modalityOf('PRES'));
+    $subjectId = $schedule->teacher($this->teacher['id'])[0]->subject['id'];
+    $page = fn () => $this->get(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->teacher['id']]));
+    $pdf = fn (): string => TeacherPdf::find(app(PublishedScheduleQuery::class), $this->term, modalityOf('PRES'), $this->campus, $this->teacher['id'])->html();
+
+    $page()->assertOk()->assertDontSee('cuentan en su carga');
+    expect($pdf())->not->toContain('cuentan en su carga');
+
+    Subject::factory()->create(['id' => $subjectId, 'code' => 'ACF-0904', 'counts_teacher_hours' => false]);
+
+    $page()->assertOk()->assertSeeInOrder(['3', 'horas a la semana', '0', 'cuentan en su carga'])->assertSeeHtml('data-testid="published-counted-hours"');
+    expect(strip_tags($pdf()))->toContain('3 horas a la semana · 0 cuentan en su carga');
 });
 
 it('las páginas de semestre, docente y salón ofrecen «Descargar PDF» con su liga', function () {

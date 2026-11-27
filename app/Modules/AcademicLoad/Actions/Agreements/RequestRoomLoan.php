@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Events\AgreementRequested;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Queries\RoomLoansQuery;
 use App\Modules\AcademicLoad\Rules\AgreementRules;
+use App\Modules\AcademicLoad\Rules\AgreementSettings;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -30,7 +31,7 @@ use Illuminate\Validation\ValidationException;
  * lanza una ValidationException sobre `room_id`; el INSERT corre en un savepoint para no abortar la transacción de
  * quien llama. Deja bitácora `requested` y, después del commit, avisa con AgreementRequested. El grupo y su departamento (`from`) los da quien llama (Scheduling, que sí ve el grupo; AcademicLoad no). Al mover
  * una sesión, quien llama cancela antes los préstamos de su horario anterior: si no, la exclusión rechaza su propia petición.
- * Quién puede lo decide
+ * Con el parámetro `academic_load.room_loans_enabled` apagado (por omisión, tarea 1.53) rechaza todo. Quién puede lo decide
  * InterdepartmentalAgreementPolicy::request antes de llamarla.
  */
 final class RequestRoomLoan
@@ -47,6 +48,10 @@ final class RequestRoomLoan
      */
     public function handle(Term $term, Modality $modality, Campus $campus, Department $from, string $groupId, Room $room, int $day, string $startsAt, string $endsAt, User $actor): InterdepartmentalAgreement
     {
+        if (! AgreementSettings::roomLoansEnabled()) {
+            throw ValidationException::withMessages(['room_id' => AgreementSettings::ROOM_LOANS_UNAVAILABLE]);
+        }
+
         $this->rules->ensureRoomNeedsLoan($room, $campus, $from);
         $this->rules->ensureSlot($day, $startsAt, $endsAt);
 

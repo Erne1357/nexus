@@ -60,6 +60,15 @@ final class SubjectPolicy
         return $this->setSpaceIn($user, $subject->department_id);
     }
 
+    /**
+     * Marcar si las horas de la materia cuentan en la carga del docente (PL-02, tarea 1.73): los mismos que cambian su
+     * tipo de espacio, el jefe de su departamento y el admin (mismo permiso, `academic.subject.set_space`).
+     */
+    public function setTeacherHours(User $user, Subject $subject): bool
+    {
+        return $this->setSpaceIn($user, $subject->department_id);
+    }
+
     /** Lo mismo, preguntado por el departamento de la materia (para listar solo las que puede cambiar). */
     public function setSpaceIn(User $user, string $departmentId): bool
     {

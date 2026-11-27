@@ -11,8 +11,11 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Enums\PositionKind;
+use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherPosition;
+use App\Modules\Faculty\Queries\TeacherTeachingHoursQuery;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -142,4 +145,63 @@ it('CV17: una plaza que no es del docente se rechaza', function () {
     openTeacher()->set('positions.0.id', $ajena->id)->set('positions.0.kind', 'tiempo_completo')->set('positions.0.base_hours', '40')->call('save')->assertHasErrors();
 
     expect($ajena->fresh()->kind)->toBe(PositionKind::Honorarios);
+});
+
+it('CV17 y PL-01: el jefe elige la categoría legible y se guarda la clave del catálogo, con bitácora', function (string $kind, string $hours, string $category, string $clave) {
+    openTeacher()
+        ->set('positions.0.kind', $kind)
+        ->set('positions.0.base_hours', $hours)
+        ->set('positions.0.category', $category)
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect($this->plaza->fresh()->category)->toBe($clave)
+        ->and(Activity::query()->where('subject_id', $this->plaza->id)->where('causer_id', $this->jefe->id)->latest('id')->first()->attribute_changes['attributes'])->toHaveKey('category');
+})->with([
+    'titular B de tiempo completo' => ['tiempo_completo', '40', 'E3815', 'E3815'],
+    'asociado A de tres cuartos' => ['tres_cuartos', '30', 'E3707', 'E3707'],
+    'investigador titular C de medio tiempo' => ['medio_tiempo', '20', 'E3663', 'E3663'],
+    'asignatura B' => ['asignatura', '10', 'E3521', 'E3521'],
+]);
+
+it('CV17 y PL-01: la pantalla ofrece nombres, no claves, y vacía es sin categoría', function () {
+    openTeacher()
+        ->set('positions.0.kind', 'tiempo_completo')
+        ->assertSee('Titular B')->assertSee('Sin categoría (se mide como titular)')
+        ->set('positions.0.base_hours', '40')->set('positions.0.category', 'E3815')->call('save');
+
+    expect($this->plaza->fresh()->category)->toBe('E3815');
+
+    openTeacher()->set('positions.0.category', '')->call('save')->assertHasNoErrors();
+
+    expect($this->plaza->fresh()->category)->toBeNull();
+});
+
+it('CV17 y PL-01: cambiar el tipo limpia la categoría y una clave de otro tipo se rechaza', function () {
+    $this->plaza->update(['category' => 'E3519']);
+
+    openTeacher()->set('positions.0.kind', 'tiempo_completo')->assertSet('positions.0.category', '');
+
+    openTeacher()->set('positions.0.category', 'E3815')->call('save')->assertHasErrors(['positions.0.category']);
+    expect($this->plaza->fresh()->category)->toBe('E3519');
+});
+
+it('CV17 y PL-01: cambiar la categoría recalcula las horas frente a grupo y avisa con PositionChanged', function () {
+    $this->plaza->update(['kind' => PositionKind::TiempoCompleto, 'base_hours' => 40, 'category' => 'E3815']);
+    $query = fn (): int => app(TeacherTeachingHoursQuery::class)->onDate(now(), [$this->teacher->id])[$this->teacher->id];
+    expect($query())->toBe(22);
+
+    Event::fake([PositionChanged::class]);
+    openTeacher()->set('positions.0.category', 'E3809')->call('save')->assertHasNoErrors();
+
+    Event::assertDispatched(PositionChanged::class);
+    expect($query())->toBe(24);
+});
+
+it('CV17 y PL-01: el jefe de otro departamento no cambia la categoría', function () {
+    $otro = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->otro->id])->create();
+
+    openTeacher($otro)->assertSet('editingId', null);
+    expect(Gate::forUser($otro)->allows('correct', $this->review))->toBeFalse()
+        ->and($this->plaza->fresh()->category)->toBeNull();
 });

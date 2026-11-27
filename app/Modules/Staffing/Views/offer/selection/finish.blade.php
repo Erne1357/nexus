@@ -19,7 +19,7 @@
 @endphp
 <x-modal wire:model="showFinish" :title="$confirming ? '¿Confirmar tu carga?' : '¿Terminar tu carga?'" box-class="max-w-xl" data-testid="selection-finish-modal">
     <div class="space-y-3">
-        <p>Llevas <b class="font-mono">{{ $hours }}</b> h en {{ count($groups) }} {{ count($groups) === 1 ? 'grupo' : 'grupos' }} · tu base <b class="font-mono">{{ $base }}</b> (±2): de {{ $low }} a {{ $high }} h.</p>
+        <p>Llevas <b class="font-mono">{{ $hours }}</b> h en {{ count($groups) }} {{ count($groups) === 1 ? 'grupo' : 'grupos' }} · frente a grupo: <b class="font-mono">{{ $base }}</b> h ({{ $low }} a {{ $high }}).</p>
 
         @if ($groups !== [])
             <ul class="divide-y divide-base-300 overflow-hidden rounded-field border border-base-300">
@@ -46,10 +46,10 @@
                 <x-icon name="o-exclamation-triangle" class="mt-0.5 h-5 w-5" aria-hidden="true" />
                 <div>
                     <p class="font-semibold">{{ $band === 'under' ? 'Te faltan '.($low - $hours).' h para tu margen' : 'Pasas tu margen por '.($hours - $high).' h' }}</p>
-                    <p>Es responsabilidad del docente cubrir sus horas de acuerdo con su base.</p>
+                    <p>Es responsabilidad del docente cubrir sus horas frente a grupo de acuerdo con su plaza.</p>
                 </div>
             </div>
-            <x-checkbox wire:model.live="acknowledged" label="Entiendo que es mi responsabilidad cubrir mis horas de acuerdo con mi base." class="checkbox-primary" data-testid="selection-acknowledge" />
+            <x-checkbox wire:model.live="acknowledged" label="Entiendo que es mi responsabilidad cubrir mis horas frente a grupo de acuerdo con mi plaza." class="checkbox-primary" data-testid="selection-acknowledge" />
             @error('acknowledged')
                 <p class="text-sm font-semibold text-error" role="alert">{{ $message }}</p>
             @enderror

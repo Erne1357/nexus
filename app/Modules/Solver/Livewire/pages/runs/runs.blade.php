@@ -152,8 +152,13 @@
                     <span class="grow text-base-content">
                         @if ($run->status === \App\Modules\Solver\Enums\SolverRunStatus::Applied)
                             Aplicada {{ mb_strtolower($when($run->applied_at)) }} por {{ $run->applier->name ?? 'alguien' }}{!! ($decision['summary'] ?? null) ? ': <span class="font-mono">'.e($decision['summary']['sessions'] ?? 0).'</span> sesiones escritas en <span class="font-mono">'.e($decision['summary']['groups'] ?? 0).'</span> grupos' : '' !!}.
-                            @if (($decision['summary']['input_problems'] ?? []) !== [])
-                                <span data-testid="applied-input-problems"><b>Problemas de entrada por corregir:</b> {{ collect($decision['summary']['input_problems'])->map(fn ($problem) => $problem['rule'].' · '.$problem['message'])->implode('; ') }}.</span>
+                            {{-- HC-08 (tarea 1.50): las horas de más que asignaron las personas son aviso, no algo por corregir. --}}
+                            @php($appliedProblems = collect($decision['summary']['input_problems'] ?? []))
+                            @if ($appliedProblems->where('rule', '!=', 'HC-08')->isNotEmpty())
+                                <span data-testid="applied-input-problems"><b>Problemas de entrada por corregir:</b> {{ $appliedProblems->where('rule', '!=', 'HC-08')->map(fn ($problem) => $problem['rule'].' · '.$problem['message'])->implode('; ') }}.</span>
+                            @endif
+                            @if ($appliedProblems->where('rule', 'HC-08')->isNotEmpty())
+                                <span data-testid="applied-hour-notices"><b>Horas de más (aviso, oficio pendiente):</b> {{ $appliedProblems->where('rule', 'HC-08')->pluck('message')->implode(' ') }}</span>
                             @endif
                         @elseif ($run->status === \App\Modules\Solver\Enums\SolverRunStatus::Discarded)
                             Descartada {{ mb_strtolower($when($decision['at'] ?? $run->updated_at)) }}{{ ($decision['who'] ?? null) ? ' por '.$decision['who'] : '' }}.

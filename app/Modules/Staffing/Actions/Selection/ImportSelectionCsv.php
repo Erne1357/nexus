@@ -3,6 +3,7 @@
 namespace App\Modules\Staffing\Actions\Selection;
 
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Events\TeachingHoursChanged;
 use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
@@ -46,6 +47,7 @@ final class ImportSelectionCsv
                 throw ValidationException::withMessages(['status' => 'Solo se importa el CSV mientras la selección está en borrador.']);
             }
 
+            $before = $selection->entries()->whereNotNull('teacher_id')->pluck('teacher_id')->all();
             $selection->entries()->delete();
 
             $teachers = RecomputeSelectionOrder::pool($selection)->get(['id', 'name', 'hired_on']);
@@ -101,6 +103,9 @@ final class ImportSelectionCsv
                 ->event('selection_csv_imported')
                 ->withProperties(['rows' => count($parsed['rows']), 'matched' => $matched, 'unresolved' => count($unresolved), 'errors' => count($parsed['errors'])])
                 ->log('Importó el CSV de criterios de la selección');
+
+            // Las horas del CSV son el respaldo de las horas frente a grupo (HC-08, tarea 1.50): de los de antes y los de ahora.
+            TeachingHoursChanged::dispatchFor($selection->term_id, [...$before, ...array_filter(array_column($matches, 'teacher_id'))]);
 
             return ['matched' => $matched, 'unresolved' => $unresolved, 'errors' => $parsed['errors']];
         });

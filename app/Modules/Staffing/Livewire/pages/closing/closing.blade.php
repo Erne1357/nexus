@@ -110,6 +110,7 @@
                         <p class="border-t border-base-300 px-4 py-2.5 text-sm text-warning md:px-5" data-testid="changed-after-close">Algo cambió después del cierre: publicarla se vetará hasta reabrirla y corregirlo.</p>
                     @endif
                     @include('staffing::closing.conditions', ['conditions' => $conditions, 'campusOptions' => $campusOptions])
+                    @include('staffing::closing.hour-notices', ['notices' => $closing->hourNotices()])
                 @endif
             </section>
 

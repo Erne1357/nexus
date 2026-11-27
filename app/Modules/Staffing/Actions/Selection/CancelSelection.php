@@ -4,6 +4,7 @@ namespace App\Modules\Staffing\Actions\Selection;
 
 use App\Modules\Core\Authorization\GrantTable;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Events\TeachingHoursChanged;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Models\Selection;
@@ -52,6 +53,9 @@ final class CancelSelection
                 : collect();
 
             $selection->update(['status' => SelectionStatus::Cancelled, 'cancelled_at' => now()]);
+
+            // Una selección cancelada deja de dar horas del CSV de respaldo (HC-08, tarea 1.50).
+            TeachingHoursChanged::dispatchFor($selection->term_id, $selection->entries()->whereNotNull('teacher_id')->pluck('teacher_id')->all());
 
             activity()
                 ->performedOn($selection)

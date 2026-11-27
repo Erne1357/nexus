@@ -36,6 +36,7 @@ it('el jefe reclama salones sin dueño desde su revisión y los ve por revisar',
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
+        ->click('@hare')
         ->click('#nexus-menu a[data-label="Validar catálogos"]')
         ->assertPathIs('/catalog-validation')
         ->click('@tab-rooms')

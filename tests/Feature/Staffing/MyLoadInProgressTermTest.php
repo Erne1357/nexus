@@ -162,6 +162,22 @@ it('con el SII muestra el horario del periodo en curso por RFC, con materia, gru
         ->assertDontSeeHtml('data-testid="my-load-term-picker"');
 });
 
+it('PL-02: en el horario del SII una tutoría ocupa su día con «no cuenta en tu carga» y no suma en sus asignadas', function () {
+    mlTermSii(mlTermSessions());
+    $tutoring = Subject::factory()->create(['department_id' => $this->dept->id, 'name' => 'Tutorías', 'theory_hours' => 1, 'practice_hours' => 0, 'counts_teacher_hours' => false]);
+    $sii = mlTermSii([['day' => 5, 'starts_at' => '07:00', 'ends_at' => '08:00', 'room_code' => '701', 'teacher_rfc' => 'AAAA800101AA1']], ['group_code' => 'T', 'subject_id' => $tutoring->id]);
+
+    $data = app(MyLoadQuery::class)->forTeacher($this->me, $this->running);
+    $block = collect($data['days'][5]['blocks'])->firstWhere('group_id', $sii->id);
+
+    expect($data['source'])->toBe('sii')
+        ->and($data['hours']['assigned'])->toBe(4)
+        ->and($block['counts_teacher_hours'])->toBeFalse();
+
+    Livewire::actingAs($this->user)->test('staffing::pages.my-load')
+        ->assertSeeHtml('data-testid="no-teacher-hours-'.$sii->id.'"');
+});
+
 it('con grupos de Nexus en el periodo en curso usa esos y no el SII', function () {
     mlTermNexus($this->running, 'N1', $this->me);
     mlTermSii(mlTermSessions());

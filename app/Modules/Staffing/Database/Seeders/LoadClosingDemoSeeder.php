@@ -484,8 +484,9 @@ final class LoadClosingDemoSeeder extends Seeder
         for ($round = 0; $round < self::CONFLICT_ROUNDS; $round++) {
             $validator = app(ScheduleValidator::class);
             $validator->forget();
+            // El aviso de HC-08 sin oficio cuenta como duro, como en el motor (tarea 1.50).
             $hard = array_values(array_filter(
-                $validator->validateLoad($load->term, $load->modality, $load->department)->violations(),
+                $validator->validateLoad($load->term, $load->modality, $load->department)->asEngine()->violations(),
                 fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard && $violation->groupId !== null && $groupIds->has($violation->groupId),
             ));
 

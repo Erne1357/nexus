@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Queries;
 
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -9,12 +10,14 @@ use Illuminate\Support\Facades\DB;
  * `historical_groups` de fuente `sii`), buscado por su RFC (tarea 1.26 / #755, «Mi carga» del semestre en curso).
  * Las sesiones guardan el aula y el RFC como texto: el aula se resuelve contra `rooms.code` del campus del grupo (si
  * no se encuentra, se conserva la clave del SII) y el docente es el que trae su RFC en la sesión. Un grupo con sesiones
- * de varios docentes trae solo las del docente. Solo lectura: el SII sigue siendo la fuente de ese periodo.
+ * de varios docentes trae solo las del docente. Solo lectura: el SII sigue siendo la fuente de ese periodo. Las horas
+ * del grupo son las que le cuenta al docente (PL-02: 0 si la materia no cuenta en su carga, como las tutorías), con la
+ * marca en `counts_teacher_hours`, igual que los grupos de Nexus.
  */
 final class SiiTeacherScheduleQuery
 {
     /**
-     * @return list<array{id: string, code: string, subject_code: string, subject_name: string, campus_code: string, campus_name: string, department: string, hours: int, sessions: list<array{day: int, starts_at: string, ends_at: string, room: ?string}>}>
+     * @return list<array{id: string, code: string, subject_code: string, subject_name: string, campus_code: string, campus_name: string, department: string, hours: int, counts_teacher_hours: bool, sessions: list<array{day: int, starts_at: string, ends_at: string, room: ?string}>}>
      */
     public function forTeacher(?string $rfc, string $termCode): array
     {
@@ -38,7 +41,7 @@ final class SiiTeacherScheduleQuery
             ->orderBy('s.starts_at')
             ->get([
                 'g.id as group_id', 'g.group_code', 'g.campus_id', 'subjects.code as subject_code', 'subjects.name as subject_name',
-                'subjects.theory_hours', 'subjects.practice_hours', 'departments.name as department',
+                'subjects.theory_hours', 'subjects.practice_hours', 'subjects.counts_teacher_hours', 'departments.name as department',
                 'campuses.code as campus_code', 'campuses.name as campus_name',
                 's.day', 's.starts_at', 's.ends_at', 's.room_code',
             ]);
@@ -58,7 +61,8 @@ final class SiiTeacherScheduleQuery
                 'campus_code' => (string) $first->campus_code,
                 'campus_name' => (string) $first->campus_name,
                 'department' => (string) $first->department,
-                'hours' => (int) $first->theory_hours + (int) $first->practice_hours,
+                'hours' => SubjectTeacherHours::of((int) $first->theory_hours, (int) $first->practice_hours, (bool) $first->counts_teacher_hours),
+                'counts_teacher_hours' => (bool) $first->counts_teacher_hours,
                 'sessions' => $sessions->map(fn (object $session): array => [
                     'day' => (int) $session->day,
                     'starts_at' => (string) $session->starts_at,

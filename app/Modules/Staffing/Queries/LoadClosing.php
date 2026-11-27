@@ -84,6 +84,17 @@ final readonly class LoadClosing
     }
 
     /**
+     * Los avisos de HC-08 de la carga (tarea 1.50): los docentes que pasan su banda de horas frente a grupo, con el
+     * oficio de conformidad pendiente o aceptado por la casilla. No impiden cerrar; sin bloqueos calculados, ninguno.
+     *
+     * @return list<string>
+     */
+    public function hourNotices(): array
+    {
+        return array_map(fn (array $notice): string => $notice['message'], $this->blockers->hourNotices ?? []);
+    }
+
+    /**
      * «Para cerrar» con el filtro de campus de la pantalla (maqueta U2, opción A; M1: la carga se cierra entera): con
      * `$campusId`, las cifras de grupos (choques, sin horario, sin docente, sin salón, docente de baja) y sus detalles son
      * los de los grupos de ese campus; sin él, las de toda la carga con su reparto por campus (`by`: clave del campus =>

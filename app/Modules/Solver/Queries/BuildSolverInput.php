@@ -523,8 +523,13 @@ final class BuildSolverInput
     }
 
     /**
-     * Los docentes de los grupos incluidos. Horas restantes: lo que le queda según HC-08 sin contar las horas de los
-     * grupos movibles, que la corrida reprograma (TeacherHourLimit). Ocupación: sus sesiones en grupos que no entran a la
+     * Los docentes de los grupos incluidos. Horas restantes: las de sus grupos movibles, que la corrida reprograma, más lo
+     * que le queda según HC-08 hasta su tope (TeacherHourLimit), nunca menos de cero (tarea 1.50): lo que las personas
+     * ya le asignaron de más es aviso con el oficio pendiente, no un problema de la entrada, así que sus movibles siempre
+     * caben y el motor solo no agrega horas por encima del tope (supuesto por confirmar). Las horas de los movibles son
+     * las de sesión (`weekly_hours`, las que el motor suma en HC-08) y lo que le queda se cuenta con las horas del docente
+     * (TeacherHourLimit, PL-02): una tutoría ocupa sus horas en el motor pero no le resta al docente (tarea 1.73), sin
+     * cambiar el contrato. Ocupación: sus sesiones en grupos que no entran a la
      * entrada (otras modalidades, o de esta sin relación con los movibles), con el campus de cada una (SC-09).
      *
      * Los docentes de los grupos virtuales también entran: sus horas no están en la base, así que no se suman.
@@ -568,7 +573,7 @@ final class BuildSolverInput
 
             return new TeacherInput(
                 $teacherId,
-                max(0, ($hours['remaining_hours'] ?? 0) + $movableHours),
+                $movableHours + max(0, $hours['remaining_hours'] ?? 0),
                 $teacher?->isHonorarios ?? false,
                 array_map(fn (array $block): TimeSlot => new TimeSlot($block[0], Minutes::format($block[1]), Minutes::format($block[2])), $teacher->unavailable ?? []),
                 $preferred[$teacherId] ?? [],

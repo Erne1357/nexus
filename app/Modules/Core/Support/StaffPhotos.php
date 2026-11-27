@@ -7,6 +7,7 @@ use App\Modules\Core\Exceptions\PhotoNotSaved;
 use App\Modules\Core\Models\User;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
+use League\Flysystem\FilesystemException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -33,24 +34,35 @@ final class StaffPhotos
         $photos = $this->normalizer->normalize($sourcePath);
         $extension = in_array($extension = strtolower($extension), self::EXTENSIONS, true) ? $extension : 'jpg';
 
-        $stamp = now();
-        while ($this->disk()->exists($path = "{$user->getKey()}/{$stamp->format('YmdHis')}.jpg")) {
-            $stamp = $stamp->addSecond();
-        }
+        $files = [];
 
-        $base = substr($path, 0, -4);
-        $files = [
-            $path => $photos['normal'],
-            "{$base}-mini.jpg" => $photos['thumb'],
-            "{$base}-original.{$extension}" => (string) file_get_contents($sourcePath),
-        ];
-
-        foreach ($files as $target => $bytes) {
-            if (! $this->disk()->put($target, $bytes)) {
-                $this->disk()->delete(array_keys($files));
-
-                throw new PhotoNotSaved($target);
+        try {
+            $stamp = now();
+            while ($this->disk()->exists($path = "{$user->getKey()}/{$stamp->format('YmdHis')}.jpg")) {
+                $stamp = $stamp->addSecond();
             }
+
+            $base = substr($path, 0, -4);
+            $files = [
+                $path => $photos['normal'],
+                "{$base}-mini.jpg" => $photos['thumb'],
+                "{$base}-original.{$extension}" => (string) file_get_contents($sourcePath),
+            ];
+
+            foreach ($files as $target => $bytes) {
+                if (! $this->disk()->put($target, $bytes)) {
+                    throw new PhotoNotSaved($target);
+                }
+            }
+        } catch (FilesystemException $e) {
+            // Crear la carpeta, escribir o mover puede lanzar aunque el disco tenga `throw => false`.
+            $this->discard(array_keys($files));
+
+            throw new PhotoNotSaved($e->getMessage(), $e);
+        } catch (PhotoNotSaved $e) {
+            $this->discard(array_keys($files));
+
+            throw $e;
         }
 
         return $path;
@@ -63,11 +75,13 @@ final class StaffPhotos
     {
         $path = $this->thumbPath($user);
 
-        if ($path === null || ! $this->disk()->exists($path)) {
+        if ($path === null) {
             return null;
         }
 
-        return 'data:image/jpeg;base64,'.base64_encode((string) $this->disk()->get($path));
+        return $this->guard(function () use ($path): ?string {
+            return $this->disk()->exists($path) ? 'data:image/jpeg;base64,'.base64_encode((string) $this->disk()->get($path)) : null;
+        });
     }
 
     /**
@@ -89,20 +103,46 @@ final class StaffPhotos
     {
         $path = $thumb ? $this->thumbPath($user) : $user->photo_path;
 
-        if ($path === null || ! $this->disk()->exists($path)) {
+        if ($path === null) {
             return null;
         }
 
-        return $this->disk()->response($path, null, [
+        return $this->guard(fn (): ?StreamedResponse => ! $this->disk()->exists($path) ? null : $this->disk()->response($path, null, [
             'Content-Type' => 'image/jpeg',
             'Cache-Control' => 'private, max-age='.StaffPhotoUrl::TTL_SECONDS,
             'X-Content-Type-Options' => 'nosniff',
-        ]);
+        ]));
     }
 
     private function thumbPath(User $user): ?string
     {
         return $user->photo_path === null ? null : substr($user->photo_path, 0, -4).'-mini.jpg';
+    }
+
+    /**
+     * @param  list<string>  $paths
+     */
+    private function discard(array $paths): void
+    {
+        try {
+            $this->disk()->delete($paths);
+        } catch (FilesystemException) {
+            // El disco ya falló: no hay nada más que limpiar.
+        }
+    }
+
+    /**
+     * Una lectura que falla por el disco (montaje roto) se reporta y cuenta como «sin foto», nunca como 500.
+     */
+    private function guard(\Closure $read): mixed
+    {
+        try {
+            return $read();
+        } catch (FilesystemException $e) {
+            report($e);
+
+            return null;
+        }
     }
 
     private function disk(): Filesystem

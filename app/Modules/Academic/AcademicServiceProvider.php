@@ -3,6 +3,7 @@
 namespace App\Modules\Academic;
 
 use App\Modules\Academic\Authorization\AcademicScopeLabels;
+use App\Modules\Academic\Console\ExcludeTeacherHoursCommand;
 use App\Modules\Academic\Console\MarkCurrentSpecialtiesCommand;
 use App\Modules\Academic\Console\PositionMailboxesFromDepartmentsCommand;
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
@@ -46,7 +47,7 @@ final class AcademicServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([MarkCurrentSpecialtiesCommand::class, PositionMailboxesFromDepartmentsCommand::class]);
+            $this->commands([ExcludeTeacherHoursCommand::class, MarkCurrentSpecialtiesCommand::class, PositionMailboxesFromDepartmentsCommand::class]);
         }
     }
 
@@ -121,7 +122,7 @@ final class AcademicServiceProvider extends ModuleServiceProvider
     public function activityAttributes(): array
     {
         return [
-            Subject::class => ['kind' => ['Tipo de materia', SubjectKind::class], 'theory_hours' => 'Horas de teoría', 'practice_hours' => 'Horas de práctica', 'credits' => 'Créditos', 'needs_lab' => 'Requiere laboratorio', 'required_space' => ['Tipo de espacio', RequiredSpace::class]],
+            Subject::class => ['kind' => ['Tipo de materia', SubjectKind::class], 'theory_hours' => 'Horas de teoría', 'practice_hours' => 'Horas de práctica', 'credits' => 'Créditos', 'needs_lab' => 'Requiere laboratorio', 'required_space' => ['Tipo de espacio', RequiredSpace::class], 'counts_teacher_hours' => 'Cuenta en la carga del docente'],
             SubjectPrerequisite::class => ['kind' => ['Tipo de seriación', PrerequisiteKind::class]],
             StudyPlan::class => ['version' => 'Versión', 'semesters_count' => 'Semestres', 'total_credits' => 'Créditos totales', 'is_historical' => 'Histórico', 'valid_from' => 'Vigente desde'],
             StudyPlanSubject::class => ['is_required' => 'Obligatoria', 'position' => 'Posición'],

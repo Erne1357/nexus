@@ -51,6 +51,9 @@
             @scope('cell_name', $subject)
                 {{ $subject->name }}
                 <span class="block text-xs text-neutral min-[1536px]:hidden">{{ $subject->required_space?->label() ?? 'Espacio sin marcar' }}</span>
+                @if (! $subject->counts_teacher_hours)
+                    <span class="mt-0.5 flex items-center gap-1 text-xs text-neutral" data-testid="no-teacher-hours-{{ $subject->code }}"><x-icon name="o-clock" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />No cuenta en la carga del docente</span>
+                @endif
             @endscope
 
             @scope('cell_department', $subject)
@@ -108,7 +111,7 @@
                         <span class="font-mono">{{ $subject->department?->code }}</span> ·
                         <span class="font-mono tabular-nums">{{ $subject->theory_hours }}-{{ $subject->practice_hours }}-{{ $subject->credits }}</span> ·
                         {{ $subject->kind?->label() ?? 'Sin tipo' }} · {{ $subject->required_space?->label() ?? 'Espacio sin marcar' }} ·
-                        {{ trans_choice('{0} En ningún plan|{1} En 1 plan|[2,*] En :count planes', $subject->study_plans_count) }}@if ($subject->needs_lab) · Laboratorio @endif
+                        {{ trans_choice('{0} En ningún plan|{1} En 1 plan|[2,*] En :count planes', $subject->study_plans_count) }}@if ($subject->needs_lab) · Laboratorio @endif@if (! $subject->counts_teacher_hours) · No cuenta en la carga del docente @endif
                     </div>
 
                     @include('academic::subjects.row-actions', ['subject' => $subject, 'inTable' => false])
@@ -144,6 +147,29 @@
             <footer class="flex justify-end gap-2 border-t border-base-300 px-5 py-3">
                 <x-button label="Cancelar" @click="$wire.showSpaceDrawer = false" />
                 <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="saveSpace" data-testid="space-save" />
+            </footer>
+        </form>
+        @endif
+    </x-drawer>
+
+    {{-- PL-02 (tarea 1.73): si las horas de la materia cuentan en la carga del docente; lo cambian el jefe de su departamento y el admin. --}}
+    <x-drawer wire:model="showHoursDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="hours-drawer-title" data-testid="teacher-hours-drawer">
+        @if ($hoursSubjectId !== null)
+        <form wire:submit="saveTeacherHours" class="flex min-h-dvh flex-col">
+            <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
+                <div class="min-w-0 flex-1">
+                    <h2 id="hours-drawer-title" class="text-xl font-bold leading-tight">Carga del docente</h2>
+                    <p class="mt-1 text-sm text-neutral">Si las horas de esta materia le cuentan al docente en su carga: en sus horas frente a grupo, su banda y el aviso de horas de más.</p>
+                </div>
+                <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="$wire.showHoursDrawer = false" aria-label="Cerrar el panel" />
+            </header>
+            <div class="flex-1 space-y-4 px-5 pt-4 pb-8">
+                <x-toggle label="Sus horas cuentan en la carga del docente" wire:model="countsTeacherHours" data-testid="teacher-hours-toggle" />
+                <p class="text-sm text-neutral">Apágalo en materias como las tutorías: el docente las da y el grupo ocupa su horario, pero sus horas no le cuentan. Al alumno sus créditos le siguen contando.</p>
+            </div>
+            <footer class="flex justify-end gap-2 border-t border-base-300 px-5 py-3">
+                <x-button label="Cancelar" @click="$wire.showHoursDrawer = false" />
+                <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="saveTeacherHours" data-testid="teacher-hours-save" />
             </footer>
         </form>
         @endif

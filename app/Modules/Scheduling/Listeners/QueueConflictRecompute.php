@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Listeners;
 
+use App\Modules\Academic\Events\SubjectUpdated;
 use App\Modules\Core\Events\ModalityUpdated;
 use App\Modules\Facilities\Events\RoomBlockAdded;
 use App\Modules\Facilities\Events\RoomBlockRemoved;
@@ -10,6 +11,7 @@ use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
 use App\Modules\Faculty\Events\HourAllowanceChanged;
 use App\Modules\Faculty\Events\PositionChanged;
+use App\Modules\Faculty\Events\TeachingHoursChanged;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
@@ -40,7 +42,10 @@ final class QueueConflictRecompute
             $event instanceof ExternalLoadChanged => $this->targets->forTeacher($event->load->teacher_id, $event->load->term_id),
             $event instanceof HourAllowanceChanged => $this->targets->forTeacher($event->allowance->teacher_id, $event->allowance->term_id),
             $event instanceof PositionChanged => $this->targets->forTeacher($event->position->teacher_id),
+            $event instanceof TeachingHoursChanged => $this->targets->forTeachers($event->teacherIds, $event->termId),
             $event instanceof ModalityUpdated => in_array('settings', $event->changed, true) ? $this->targets->forModality($event->modality) : [],
+            // PL-02: si las horas de la materia cuentan en la carga del docente cambia HC-08 de quienes la dan.
+            $event instanceof SubjectUpdated => in_array('counts_teacher_hours', $event->changed, true) ? $this->targets->forSubject($event->subject->id) : [],
             default => [],
         };
 

@@ -83,6 +83,7 @@
                     <p class="py-4 text-sm text-neutral">{{ $load->status === \App\Modules\AcademicLoad\Enums\LoadStatus::Draft ? 'La carga está en borrador: todavía no tiene grupos que cerrar.' : 'La carga ya pasó el cierre. Para cambiarla, reábrela.' }}</p>
                 @else
                     @include('staffing::closing.condition-rows', ['closing' => $closing])
+                    @include('staffing::closing.hour-notices', ['notices' => $closing->hourNotices(), 'flush' => true])
                 @endif
             </div>
             <div x-show="tab === 'justificaciones'" x-cloak class="-mx-5 pt-3">

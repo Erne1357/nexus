@@ -18,6 +18,9 @@ use App\Modules\Scheduling\Models\GroupSession;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
+// Estas pruebas piden préstamos de salón, apagados por omisión (tarea 1.53).
+beforeEach(fn () => roomLoans());
+
 /*
 | Sección de salón del cajón de la sesión (tarea 3.7; maqueta `cajones`, estado `#sesion`): el salón actual, los
 | sugeridos con sus motivos y su estado, el buscador y «Asignar salón» o «Asignar y pedir préstamo». Asigna el jefe del
@@ -270,4 +273,23 @@ it('muestra los tres mejores sugeridos y los demás con «Ver N más»; si todos
     // Buscar uno de los que van tras «Ver N más» los abre: la lista se vuelve a montar con `more` en true.
     $component->set('search', 'CC-08');
     expect($listOf())->toBe('{ more: true }');
+});
+
+it('con los préstamos apagados no ofrece los salones de otro departamento y rechaza asignarlos', function () {
+    roomLoans(false);
+
+    sessionRoomAs($this->jefe)
+        ->assertSee('CC-05')
+        ->assertDontSee('MM-L2')
+        ->call('assign', $this->foreign->id)
+        ->assertHasErrors();
+
+    expect(InterdepartmentalAgreement::query()->count())->toBe(0)
+        ->and($this->session->fresh()->room_id)->toBeNull();
+});
+
+it('con los préstamos encendidos ofrece los salones de otro departamento', function () {
+    roomLoans(true);
+
+    sessionRoomAs($this->jefe)->assertSee('MM-L2');
 });

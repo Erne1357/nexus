@@ -28,7 +28,8 @@ use Illuminate\Support\Facades\DB;
  *
  * Los insumos de Faculty salen de RankingInputsQuery en lotes. Las marcas las da el validador de Scheduling (scoped;
  * se olvida su foto al empezar para leer la de ahora), con checkTeachers() una vez por grupo y las marcas de
- * CandidateMarks: HC-01 marca «choque», HC-08 «sin horas», HC-09 «no disponible» y el aviso SC-09 «traslado justo»,
+ * CandidateMarks: HC-01 marca «choque», HC-09 «no disponible», HC-08 «pasa su banda» (su propio bloque, asignable) y el
+ * aviso SC-09 «traslado justo»,
  * según las reglas que el validador tenga. Las horas restantes de cada candidato, sin y con
  * el grupo («quedan 12 → 7»), salen de teacherHours(), con la misma cuenta de HC-08 (TeacherHourLimit). Ordena con
  * RankingScorer y los pesos de `staffing.weights`.
@@ -129,6 +130,7 @@ final class RankGroups
                     unavailable: in_array('no_disponible', $marks, true),
                     remainingHours: self::remaining($hours[$input->teacherId] ?? null, 'before'),
                     tightTravel: in_array('traslado_justo', $marks, true),
+                    bandAccepted: in_array(CandidateMarks::BAND_ACCEPTED, $marks, true),
                 );
             }
 

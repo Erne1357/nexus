@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
  * «Para cerrar», contadas por grupo, pero con los choques duros vigentes de `schedule_conflicts` y no con el validador,
  * que tardaría con todas las cargas del Tec. El veto sigue decidiendo al cerrar. `blockingGroups` son los grupos
  * distintos que faltan (la cifra de «C2 · N»): uno sin docente ni salón cuenta en dos columnas y ahí una vez.
+ * `overBand` son los docentes que pasan su banda de horas frente a grupo (HC-08, tarea 1.50): aviso, no falta.
  */
 final readonly class LoadProgress
 {
@@ -26,6 +27,7 @@ final readonly class LoadProgress
         public int $awaiting = 0,
         public int $justified = 0,
         public int $blockingGroups = 0,
+        public int $overBand = 0,
     ) {}
 
     /**

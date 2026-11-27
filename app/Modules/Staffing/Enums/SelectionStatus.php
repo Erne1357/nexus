@@ -31,7 +31,7 @@ enum SelectionStatus: string
 
     /**
      * Viva: publicada, en curso o en la ronda extra. Mientras lo está, los docentes eligen sus grupos y el jefe o el JPD
-     * asignan sin HC-16 y con HC-08 como aviso (diseño 1.33, 6.7).
+     * asignan sin HC-16 (diseño 1.33, 6.7). HC-08 es aviso siempre desde la tarea 1.50.
      */
     public function isLive(): bool
     {

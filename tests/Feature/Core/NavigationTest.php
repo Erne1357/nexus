@@ -548,7 +548,7 @@ describe('menú', function () {
             ->and($page->querySelector('#nexus-menu [data-menu-flip="icon"]'))->toBe($home);
     });
 
-    it('en Inicio, Inicio lleva aria-current y la columna muestra la primera área sin marcar su icono', function () {
+    it('MN-07: en Inicio, Inicio lleva aria-current y no hay columna de ninguna área ni icono marcado', function () {
         $this->actingAs(User::factory()->admin()->create());
 
         $page = domOf(Livewire::test('core::components.navigation', ['route' => 'home']));
@@ -557,8 +557,22 @@ describe('menú', function () {
         expect($current)->toHaveCount(1)
             ->and($current->item(0)->hasAttribute('data-menu-home'))->toBeTrue()
             ->and($current->item(0)->getAttribute('aria-current'))->toBe('page')
-            ->and($page->querySelector('#nexus-menu [role="group"][data-current]')->getAttribute('data-menu-area'))->toBe('academico')
+            ->and($page->querySelector('#nexus-menu [role="group"][data-current]'))->toBeNull()
+            ->and($page->querySelector('#nexus-menu[data-bare]'))->not->toBeNull()
             ->and($page->querySelector('#nexus-menu [data-menu-flip="icon"][data-area-current]'))->toBeNull();
+    });
+
+    it('MN-07: el Inicio reserva solo la franja de iconos; otra pantalla conserva su columna', function () {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $home = $this->get('/')->assertOk()->getContent();
+        $other = $this->get(route('core.campuses'))->assertOk()->getContent();
+
+        expect($home)->toContain('[--shown-w:64px]')->not->toContain('[--shown-w:var(--menu-w)]')
+            ->and($home)->toContain('[--column-display:none]')->not->toContain('data-current=""')
+            ->and($other)->toContain('[--shown-w:var(--menu-w)]')->not->toContain('[--shown-w:64px]')
+            ->and($other)->toContain('[--column-display:flex]')
+            ->and(domOf($other)->querySelector('#nexus-menu [role="group"][data-current]'))->not->toBeNull();
     });
 
     it('fuera de Inicio, se marca el icono del área de la pantalla y solo ese', function () {

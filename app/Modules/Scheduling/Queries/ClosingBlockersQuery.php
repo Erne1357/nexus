@@ -21,6 +21,9 @@ use Illuminate\Support\Collection;
  * todavía; solo cuentan los grupos de la carga.
  * Olvida la foto antes, porque el validador es `scoped` y en el mismo request pudo haber leído una vieja (por ejemplo,
  * justo después de asignar el último salón).
+ *
+ * De la misma validación salen los avisos de HC-08 de los grupos de la carga (los docentes que pasan su banda de horas
+ * frente a grupo, uno por docente): no bloquean, se muestran en «Para cerrar» (tarea 1.50).
  */
 final class ClosingBlockersQuery
 {
@@ -40,26 +43,39 @@ final class ClosingBlockersQuery
             return new ClosingBlockers;
         }
 
-        return ClosingBlockers::tally($flags, $load->modality->profile, $this->conflicted($load, $flags));
+        [$conflicted, $hourNotices] = $this->validated($load, $flags);
+
+        return ClosingBlockers::tally($flags, $load->modality->profile, $conflicted)->withHourNotices($hourNotices);
     }
 
     /**
-     * Los ids de los grupos de la carga con al menos un choque duro: el validador, una vez por periodo y modalidad, con
-     * el alcance del departamento, cruzado con los grupos de la carga.
+     * Con el validador, una vez por periodo y modalidad y con el alcance del departamento, cruzado con los grupos de la
+     * carga: los ids de los grupos con al menos un choque duro y los avisos de HC-08 de sus docentes (uno por docente).
      *
      * @param  Collection<string, GroupClosingFlags>  $flags
-     * @return list<string>
+     * @return array{list<string>, list<array{teacher_id: string, message: string}>}
      */
-    private function conflicted(AcademicLoad $load, Collection $flags): array
+    private function validated(AcademicLoad $load, Collection $flags): array
     {
         $department = Department::query()->withTrashed()->whereKey($load->department_id)->firstOrFail();
 
         $this->validator->forget();
-        $hard = array_filter(
-            $this->validator->validateLoad($load->term, $load->modality, $department)->violations(),
-            fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
-        );
+        $violations = $this->validator->validateLoad($load->term, $load->modality, $department)->violations();
+        $ofLoad = array_flip($flags->keys()->all());
+        $hard = array_filter($violations, fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard);
+        $notices = [];
 
-        return array_values(array_intersect(array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))), $flags->keys()->all()));
+        foreach ($violations as $violation) {
+            if ($violation->rule === 'HC-08' && $violation->severity === ConflictSeverity::Soft && isset($ofLoad[$violation->groupId])) {
+                $notices[$violation->subjectId] ??= ['teacher_id' => $violation->subjectId, 'message' => $violation->message];
+            }
+        }
+
+        usort($notices, fn (array $a, array $b): int => strcmp($a['message'], $b['message']));
+
+        return [
+            array_values(array_intersect(array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))), $flags->keys()->all())),
+            $notices,
+        ];
     }
 }

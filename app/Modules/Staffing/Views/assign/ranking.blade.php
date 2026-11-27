@@ -1,7 +1,8 @@
 {{--
     El ranking completo de un grupo, el mismo en las dos vistas: arriba la leyenda del orden; luego quienes pueden
-    tomarlo (staffing::assign.ranking-row) y, plegado en un renglón, el bloque final (reglas-de-negocio.md, «Un solo
-    bloque final»): «N docentes no pueden tomarlo (M sin horas, K choque, J no disponible)» con «Ver», que lo abre
+    tomarlo (staffing::assign.ranking-row); luego, abierto, el bloque «Pasan su banda» (HC-08, tarea 1.50: se pueden
+    asignar, con el oficio de conformidad pendiente), con su renglón de título; y, plegado en un renglón, el bloque final
+    (reglas-de-negocio.md, «Un solo bloque final»): «N docentes no pueden tomarlo (K choque, J no disponible)» con «Ver», que lo abre
     debajo (toggleFinalTier). Con la caja de 46rem o más es una tabla de nueve columnas; debajo, cada docente ocupa dos
     renglones. `capped` (en la vista por materia): desde 768 px la tabla mide a lo más 70vh, con su propio
     desplazamiento y el encabezado de columnas pegado arriba.
@@ -9,6 +10,7 @@
 @php($grid = '@[46rem]:grid-cols-[1.75rem_minmax(8.5rem,24rem)_2.75rem_2.75rem_6rem_3rem_3.75rem_5.25rem_minmax(6.25rem,1fr)]')
 @php($capped ??= false)
 @php($eligible = $ranking->eligible())
+@php($overBand = $ranking->overBand())
 @php($flagged = $ranking->flagged())
 @php($finalOpen = in_array($group->id, $finalTierOpen, true))
 @php($recommendedId = $eligible[0]->teacherId ?? null)
@@ -37,6 +39,18 @@
                     @foreach ($eligible as $candidate)
                         @include('staffing::assign.ranking-row')
                     @endforeach
+
+                    @if ($overBand !== [])
+                        <div role="row" class="flex flex-wrap items-center gap-x-2 gap-y-1 bg-warning/10 px-4 py-2" data-testid="over-band-tier">
+                            <p role="cell" class="flex min-w-0 items-start gap-2 text-sm">
+                                <x-icon name="o-clock" class="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                                <span><span class="font-mono font-semibold tabular-nums">{{ count($overBand) }}</span> {{ count($overBand) === 1 ? 'pasa su banda' : 'pasan su banda' }} de horas frente a grupo con este grupo <span class="text-neutral">· se pueden asignar; requiere oficio de conformidad del docente (pendiente)</span></span>
+                            </p>
+                        </div>
+                        @foreach ($overBand as $candidate)
+                            @include('staffing::assign.ranking-row')
+                        @endforeach
+                    @endif
 
                     @if ($flagged !== [])
                         <div role="row" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 bg-base-200 px-4 py-2" data-testid="flagged-tier">

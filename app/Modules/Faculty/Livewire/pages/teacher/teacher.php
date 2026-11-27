@@ -46,6 +46,7 @@ use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherRecord;
 use App\Modules\Faculty\Queries\TeacherRecordQuery;
 use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
+use App\Modules\Faculty\Rules\PositionCategories;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -119,6 +120,9 @@ new #[Title('Ficha del docente')] class extends Component
     public string $kind = '';
 
     public string $base_hours = '';
+
+    /** La clave de categoría de la plaza (PL-01, PositionCategories); '' es sin categoría. */
+    public string $category = '';
 
     public string $valid_from = '';
 
@@ -216,6 +220,8 @@ new #[Title('Ficha del docente')] class extends Component
      */
     public function updatedKind(): void
     {
+        $this->category = '';
+
         $fixed = PositionKind::tryFrom($this->kind)?->fixedHours();
 
         if ($fixed !== null) {
@@ -306,6 +312,7 @@ new #[Title('Ficha del docente')] class extends Component
                 ? 'No te puedes dar de baja a ti mismo.'
                 : 'Solo el administrador y la Subdirección dan de baja.',
             'degrees' => array_map(fn (TeacherDegree $degree): array => ['id' => $degree->value, 'name' => $degree->label()], TeacherDegree::cases()),
+            'categoryOptions' => PositionCategories::options(PositionKind::tryFrom($this->kind), $this->category),
             'kinds' => array_map(fn (PositionKind $kind): array => [
                 'id' => $kind->value,
                 'name' => $kind->label().($kind->fixedHours() === null ? '' : " · {$kind->fixedHours()} h"),
@@ -692,6 +699,7 @@ new #[Title('Ficha del docente')] class extends Component
         $this->resetValidation();
         $this->editingPositionId = $position->id;
         $this->kind = $position->kind->value;
+        $this->category = (string) $position->category;
         $this->base_hours = (string) $position->base_hours;
         $this->valid_from = $position->valid_from?->toDateString() ?? '';
         $this->valid_to = $position->valid_to?->toDateString() ?? '';
@@ -705,6 +713,7 @@ new #[Title('Ficha del docente')] class extends Component
 
         $data = $this->validate([
             'kind' => ['required', Rule::enum(PositionKind::class)],
+            'category' => ['nullable', 'string', 'max:8'],
             'base_hours' => ['nullable', 'string', 'max:4'],
             'valid_from' => ['nullable', 'date_format:Y-m-d'],
             'valid_to' => ['nullable', 'date_format:Y-m-d'],

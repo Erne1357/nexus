@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing;
 
+use App\Modules\Academic\Events\SubjectUpdated;
 use App\Modules\AcademicLoad\Database\Seeders\ReanalysisDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
@@ -31,6 +32,8 @@ use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
+use App\Modules\Faculty\Events\TeachingHoursChanged;
+use App\Modules\Faculty\Queries\SelectionCsvHours;
 use App\Modules\Faculty\Queries\SelectionQueueMembership;
 use App\Modules\Faculty\Queries\TeacherWeeklyLoad;
 use App\Modules\Scheduling\Enums\GroupStatus;
@@ -64,6 +67,7 @@ use App\Modules\Staffing\Listeners\QueueTeacherLoadRefresh;
 use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupsCreated;
+use App\Modules\Staffing\Listeners\RerankOnSubjectTeacherHours;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\Selection;
@@ -73,6 +77,7 @@ use App\Modules\Staffing\Notifications\SelectionTeacherNotice;
 use App\Modules\Staffing\Policies\ChangeRequestPolicy;
 use App\Modules\Staffing\Policies\SelectionPolicy;
 use App\Modules\Staffing\Queries\ChosenAlternativePlacementsQuery;
+use App\Modules\Staffing\Queries\SelectionCsvHoursQuery;
 use App\Modules\Staffing\Queries\SelectionQueueMembershipQuery;
 use App\Modules\Staffing\Queries\SelectionTimetableQuery;
 use App\Modules\Staffing\Queries\TeacherWeeklyLoadQuery;
@@ -92,8 +97,8 @@ use Illuminate\Support\Facades\Gate;
 final class StaffingServiceProvider extends ModuleServiceProvider
 {
     /**
-     * Lo que recalcula `teacher_term_loads`: los grupos con docente de Scheduling y las plazas, horas externas,
-     * datos y adscripciones de Faculty.
+     * Lo que recalcula `teacher_term_loads`: los grupos con docente de Scheduling y las plazas, horas externas y
+     * autorizadas, horas frente a grupo del CSV de la selección (TeachingHoursChanged), datos y adscripciones de Faculty.
      */
     private const array REFRESH_LOADS_ON = [
         GroupTeacherChanged::class,
@@ -102,8 +107,10 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         PositionChanged::class,
         ExternalLoadChanged::class,
         HourAllowanceChanged::class,
+        TeachingHoursChanged::class,
         TeacherUpdated::class,
         AdscriptionChanged::class,
+        SubjectUpdated::class,
     ];
 
     /**
@@ -125,6 +132,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         $this->app->bind(PendingPlacements::class, ChosenAlternativePlacementsQuery::class);
         $this->app->bind(TeacherWeeklyLoad::class, TeacherWeeklyLoadQuery::class);
         $this->app->bind(SelectionQueueMembership::class, SelectionQueueMembershipQuery::class);
+        $this->app->bind(SelectionCsvHours::class, SelectionCsvHoursQuery::class);
     }
 
     public function boot(): void
@@ -147,8 +155,9 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         Event::listen([GroupScheduleChanged::class, GroupCancelled::class, GroupTeacherChanged::class], RerankOnGroupChange::class);
         Event::listen([
             PositionChanged::class, ExternalLoadChanged::class, AvailabilityChanged::class, QualificationChanged::class,
-            AdscriptionChanged::class, TeacherUpdated::class, TeacherAccessChanged::class,
+            AdscriptionChanged::class, TeacherUpdated::class, TeacherAccessChanged::class, TeachingHoursChanged::class,
         ], RerankOnFacultyChange::class);
+        Event::listen(SubjectUpdated::class, RerankOnSubjectTeacherHours::class);
     }
 
     /**
@@ -251,10 +260,10 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 help: 'Cuántos semestres hacia atrás promedia el ranking la evaluación docente.',
                 type: SettingType::Integer, default: RankingWindowSizes::DEFAULT_EVALUATION, rules: ['min:1', 'max:20'], unit: 'semestres'),
             new SettingDefinition('staffing.extra_hours_tolerance', ...$module, label: 'Horas de más que se toleran',
-                help: 'Cuántas horas semanales puede tener un docente por encima de sus horas base antes de que Nexus marque que se pasó.',
+                help: 'Cuántas horas semanales, además de las 2 de la banda del reglamento, puede tener un docente por encima de sus horas frente a grupo antes de que Nexus avise que se pasó.',
                 type: SettingType::Integer, default: 0, rules: ['min:0', 'max:40'], unit: 'horas'),
             new SettingDefinition('staffing.honorarios_max_hours', ...$module, label: 'Tope de horas de un docente por honorarios',
-                help: 'Las horas semanales máximas de quien da clases por honorarios. Sin valor, se usan sus horas base más la tolerancia.',
+                help: 'Las horas semanales máximas de quien da clases por honorarios. Sin valor, se usa su banda de horas frente a grupo más la tolerancia.',
                 type: SettingType::Integer, default: null, rules: ['min:1', 'max:40'], unit: 'horas', nullable: true),
             new SettingDefinition('staffing.min_campus_travel_minutes', ...$module, label: 'Minutos mínimos para cambiar de campus',
                 help: 'El tiempo que necesita un docente entre dos clases seguidas en campus distintos. Con menos, Nexus avisa del traslado (no bloquea).',
@@ -407,10 +416,13 @@ final class StaffingServiceProvider extends ModuleServiceProvider
 
                 return $teachers === $loads ? true : "{$teachers} docentes con grupos y {$loads} cargas por docente con grupos.";
             }),
-            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Rooms), 'Cero choques duros de docente (HC-01, HC-08, HC-09)', fn (DemoContext $demo): true|string => ($hard = DB::table('schedule_conflicts')
+            // HC-08 es aviso desde la tarea 1.50: cuenta el que pasa también lo autorizado (oficio pendiente), que la demo no deja.
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Rooms), 'Cero choques duros de docente (HC-01, HC-09) ni horas de más sin oficio (HC-08)', fn (DemoContext $demo): true|string => ($hard = DB::table('schedule_conflicts')
                 ->where('term_id', $demo->term()->getKey())->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
                 ->whereIn('group_id', Group::query()->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'))->select('id'))
-                ->where('severity', 'hard')->whereIn('rule', ['HC-01', 'HC-08', 'HC-09'])->whereNull('resolved_at')->count()) === 0
+                ->where(fn ($query) => $query->where(fn ($hard) => $hard->where('severity', 'hard')->whereIn('rule', ['HC-01', 'HC-09']))
+                    ->orWhere(fn ($hours) => $hours->where('rule', 'HC-08')->whereRaw("(related->>'remaining_hours')::int < 0")))
+                ->whereNull('resolved_at')->count()) === 0
                 ? true
                 : "{$hard} choques duros de docente."),
             ...$this->publicationChecks(),

@@ -37,6 +37,20 @@ final class ConflictRecomputeTargetsQuery
     }
 
     /**
+     * Los periodos y modalidades con grupos no cancelados de esos docentes en el periodo: cambiaron sus horas frente a
+     * grupo (TeachingHoursChanged, HC-08).
+     *
+     * @param  list<string>  $teacherIds
+     * @return list<array{string, string}>
+     */
+    public function forTeachers(array $teacherIds, string $termId): array
+    {
+        return $this->pairs(Group::query()->whereIn('teacher_id', $teacherIds)
+            ->where('status', '<>', GroupStatus::Cancelled->value)
+            ->where('term_id', $termId));
+    }
+
+    /**
      * Los periodos y modalidades donde el docente tiene grupos activos.
      *
      * @return list<array{string, string}>
@@ -75,6 +89,24 @@ final class ConflictRecomputeTargetsQuery
             ->pluck('id')
             ->map(fn (string $termId): array => [$termId, $modality->getKey()])
             ->all();
+    }
+
+    /**
+     * Cambió si las horas de la materia cuentan en la carga del docente (PL-02, HC-08): los periodos y modalidades con
+     * grupos no cancelados de los docentes que tienen grupos de la materia, en los periodos que no han terminado.
+     *
+     * @return list<array{string, string}>
+     */
+    public function forSubject(string $subjectId): array
+    {
+        $teacherIds = Group::query()->where('subject_id', $subjectId)->whereNotNull('teacher_id')
+            ->where('status', '<>', GroupStatus::Cancelled->value)
+            ->tap(fn (Builder $query) => $this->openTerms($query))
+            ->distinct()->pluck('teacher_id')->all();
+
+        return $teacherIds === [] ? [] : $this->pairs(Group::query()->whereIn('teacher_id', $teacherIds)
+            ->where('status', '<>', GroupStatus::Cancelled->value)
+            ->tap(fn (Builder $query) => $this->openTerms($query)));
     }
 
     /**

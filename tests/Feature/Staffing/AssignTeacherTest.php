@@ -9,6 +9,7 @@ use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
@@ -206,7 +207,7 @@ function assignTeacherSelection(AcademicLoad $load, SelectionStatus $status): Se
     return $selection;
 }
 
-it('con selección viva el jefe asigna sin motivo de HC-16 y HC-08 solo avisa', function (SelectionStatus $status) {
+it('con selección viva el jefe asigna sin motivo de HC-16 y HC-08 no veta', function (SelectionStatus $status) {
     assignTeacherSelection($this->load, $status);
     $short = Teacher::factory()->create();
     TeacherPosition::factory()->for($short)->asignatura(1)->create();
@@ -245,33 +246,40 @@ it('con selección viva HC-09 sigue siendo duro para el jefe', function () {
         ->and(GroupTeacherAssignment::query()->count())->toBe(0);
 });
 
-it('sin selección viva HC-16 y HC-08 se exigen como antes', function (SelectionStatus $status) {
+it('HC-08: sin selección viva HC-16 se exige, pero pasar la banda de horas ya no veta: asigna con el aviso del oficio pendiente', function (SelectionStatus $status) {
     assignTeacherSelection($this->load, $status);
     $short = Teacher::factory()->create();
     TeacherPosition::factory()->for($short)->asignatura(1)->create();
 
     $reason = assignmentErrors(fn () => assignTeacher($this->group, $this->teachers[2], $this->actor));
-    $hours = assignmentErrors(fn () => assignTeacher($this->group, $short, $this->actor, 'Es el único disponible.'));
+    [$assignment, $notice] = app(AssignTeacher::class)->handleWithNotice($this->group, $short, $this->actor, 'Es el único disponible.');
+    $validator = app(ScheduleValidator::class);
+    $validator->forget();
+    $term = $this->group->term;
 
     expect($reason)->toHaveKey('reason')
-        ->and(implode(' ', $hours['teacher'] ?? []))->toContain('se pasa por')
-        ->and($this->group->fresh()->teacher_id)->toBeNull();
+        ->and($assignment->teacher_id)->toBe($short->id)
+        ->and($this->group->fresh()->teacher_id)->toBe($short->id)
+        ->and($validator->validateTeacher($short, $term)->hasHard())->toBeFalse()
+        ->and($validator->teacherHoursNotice($short, $term))->toStartWith('Pasa su banda de horas frente a grupo (1 h, de 0 a 3): lleva ')
+        ->and($validator->teacherHoursNotice($short, $term))->toEndWith('Requiere oficio de conformidad del docente (pendiente).')
+        ->and($notice)->toBe($short->name.' '.lcfirst((string) $validator->teacherHoursNotice($short, $term)));
 })->with([
     'borrador' => [SelectionStatus::Draft],
     'cancelada' => [SelectionStatus::Cancelled],
 ]);
 
-it('HC-16 con la selección de la carga terminada: el jefe asigna sin motivo (el orden reemplaza al ranking), pero HC-08 vuelve a ser duro', function () {
+it('HC-16 con la selección de la carga terminada: el jefe asigna sin motivo (el orden reemplaza al ranking) y HC-08 ya no veta (tarea 1.50)', function () {
     assignTeacherSelection($this->load, SelectionStatus::Finished);
     $short = Teacher::factory()->create();
     TeacherPosition::factory()->for($short)->asignatura(1)->create();
 
     $third = assignTeacher($this->group, $this->teachers[2], $this->actor);
-    $hours = assignmentErrors(fn () => assignTeacher($this->group, $short, $this->actor, 'Es el único disponible.'));
+    $hours = assignTeacher($this->group, $short, $this->actor, 'Es el único disponible.');
 
     expect($third)->ranking_position_at_assignment->toBe(3)->reason->toBe(AssignTeacher::SELECTION_REASON)
-        ->and(implode(' ', $hours['teacher'] ?? []))->toContain('se pasa por')
-        ->and($this->group->fresh()->teacher_id)->toBe($this->teachers[2]->id);
+        ->and($hours->teacher_id)->toBe($short->id)
+        ->and($this->group->fresh()->teacher_id)->toBe($short->id);
 });
 
 it('una selección viva de otra carga no cambia las reglas del grupo', function () {

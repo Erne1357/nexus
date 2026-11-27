@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling;
 
+use App\Modules\Academic\Events\SubjectUpdated;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
@@ -40,6 +41,7 @@ use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
 use App\Modules\Faculty\Events\HourAllowanceChanged;
 use App\Modules\Faculty\Events\PositionChanged;
+use App\Modules\Faculty\Events\TeachingHoursChanged;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Console\ImportLoadProjectionCommand;
 use App\Modules\Scheduling\Console\RecomputeConflicts;
@@ -110,7 +112,9 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         ExternalLoadChanged::class,
         HourAllowanceChanged::class,
         PositionChanged::class,
+        TeachingHoursChanged::class,
         ModalityUpdated::class,
+        SubjectUpdated::class,
     ];
 
     /**

@@ -30,12 +30,26 @@ it('dice las horas que quedan con y sin el grupo, solo las de sin grupo o ningun
         ->and(rankingRow(['remainingHours' => null, 'remainingAfterHours' => null])->remainingLabel())->toBeNull();
 });
 
-it('las marcas del bloque final son sin horas, choque y no disponible; sin evaluación no baja', function () {
-    $flagged = rankingRow(['flags' => ['choque', 'sin_evaluacion', 'sin_horas']]);
+it('las marcas del bloque final son choque y no disponible; sin evaluación no baja', function () {
+    $flagged = rankingRow(['flags' => ['choque', 'sin_evaluacion', 'no_disponible']]);
 
     expect($flagged->isFlagged())->toBeTrue()
-        ->and($flagged->marks())->toBe(['sin_horas' => 'Sin horas', 'choque' => 'Choque'])
+        ->and($flagged->marks())->toBe(['choque' => 'Choque', 'no_disponible' => 'No disponible'])
         ->and(rankingRow(['flags' => ['sin_evaluacion'], 'evaluation' => null])->isFlagged())->toBeFalse();
+});
+
+it('HC-08: «pasa su banda» va en su propio bloque, asignable, y no en el final; con choque va al final (tarea 1.50)', function () {
+    $row = rankingRow(['flags' => ['sin_horas', 'traslado_justo']]);
+    $withClash = rankingRow(['flags' => ['sin_horas', 'choque']]);
+
+    expect($row->isFlagged())->toBeFalse()
+        ->and($row->isOverBand())->toBeTrue()
+        ->and($row->bandAccepted())->toBeFalse()
+        ->and($row->marks())->toBe([])
+        ->and($row->notices())->toBe(['sin_horas' => 'pasa su banda', 'traslado_justo' => 'traslado justo'])
+        ->and($withClash->isFlagged())->toBeTrue()
+        ->and($withClash->isOverBand())->toBeFalse()
+        ->and(rankingRow(['flags' => ['sin_horas', 'banda_aceptada']])->bandAccepted())->toBeTrue();
 });
 
 it('SC-09: «traslado justo» es una marca discreta que no baja al bloque final', function () {

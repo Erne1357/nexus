@@ -111,7 +111,7 @@
                                             'flex min-w-0 flex-col gap-1.5 rounded-field border px-3 py-2.5 text-left hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-primary',
                                             'border-info/40 bg-info/5' => $group['is_mine'],
                                             'border-base-300 bg-base-100' => ! $group['is_mine'],
-                                            'border-dashed' => $group['teacher_name'] === null,
+                                            'border-dashed' => ! $group['taken'],
                                         ])>
                                         <span class="flex items-center gap-2">
                                             <b class="font-mono text-base">{{ $group['code'] }}</b>
@@ -132,8 +132,8 @@
                                         <span class="truncate text-sm">
                                             @if ($group['is_mine'])
                                                 <b>Tú</b>
-                                            @elseif ($group['teacher_name'])
-                                                {{ $group['teacher_name'] }}
+                                            @elseif ($group['taken'])
+                                                <span class="badge badge-neutral badge-sm font-semibold" data-testid="offer-taken">Asignado</span>
                                             @else
                                                 <span class="font-semibold text-warning">Sin docente</span>
                                             @endif
@@ -159,7 +159,7 @@
                 @if (count($groups) === 0)
                     Todavía no hay grupos que ver: la oferta aparece cuando la carga de tu departamento entra a asignación de docentes.
                 @elseif ($state === 'top')
-                    No estás entre los 3 primeros de ningún grupo que coincida, sin una marca que te baje (sin horas, choque o no disponible).
+                    No estás entre los 3 primeros de ningún grupo que coincida, sin una marca que te baje (pasa tu banda, choque o no disponible).
                 @else
                     Ningún grupo coincide con los filtros.
                 @endif

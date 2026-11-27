@@ -84,7 +84,8 @@ it('HC-17: muestra todos los grupos del departamento en todos los campus con su 
         ->assertOk()
         ->assertSee('Semestre 1')
         ->assertSee('Semestre 3')
-        ->assertSeeInOrder(['1-A', 'Ma Vi', '11:00–13:00', 'Óscar Nájera'])
+        ->assertSeeInOrder(['1-A', 'Ma Vi', '11:00–13:00', 'Asignado'])
+        ->assertDontSee('Óscar Nájera')
         ->assertSee('Sin docente')
         ->assertSee('C1')
         ->assertSee('C2');
@@ -220,7 +221,7 @@ it('filtra por materia (?q=), semestre, «Sin docente» y «Entre tus 3 primeros
         ->assertSee('Quitar filtros');
 });
 
-it('«Entre tus 3 primeros» cuenta exactamente lo que muestra: lugar 1 a 3, sin marca que lo baje y sin contar los suyos', function () {
+it('«Entre tus 3 primeros» cuenta exactamente lo que muestra: lugar 1 a 3, sin marca que lo baje (tampoco pasar su banda, HC-08) y sin contar los suyos', function () {
     $top = offerGroup($this->sc, $this->c2, ['code' => 'TOP1']);
     $noHours = offerGroup($this->sc, $this->c2, ['code' => 'SIN1']);
     $clash = offerGroup($this->sc, $this->c2, ['code' => 'CHO1']);

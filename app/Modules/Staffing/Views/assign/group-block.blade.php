@@ -57,7 +57,7 @@
                     <x-icon name="o-user-minus" class="h-4 w-4 shrink-0" />Ningún docente entró al ranking de este grupo.
                 </p>
             @else
-                @php($recommendedId = collect($row->candidates)->first(fn ($candidate) => ! $candidate->isFlagged())?->teacherId)
+                @php($recommendedId = collect($row->candidates)->first(fn ($candidate) => ! $candidate->isFlagged() && ! $candidate->isOverBand())?->teacherId)
                 <div class="grid gap-2 @[44rem]:grid-cols-3" data-testid="candidates">
                     @foreach ($row->candidates as $candidate)
                         @include('staffing::assign.candidate', ['group' => $group, 'candidate' => $candidate, 'size' => $row->rankingSize, 'recommended' => $candidate->teacherId === $recommendedId])
@@ -65,7 +65,7 @@
                 </div>
                 @if ($recommendedId === null)
                     <p class="flex items-center gap-2 text-[12.5px] text-neutral" data-testid="no-eligible">
-                        <x-icon name="o-information-circle" class="h-4 w-4 shrink-0" aria-hidden="true" />Ninguno sin marcas: estos son los primeros del bloque final.
+                        <x-icon name="o-information-circle" class="h-4 w-4 shrink-0" aria-hidden="true" />{{ collect($row->candidates)->contains(fn ($candidate) => $candidate->isOverBand()) ? 'Ninguno sin marcas: estos pasan su banda de horas o son del bloque final.' : 'Ninguno sin marcas: estos son los primeros del bloque final.' }}
                     </p>
                 @endif
             @endif

@@ -2,11 +2,14 @@
 
 namespace App\Modules\Staffing\Queries;
 
+use App\Modules\Academic\Rules\SubjectTeacherHours;
 use App\Modules\Core\Actions\SendAccessInvitation;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Core\Support\AccessInvitationLink;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Rules\TeachingHours;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
@@ -20,7 +23,7 @@ use Illuminate\Support\Facades\DB;
  * la cola: con acceso, invitado (invitación vigente), pendiente (con su motivo) o sin correo. Una consulta por cada
  * cosa, sin importar la cola.
  *
- * @phpstan-type Row array{entry: SelectionEntry, name: string, hours: int, groups: list<string>, current: bool, access: string, confirmation: ?string}
+ * @phpstan-type Row array{entry: SelectionEntry, name: string, hours: int, target: int, groups: list<string>, current: bool, access: string, confirmation: ?string}
  * @phpstan-type Access array{counts: array{access: int, invited: int, pending: int, no_email: int}, missing: list<array{teacher_id: ?string, name: string, state: string, reason: string, resendable: bool}>}
  */
 final class SelectionMonitorQuery
@@ -36,6 +39,7 @@ final class SelectionMonitorQuery
         private readonly SelectionGroupsQuery $groups,
         private readonly RoleAssignmentRules $rules,
         private readonly PriorChoiceHoursQuery $priorHours,
+        private readonly TeachingTargetQuery $targets,
     ) {}
 
     /**
@@ -48,19 +52,23 @@ final class SelectionMonitorQuery
 
         $groups = $this->groups->of($selection)
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->get(['groups.id', 'groups.code', 'groups.teacher_id', DB::raw('subjects.theory_hours + subjects.practice_hours as hours')]);
+            ->get(['groups.id', 'groups.code', 'groups.teacher_id', DB::raw(SubjectTeacherHours::SQL.' as hours')]);
 
         $byTeacher = $groups->whereNotNull('teacher_id')->groupBy('teacher_id');
         $access = $this->accessOf($entries);
         $measured = $this->priorHours->forSelection($selection, $entries);
+        $targets = $this->targets->forTerm(Term::query()->whereKey($selection->term_id)->firstOrFail(), $entries->whereNotNull('teacher_id')->pluck('base_hours', 'teacher_id')->map(fn ($csv): int => (int) $csv)->all());
 
-        $rows = $entries->map(function (SelectionEntry $entry) use ($byTeacher, $current, $access, $measured): array {
+        $rows = $entries->map(function (SelectionEntry $entry) use ($byTeacher, $current, $access, $measured, $targets): array {
             $taken = $byTeacher->get($entry->teacher_id, collect());
 
             return [
                 'entry' => $entry,
                 'name' => $entry->teacher?->name ?? $entry->csv_name,
+                // SEL-07: el puesto administrativo con el que pasa primero en la orden (tarea 1.54), o nulo.
+                'admin_post' => $entry->isPriorChoice() ? null : $entry->administrative_post,
                 'hours' => (int) $taken->sum('hours'),
+                'target' => $targets[$entry->teacher_id] ?? TeachingHours::fromCsvHours((int) $entry->base_hours),
                 'groups' => $taken->pluck('code')->sort()->values()->all(),
                 'current' => $current?->getKey() === $entry->getKey(),
                 'access' => $access[$entry->teacher_id]['state'] ?? 'pending',

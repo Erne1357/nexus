@@ -47,12 +47,14 @@ it('cada página llega con su propia sesión: lo que otra dejó pendiente no la 
 });
 
 it('la liebre abre el menú con el cursor en el buscador; buscar filtra por grupos y Esc lo cierra', function () {
+    // MN-07: en Inicio no hay columna de ningún área; las entradas salen al abrir el menú.
     $page = signInToShell()
-        ->assertVisible('a[data-label="Validación de catálogos"]')
+        ->assertMissing('a[data-label="Validación de catálogos"]')
         ->assertMissing('[data-menu-group="propuesta"]')
         ->assertMissing('a[data-label="Importaciones"]')
         ->click('@hare')
         ->assertVisible('[data-menu-group="propuesta"]')
+        ->assertScript('document.querySelector(\'a[data-label="Validación de catálogos"]\').getBoundingClientRect().width > 100')
         ->assertScript('document.body.dataset.menu', 'open')
         ->assertAttribute('@hare', 'aria-expanded', 'true')
         ->assertAttribute('@hare', 'aria-label', 'Cerrar el menú completo')
@@ -77,7 +79,7 @@ it('la liebre abre el menú con el cursor en el buscador; buscar filtra por grup
         ->assertScript('document.body.dataset.menu', 'closed')
         ->assertAttribute('@hare', 'aria-expanded', 'false')
         ->assertScript('document.activeElement.id', 'nexus-hare')
-        ->assertVisible('a[data-label="Validación de catálogos"]')
+        ->assertMissing('a[data-label="Validación de catálogos"]')
         ->assertVisible('[data-menu-home]')
         ->assertMissing('a[data-label="Importaciones"]')
         ->assertDontSee('Sin resultados')
