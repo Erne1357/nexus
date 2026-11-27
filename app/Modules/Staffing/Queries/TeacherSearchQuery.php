@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing\Queries;
 
+use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
@@ -26,6 +27,15 @@ final class TeacherSearchQuery
     public const int LIMIT = 10;
 
     public function __construct(private readonly ScheduleValidator $validator) {}
+
+    /**
+     * El grupo por un id del cliente; 404 si no existe.
+     */
+    public function groupOrFail(string $groupId): Group
+    {
+        /** @var Group */
+        return KeyLookup::findOrFail(Group::query(), $groupId);
+    }
 
     /**
      * @return list<TeacherSearchResult>

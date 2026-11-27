@@ -1,10 +1,8 @@
 <?php
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
-use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
-use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Support\WeekGrid;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Actions\Sessions\PlaceGroupSession;
@@ -166,7 +164,7 @@ new class extends Component
         $this->resetForms();
         $this->adding = true;
         $this->kind = $editor->placement($group)['kind']->value;
-        $grid = WeekGrid::of($group->modality()->withTrashed()->firstOrFail()->profile);
+        $grid = app(CurrentLoadQuery::class)->gridOf($group);
         $this->day = (string) ($grid->days[0]['day'] ?? 1);
         $this->startsAt = (string) ($grid->blocks[0]['starts_at'] ?? '');
         $this->endsAt = (string) ($grid->blocks[0]['ends_at'] ?? '');
@@ -369,7 +367,7 @@ new class extends Component
         ]);
         $gate = Gate::forUser(auth()->user());
         $term = $editor->term($this->termId);
-        $grid = WeekGrid::of($group->modality()->withTrashed()->firstOrFail()->profile);
+        $grid = app(CurrentLoadQuery::class)->gridOf($group);
 
         $editReason = $this->editReason($group, $gate->allows('editSessions', $group));
         $assignReason = $this->assignReason($group, $gate->allows('create', [GroupTeacherAssignment::class, $group]));
@@ -435,7 +433,7 @@ new class extends Component
             return 'Solo lectura: asigna docentes el jefe del departamento y el jefe de proyecto docente.';
         }
 
-        $load = AcademicLoad::query()->ofDepartment($group->term_id, $group->modality_id, $group->department_id)->first();
+        $load = app(CurrentLoadQuery::class)->loadOf($group);
 
         return match (true) {
             $load === null => 'El departamento no tiene carga en este periodo.',
@@ -476,7 +474,7 @@ new class extends Component
      */
     private function validateTimes(Group $group, ?GroupSession $session): void
     {
-        $grid = WeekGrid::of($group->modality()->withTrashed()->firstOrFail()->profile);
+        $grid = app(CurrentLoadQuery::class)->gridOf($group);
 
         $this->validate([
             'day' => ['required', Rule::in(array_map('strval', array_column($grid->days, 'day')))],
@@ -525,9 +523,6 @@ new class extends Component
     {
         $group = $this->groupOrFail($query, (string) $this->groupId);
 
-        return KeyLookup::findOrFail(
-            GroupSession::query()->where('group_id', $group->id)->with(['group', 'room' => fn ($relation) => $relation->withTrashed()]),
-            $sessionId,
-        );
+        return $query->sessionOrFail($group, $sessionId);
     }
 };

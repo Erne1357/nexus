@@ -1,6 +1,5 @@
 <?php
 
-use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Queries\TeacherSearchQuery;
@@ -25,16 +24,16 @@ new class extends Component
 
     public string $term = '';
 
-    public function mount(string $groupId, bool $assignable = true): void
+    public function mount(TeacherSearchQuery $query, string $groupId, bool $assignable = true): void
     {
         $this->groupId = $groupId;
         $this->assignable = $assignable;
-        $this->group();
+        $this->group($query);
     }
 
-    public function pick(string $teacherId): void
+    public function pick(string $teacherId, TeacherSearchQuery $query): void
     {
-        $group = $this->group();
+        $group = $this->group($query);
 
         abort_unless($this->assignable, 403);
 
@@ -50,13 +49,13 @@ new class extends Component
 
         return [
             'ready' => mb_strlen($term) >= TeacherSearchQuery::MIN_LENGTH,
-            'results' => $query->search($this->group(), $term),
+            'results' => $query->search($this->group($query), $term),
         ];
     }
 
-    private function group(): Group
+    private function group(TeacherSearchQuery $query): Group
     {
-        $group = KeyLookup::findOrFail(Group::query(), $this->groupId);
+        $group = $query->groupOrFail($this->groupId);
         $this->authorize('create', [GroupTeacherAssignment::class, $group]);
 
         return $group;

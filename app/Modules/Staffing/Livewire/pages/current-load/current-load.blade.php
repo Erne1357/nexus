@@ -142,6 +142,6 @@
             @endforeach
         </div>
 
-        <livewire:staffing::components.current-load-drawer :term-id="$termId" :modality-id="$modalityId" :department-id="$departmentId" wire:key="drawer-{{ $departmentId }}" />
+        <livewire:staffing::components.current-load-drawer :term-id="$termId" :modality-id="$modalityId" :department-id="$departmentId" wire:key="drawer-{{ $termId }}-{{ $modalityId }}-{{ $departmentId }}" />
     @endif
 </div>
