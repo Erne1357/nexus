@@ -379,6 +379,8 @@ describe('sin tablero', function () {
 
 describe('ruta y menú', function () {
     it('sirve la ruta al jefe y manda al invitado al login', function () {
+        // El jefe la abre con la carga de su departamento en la etapa de propuesta (MN-06).
+        AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->sc->id]);
         $this->get(route('academic-load.demand'))->assertRedirect(route('login'));
         $this->actingAs($this->jefe)->get(route('academic-load.demand'))->assertOk()->assertSee('Demanda por materia');
     });

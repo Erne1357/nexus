@@ -181,6 +181,8 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         };
 
         return [
+            new NavigationItem('Carga actual', 'staffing.current-load', 'o-table-cells', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, order: -1, whyUnavailable: $loadInProgress,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView)),
             new NavigationItem('Asignación docente', 'staffing.assign', 'o-user-plus', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::RankingView)),
             new NavigationItem('Orden de selección', 'staffing.selection.admin', 'o-queue-list', NavigationArea::Administracion, group: NavigationGroup::Configuracion, order: -1,
@@ -237,7 +239,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 help: 'Cuánto suma cada cosa al puntaje con el que se ordena a los docentes que pueden tomar un grupo. Cada peso es un número de cero en adelante; con cero, esa cosa no cuenta.',
                 type: SettingType::DecimalTable, default: ['per_group_taught' => 1.0, 'preferente' => 3.0, 'apto' => 1.0, 'evaluation' => 2.0],
                 rules: ['min:0', 'max:100'],
-                fields: ['per_group_taught' => 'Por cada grupo impartido', 'preferente' => 'Perfil preferente en la materia', 'apto' => 'Perfil apto en la materia', 'evaluation' => 'Por punto de evaluación docente']),
+                fields: ['per_group_taught' => 'Por cada grupo impartido', 'preferente' => 'Experiencia académica preferente en la materia', 'apto' => 'Experiencia académica apta en la materia', 'evaluation' => 'Por punto de evaluación docente']),
             new SettingDefinition('staffing.history_terms', ...$module, label: 'Semestres del historial',
                 help: 'Cuántos semestres hacia atrás cuenta el ranking los grupos que el docente ya impartió.',
                 type: SettingType::Integer, default: RankingWindowSizes::DEFAULT_HISTORY, rules: ['min:1', 'max:20'], unit: 'semestres'),

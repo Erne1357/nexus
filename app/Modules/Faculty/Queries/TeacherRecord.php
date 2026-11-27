@@ -12,7 +12,7 @@ use Illuminate\Support\Collection;
 
 /**
  * Lo que muestra la ficha de un docente, de solo lectura (TeacherRecordQuery). Las tareas siguientes (disponibilidad,
- * perfil, historial y evaluaciones) agregan aquí lo suyo.
+ * experiencia académica, historial y evaluaciones) agregan aquí lo suyo.
  *
  * `positionStatus` da, por id de plaza, `vigente`, `por_empezar` o `vencida` hoy; `countsInTerm`, si la plaza cuenta
  * en las horas base del periodo (S1, supuesto por confirmar: vigente el primer día). `baseHours` es null sin periodo.

@@ -13,7 +13,7 @@ use App\Modules\Faculty\Events\TeachingHoursChanged;
 use App\Modules\Staffing\Actions\QueueRankings;
 
 /**
- * Cambió algo de un docente que entra en el ranking (plaza, horas externas, disponibilidad, perfil, adscripción, sus
+ * Cambió algo de un docente que entra en el ranking (plaza, horas externas, disponibilidad, experiencia académica, adscripción, sus
  * datos, su acceso o sus horas frente a grupo del CSV de la selección, que cambian la marca de HC-08): encola los alcances del docente (QueueRankings). Las horas externas y la disponibilidad son de
  * un periodo y solo cuentan en él; lo demás, en los periodos con carga abierta.
  */

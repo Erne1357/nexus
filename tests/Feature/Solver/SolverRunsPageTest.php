@@ -35,6 +35,9 @@ use Livewire\Livewire;
 | El jefe ve, lanza y acepta las corridas de su carga; el coordinador ve las suyas y las de departamento de las cargas que
 | tocan su carrera, nunca las de otro coordinador, y no acepta; Subdirección ve todas y no lanza; el docente no entra.
 | `?corrida=` abre esa corrida y la que corre se lee con `wire:poll`, solo mientras corre.
+| Desde la tarea 1.56 la pantalla no abre para el jefe ni para el JPD por ahora (MN-06, confirmado el 26 de noviembre de
+| 2026): no se les quitó el permiso, así que las pruebas que montan la página con Livewire::test como el jefe siguen probando
+| lo que la página le deja hacer con él.
 */
 
 beforeEach(function () {
@@ -91,10 +94,12 @@ function launchFromRunsPage(User $user)
 }
 
 describe('quién entra', function () {
-    it('el jefe, el coordinador y Subdirección entran; el docente no; el invitado va al login', function () {
-        foreach ([$this->jefe, $this->coordinador, User::factory()->withRole(Role::Subdireccion)->create()] as $user) {
+    it('el coordinador y Subdirección entran; el jefe no, por ahora (MN-06); el docente no; el invitado va al login', function () {
+        foreach ([$this->coordinador, User::factory()->withRole(Role::Subdireccion)->create()] as $user) {
             $this->actingAs($user)->get(route('solver.runs'))->assertOk()->assertSee('Corridas del motor');
         }
+
+        $this->actingAs($this->jefe)->get(route('solver.runs'))->assertForbidden();
 
         $this->actingAs(User::factory()->withRole(Role::Docente)->create())->get(route('solver.runs'))->assertForbidden();
         auth()->logout();
@@ -103,9 +108,10 @@ describe('quién entra', function () {
 
     it('un usuario sin permiso no abre una corrida por la URL ni llama sus métodos', function () {
         $run = SolverRun::factory()->done()->create(['term_id' => $this->term->id, 'department_id' => $this->sistemas->id, 'output' => null]);
-        $otherHead = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => departmentKey(70)])->create();
+        // Un coordinador de otra carrera: el jefe de otro departamento ya no abre la pantalla (MN-06).
+        $otherCoordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(70)])->create();
 
-        $this->actingAs($otherHead)->get(route('solver.runs', ['corrida' => $run->id]))->assertForbidden();
+        $this->actingAs($otherCoordinator)->get(route('solver.runs', ['corrida' => $run->id]))->assertForbidden();
 
         $component = runsPage($this->jefe);
         $this->actingAs(User::factory()->withRole(Role::Docente)->create());

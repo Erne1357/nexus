@@ -10,9 +10,9 @@ use Random\Randomizer;
  *
  * Cada plantilla trae nombre (de listas, nunca reales), RFC (sintético, con la forma de un RFC: 4 letras, fecha y homoclave),
  * adscripciones (`dept` es la posición del departamento en la lista del seeder; sin campus, porque el docente no es
- * de un campus, y sin repetir departamento), plazas, disponibilidad del periodo actual, horas fuera del ITCJ, perfil, historial y evaluaciones. Las materias
+ * de un campus, y sin repetir departamento), plazas, disponibilidad del periodo actual, horas fuera del ITCJ, experiencia académica, historial y evaluaciones. Las materias
  * van por su posición en la lista de materias del departamento (`$subjectCounts`); un departamento sin materias no
- * da perfil ni historial.
+ * da experiencia académica ni historial.
  *
  * Los casos raros no dependen del azar sino del consecutivo, para que aparezcan aun con pocos docentes: cada 20
  * docentes se repiten los 20 escenarios de plazas (los cinco tipos, dos o tres plazas completas, vencidas, futuras

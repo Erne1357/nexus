@@ -16,9 +16,10 @@ use App\Modules\Core\Models\User;
 it('una persona con dos puestos cambia de perfil y ve menú e Inicio distintos', function () {
     $c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
-    // Carga en curso (MN-04): sin ella, nadie más que el admin ve la bandeja ni la propuesta en el menú.
-    AcademicLoad::factory()->for($term)->create();
+    // Carga en curso (MN-04): sin ella, nadie más que el admin ve la bandeja ni la propuesta en el menú. Es la de Sistemas,
+    // en borrador: el jefe ve la bandeja por la etapa de su carga (MN-06).
     $department = Department::factory()->create(['name' => 'Sistemas y Computación']);
+    AcademicLoad::factory()->for($term)->create(['department_id' => $department->id]);
     $career = Career::factory()->create(['code' => 'ISC', 'name' => 'Ingeniería en Sistemas Computacionales']);
 
     User::factory()

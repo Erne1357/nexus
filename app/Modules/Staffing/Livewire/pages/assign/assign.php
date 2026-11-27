@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -350,7 +351,7 @@ new #[Title('Asignación docente')] class extends Component
     {
         $group = $this->assignableGroup($groupId, $query);
         $teacher = $query->teacherOrFail($teacherId);
-        $from = $from === 'tarjetas' ? 'tarjetas' : 'ranking';
+        $from = in_array($from, ['tarjetas', 'busqueda'], true) ? $from : 'ranking';
 
         $this->pending = $this->failure = null;
         $this->reason = '';
@@ -366,6 +367,16 @@ new #[Title('Asignación docente')] class extends Component
 
         $this->pending = ['group' => $group->id, 'teacher' => $teacher->id, 'name' => $teacher->name, 'position' => $position, 'size' => $size, 'from' => $from];
         $this->dispatch('assign-reason-opened');
+    }
+
+    /**
+     * Un docente elegido en «Buscar otro docente» (HC-21): se asigna como a cualquiera, y con el motivo de HC-16 si no
+     * es el primer lugar o no está en el ranking. AssignTeacher no revisa su departamento.
+     */
+    #[On('teacher-picked')]
+    public function pickSearched(string $groupId, string $teacherId, AssignmentBoardQuery $query, GroupRankingQuery $rankings, AssignTeacher $action): void
+    {
+        $this->assign($groupId, $teacherId, $query, $rankings, $action, 'busqueda');
     }
 
     /**

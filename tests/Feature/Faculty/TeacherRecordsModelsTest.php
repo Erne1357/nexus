@@ -15,7 +15,7 @@ use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 
-it('un docente tiene disponibilidad, horas externas, historial, perfil y evaluaciones', function () {
+it('un docente tiene disponibilidad, horas externas, historial, experiencia académica y evaluaciones', function () {
     $teacher = Teacher::factory()->create();
     TeacherAvailability::factory()->for($teacher)->create();
     TeacherExternalLoad::factory()->for($teacher)->create();
@@ -59,7 +59,7 @@ it('el historial relaciona materia y campus y tiene origen', function () {
         ->and(TeacherSubjectHistory::factory()->create()->source)->toBe(HistorySource::Import);
 });
 
-it('el perfil guarda quién lo declaró y su nivel', function () {
+it('la experiencia académica guarda quién lo declaró y su nivel', function () {
     $user = User::factory()->create();
     $profile = TeacherSubjectQualification::factory()->preferente()->create(['qualified_by' => $user->id]);
 

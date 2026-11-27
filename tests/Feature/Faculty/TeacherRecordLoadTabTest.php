@@ -88,3 +88,59 @@ it('quien no puede ver la ficha no ve la pestaña Carga', function () {
     Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id])
         ->assertSeeHtml('data-testid="tab-carga"');
 });
+
+/*
+| Carga en su departamento y en los demás (tarea 1.59, B3): con grupos en varios departamentos (el jefe pudo asignarlo
+| sin pedir prestado, 1.58), la pestaña parte la semana por departamento y colorea la cuadrícula.
+*/
+
+function loadTabGroupIn(Department $department, string $subjectCode, string $name, int $day, string $from, string $to): void
+{
+    $subject = Subject::factory()->create(['department_id' => $department->id, 'code' => $subjectCode, 'name' => $name, 'theory_hours' => 2, 'practice_hours' => 0]);
+    $group = Group::factory()->create(['term_id' => test()->next->id, 'campus_id' => test()->campus->id, 'subject_id' => $subject->id, 'department_id' => $department->id, 'code' => 'A', 'teacher_id' => test()->teacher->id]);
+    GroupSession::factory()->on($day, $from, $to)->create(['group_id' => $group->id, 'room_id' => test()->room->id]);
+}
+
+it('la ficha parte la carga en su departamento y en otros departamentos, con el jefe de cada uno y la leyenda', function () {
+    $cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
+    $head = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $cb->id])->create(['name' => 'Héctor Olivas']);
+    loadTabGroupIn($this->dept, 'AED-2000', 'Bases de Datos', 1, '10:00', '12:00');
+    loadTabGroupIn($cb, 'ACF-0901', 'Cálculo Diferencial', 2, '08:00', '10:00');
+
+    Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertSeeHtml('data-testid="load-departments-next"')
+        ->assertSee('En Sistemas y Computación')
+        ->assertSee('Su departamento')
+        ->assertSee('En otros departamentos · 2 h')
+        ->assertSee('Ciencias Básicas')
+        ->assertSee('Otro departamento')
+        ->assertSee('Jefe: Héctor Olivas')
+        ->assertSee('Cálculo Diferencial')
+        ->assertSeeHtml('data-testid="load-legend-next"')
+        ->assertSee('h de base 40');
+});
+
+it('un departamento sin jefe vigente lo dice', function () {
+    $cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
+    loadTabGroupIn($cb, 'ACF-0901', 'Cálculo Diferencial', 2, '08:00', '10:00');
+
+    Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertSee('Sin jefe vigente');
+});
+
+it('la carga del SII sale sin partir por departamento', function () {
+    loadTabSiiGroup();
+
+    Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
+        ->assertDontSeeHtml('data-testid="load-departments-current"')
+        ->assertSeeHtml('data-testid="week-grid"');
+});
+
+it('un jefe de otro departamento sigue sin abrir la ficha de un docente fuera de su alcance', function () {
+    $cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
+    loadTabGroupIn($cb, 'ACF-0901', 'Cálculo Diferencial', 2, '08:00', '10:00');
+    $other = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $cb->id])->create();
+    $outsider = Teacher::factory()->adscribedTo(Department::factory()->create(['code' => 'II']))->create();
+
+    $this->actingAs($other)->get(route('faculty.teachers.show', $outsider->id))->assertForbidden();
+});

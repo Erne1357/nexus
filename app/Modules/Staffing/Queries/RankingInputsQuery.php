@@ -22,7 +22,7 @@ use Illuminate\Support\Collection;
  * (desempate)»), en un número fijo de consultas por lotes, sin importar cuántos grupos ni docentes sean.
  *
  * - Candidatos de un grupo: docentes activos y no borrados con adscripción vigente al departamento del grupo, y los
- *   activos de otros departamentos con perfil `preferente` en la materia (`fromOtherDepartment`).
+ *   activos de otros departamentos con experiencia académica `preferente` en la materia (`fromOtherDepartment`).
  * - Historial: filas de `teacher_subject_history` de la materia dentro de `RankingWindow::semestersBefore` con el
  *   tamaño de `staffing.history_terms`; de cualquier campus y origen (supuesto por confirmar, ya documentado).
  * - Evaluación: promedio simple de todas las evaluaciones de la ventana de `staffing.evaluation_terms` (supuesto
