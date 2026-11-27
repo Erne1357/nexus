@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Http\Controllers\AcceptPrivacyNoticePage;
 use App\Modules\Core\Http\Controllers\AccessInvitationPage;
 use App\Modules\Core\Http\Controllers\ChangePasswordPage;
 use App\Modules\Core\Http\Controllers\ForgotPasswordPage;
@@ -56,6 +57,9 @@ Route::middleware('auth')->group(function () {
     // —saludo, bloque del puesto, calendario y tarjetas— queda como «Resumen» en Mi espacio.
     Route::livewire('/resumen', 'core::pages.home')->name('core.summary');
     Route::get('/user/password', ChangePasswordPage::class)->name('user-password.edit');
+    // AC-22: la pantalla «Aviso de privacidad» del alumno que no ha aceptado la versión vigente (EnsurePrivacyNoticeAccepted).
+    Route::get('/aviso-de-privacidad/aceptar', [AcceptPrivacyNoticePage::class, 'show'])->name('privacy-notice.accept');
+    Route::post('/aviso-de-privacidad/aceptar', [AcceptPrivacyNoticePage::class, 'accept'])->name('privacy-notice.accept.store');
     Route::livewire('/campus', 'core::pages.campuses')->name('core.campuses');
     Route::livewire('/modalidades', 'core::pages.modalities')->name('core.modalities');
     Route::livewire('/notifications', 'core::pages.notifications')->name('core.notifications');

@@ -9,12 +9,19 @@ use Illuminate\Support\Carbon;
  * integral de 2026, copiados tal cual en `core::privacy-notice.simplified` y `core::privacy-notice.integral`. Se llega a
  * ellos desde cdjuarez.tecnm.mx/alumnos › «Protección de Datos Personales», que lleva a la página del TecNM con los PDF.
  *
- * Cuando el TecNM publique otro aviso, se copian los textos nuevos y cambian estas constantes en el mismo PR.
+ * Cuando el TecNM publique otro aviso, se copian los textos nuevos y cambian estas constantes en el mismo PR: con otra
+ * `VERSION`, cada alumno vuelve a aceptarlo (AC-22).
  */
 final class PrivacyNotice
 {
     /** La fecha de realización del aviso vigente («FECHA DE REALIZACIÓN: 03/MARZO/2026.»), en ISO. */
     public const string DATE = '2026-03-03';
+
+    /**
+     * La versión vigente del aviso, la que el alumno acepta (AC-22) y se guarda en `users.privacy_notice_version`: su
+     * fecha de realización. Vive aquí y no en una migración.
+     */
+    public const string VERSION = self::DATE;
 
     /** La sección de la página del ITCJ para alumnos que lleva al aviso. */
     public const string SOURCE_URL = 'https://cdjuarez.tecnm.mx/alumnos';

@@ -21,8 +21,8 @@ use Livewire\Component;
 /**
  * «Mis datos» del alumno (AC-15, supuesto por confirmar): mientras no haya pantallas de alumno (R3), su portada mínima
  * con sus datos escolares (número de control, carrera, plan, campus, semestre y estatus) y su acceso: su usuario, su
- * correo institucional y si sigue con el NIP del SII, con el enlace para cambiar su contraseña, que no es obligatorio
- * (AC-12). Tiene cuatro pestañas, con `?tab=`: «Mis datos» (por omisión), «Retícula» y «Kárdex» (solo lectura, con las
+ * correo institucional y si sigue con el NIP del SII, con el enlace para cambiar su contraseña (cambiar el NIP es obligatorio,
+ * AC-12). Tiene cuatro pestañas, con `?tab=`: «Mis datos» (por omisión), «Retícula» y «Kárdex» (solo lectura, con las
  * cifras arriba de ambas; tarea 1.42) y «Credencial» (su credencial de alumno). `?tab=perfil`, de los enlaces viejos, abre «Retícula». Solo lectura y solo de lo suyo: el permiso personal `students.my_record.view`, que solo tiene el alumno.
  */
 new #[Title('Mis datos')] class extends Component

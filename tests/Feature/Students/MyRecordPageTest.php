@@ -55,7 +55,7 @@ it('AC-15: al cambiar su NIP la portada ya no dice que entra con él', function 
 it('AC-15: «Mis datos» aparece en el menú del alumno, que no ve el calendario del periodo en Inicio', function () {
     Term::factory()->current()->create();
 
-    $this->actingAs($this->user)->get(route('core.summary'))
+    $this->actingAs(settledStudentUser($this->user))->get(route('core.summary'))
         ->assertOk()
         ->assertSee('Mis datos')
         ->assertSee(route('students.my-record'))
@@ -75,6 +75,8 @@ it('AC-15: nadie más entra a «Mis datos» ni lo ve en el menú: ni el personal
 ]);
 
 it('AC-15: el alumno no entra a la lista de alumnos ni a la ficha de otro alumno', function () {
+    settledStudentUser($this->user);
+
     $this->actingAs($this->user)->get(route('students.index'))->assertForbidden();
     $this->actingAs($this->user)->get(route('students.show', $this->other))->assertForbidden();
 });

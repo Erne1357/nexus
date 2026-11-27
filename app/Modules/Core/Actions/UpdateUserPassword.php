@@ -4,6 +4,7 @@ namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Rules\AccessRequirements;
 use App\Modules\Core\Support\DefaultPassword;
 use App\Modules\Core\Support\SiiNip;
 use Closure;
@@ -25,8 +26,12 @@ use Laravel\Fortify\Contracts\UpdatesUserPasswords;
  * y conforme a Password::defaults() (FortifyServiceProvider de Core). Rechaza también la contraseña
  * por defecto (DefaultPassword) como contraseña nueva. La contraseña actual de un alumno que sigue con el NIP del SII
  * acepta las dos formas de un NIP corto, como el login (AC-11). La nueva queda como **propia** (`password_origin =
- * user`, AC-12): una nueva corrida de la migración del SII ya no la pisa. Rota el remember token, así que ninguna cookie de "recordarme" anterior vuelve a servir; las demás sesiones abiertas
- * las cierra AuthenticateSession en su siguiente petición. La bitácora registra el cambio, nunca
+ * user`, AC-12): una nueva corrida de la migración del SII ya no la pisa. El alumno que no ha aceptado el aviso de
+ * privacidad vigente lo acepta aquí (AC-22): sin la casilla `privacy_notice` no cambia nada, y con ella
+ * AcceptPrivacyNotice lo guarda en la misma transacción, antes que la contraseña, para que el último guardado del
+ * usuario sea el de la contraseña (PasswordUpdateResponse lo lee). Rota el remember token, así que ninguna cookie de
+ * "recordarme" anterior vuelve a servir; las demás sesiones abiertas las cierra AuthenticateSession en su siguiente
+ * petición. La bitácora registra el cambio, nunca
  * la contraseña.
  */
 final class UpdateUserPassword implements UpdatesUserPasswords
@@ -40,12 +45,22 @@ final class UpdateUserPassword implements UpdatesUserPasswords
      */
     public function update(User $user, array $input): void
     {
+        // Fortify la registra como singleton: lo que depende de la petición (Actor) se pide aquí, no en el constructor (Octane).
+        $acceptsNotice = app(AccessRequirements::class)->mustAcceptPrivacyNotice($user);
+
         $validated = Validator::make($input, [
             'current_password' => ['required', 'string', $this->currentPassword($user)],
             'password' => ['required', 'string', Password::defaults(), 'confirmed', 'different:current_password', $this->defaultPassword->rejectionRule()],
+            ...($acceptsNotice ? ['privacy_notice' => ['accepted']] : []),
+        ], [
+            'privacy_notice.accepted' => 'Para seguir, marca que leíste el aviso de privacidad y aceptas el tratamiento de tus datos personales.',
         ])->validate();
 
-        DB::transaction(function () use ($user, $validated): void {
+        DB::transaction(function () use ($user, $validated, $acceptsNotice): void {
+            if ($acceptsNotice) {
+                app(AcceptPrivacyNotice::class)->handle($user);
+            }
+
             $user->forceFill([
                 'password' => $validated['password'],
                 'must_change_password' => false,

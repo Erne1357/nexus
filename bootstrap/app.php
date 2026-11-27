@@ -3,6 +3,7 @@
 use App\Modules\Core\Http\Middleware\EnsureAcademicLoadIsVisible;
 use App\Modules\Core\Http\Middleware\EnsureAccessIsEnabled;
 use App\Modules\Core\Http\Middleware\EnsurePasswordIsChanged;
+use App\Modules\Core\Http\Middleware\EnsurePrivacyNoticeAccepted;
 use App\Modules\Core\Http\Middleware\EnsureUserIsActive;
 use App\Modules\Core\Http\Middleware\NormalizeSidebarState;
 use App\Modules\Core\Http\Middleware\SetSecurityHeaders;
@@ -26,7 +27,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(SetSecurityHeaders::class);
 
         // Para toda ruta web (Core): cierra las demás sesiones cuando cambia la contraseña, la de
-        // un usuario desactivado y la de quien se quedó sin perfil habilitado (AC-21), obliga a cambiar la contraseña en el primer acceso, deja el
+        // un usuario desactivado y la de quien se quedó sin perfil habilitado (AC-21), obliga a cambiar la contraseña en el primer acceso
+        // y el NIP del SII (AC-12), pide al alumno aceptar el aviso de privacidad (AC-22), deja el
         // estado de la barra lateral de MaryUI en 'true' o 'false' y cierra las rutas de la carga
         // académica mientras el admin la tiene oculta (MN-05).
         $middleware->web(append: [
@@ -34,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
             EnsureUserIsActive::class,
             EnsureAccessIsEnabled::class,
             EnsurePasswordIsChanged::class,
+            EnsurePrivacyNoticeAccepted::class,
             NormalizeSidebarState::class,
             EnsureAcademicLoadIsVisible::class,
         ]);
