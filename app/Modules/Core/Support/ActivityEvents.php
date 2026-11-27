@@ -57,6 +57,8 @@ final class ActivityEvents
         'deactivated' => 'Baja de la cuenta',
         'reactivated' => 'Reactivación de la cuenta',
         'access-invited' => 'Invitación de acceso',
+        'position-mail-retried' => 'Correo de puesto reintentado',
+        'position-mail-discarded' => 'Correo de puesto descartado',
         'access-invitation-cancelled' => 'Invitación sin efecto',
         'access-accepted' => 'Acceso activado',
         'access-revoked' => 'Acceso retirado',

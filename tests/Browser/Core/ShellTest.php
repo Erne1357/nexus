@@ -129,7 +129,7 @@ it('con el menú abierto, ↓ y ↑ recorren las entradas que quedan y Enter en 
         ->keys('a[data-label="Validación de catálogos"]', 'ArrowUp')
         ->assertScript('document.activeElement.dataset.label', 'Resumen')
         ->keys('a[data-label="Resumen"]', 'ArrowUp')
-        ->assertScript('document.activeElement.dataset.label', 'Correos y colas');
+        ->assertScript('document.activeElement.dataset.label', 'Buzones de puesto');
 
     $page->click('#nexus-menu-search')
         ->type('#nexus-menu-search', 'carga por')

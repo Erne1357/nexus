@@ -280,6 +280,7 @@ describe('R-V2-4: nada que escriba', function () {
             'core.login_notice.view',
             'core.login_shortcut.view',
             'core.mail.view',
+            'core.mail.view_mailboxes',
             'core.modality.view',
             'core.modality.view_inactive',
             'core.navigation.view_unavailable',

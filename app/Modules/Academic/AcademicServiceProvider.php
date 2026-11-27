@@ -4,6 +4,7 @@ namespace App\Modules\Academic;
 
 use App\Modules\Academic\Authorization\AcademicScopeLabels;
 use App\Modules\Academic\Console\MarkCurrentSpecialtiesCommand;
+use App\Modules\Academic\Console\PositionMailboxesFromDepartmentsCommand;
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\Academic\Enums\AcademicPermission;
@@ -40,6 +41,15 @@ final class AcademicServiceProvider extends ModuleServiceProvider
         $this->app->bind(ScopeLabels::class, AcademicScopeLabels::class);
     }
 
+    public function boot(): void
+    {
+        parent::boot();
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([MarkCurrentSpecialtiesCommand::class, PositionMailboxesFromDepartmentsCommand::class]);
+        }
+    }
+
     public function permissions(): array
     {
         return [AcademicPermission::class];
@@ -70,15 +80,6 @@ final class AcademicServiceProvider extends ModuleServiceProvider
     public function adminOnly(): array
     {
         return [AcademicPermission::CareerDelete, AcademicPermission::DepartmentDelete];
-    }
-
-    public function boot(): void
-    {
-        parent::boot();
-
-        if ($this->app->runningInConsole()) {
-            $this->commands([MarkCurrentSpecialtiesCommand::class]);
-        }
     }
 
     /**
