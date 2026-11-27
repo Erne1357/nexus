@@ -25,19 +25,21 @@ final class ExtraHoursStatusQuery
 
     /**
      * @param  list<string>  $teacherIds
+     * @param  array<string, int|null>|null  $extraByTeacher  las horas extra ya leídas de `teacher_term_loads` (null: se leen aquí)
+     * @param  array<string, string|null>|null  $userIds  el usuario de cada docente ya leído (null: se lee aquí)
      * @return array<string, ExtraHoursStatus> por id de docente; todos los pedidos aparecen
      */
-    public function forTerm(Term $term, array $teacherIds): array
+    public function forTerm(Term $term, array $teacherIds, ?array $extraByTeacher = null, ?array $userIds = null): array
     {
         if ($teacherIds === []) {
             return [];
         }
 
-        $extra = TeacherTermLoad::query()->where('term_id', $term->getKey())->whereIn('teacher_id', $teacherIds)->pluck('extra_hours', 'teacher_id');
+        $extra = $extraByTeacher ?? TeacherTermLoad::query()->where('term_id', $term->getKey())->whereIn('teacher_id', $teacherIds)->pluck('extra_hours', 'teacher_id')->all();
         $decisions = TeacherExtraHoursDecision::query()->where('term_id', $term->getKey())->whereIn('teacher_id', $teacherIds)->get()->keyBy('teacher_id');
         $withExtra = array_values(array_filter($teacherIds, fn (string $id): bool => (int) ($extra[$id] ?? 0) > 0));
-        $userIds = Teacher::query()->whereIn('id', $withExtra)->whereNotNull('user_id')->pluck('user_id', 'id');
-        $restricted = array_flip($this->noHonorarios->among($userIds->values()->all(), now()));
+        $userIds ??= Teacher::query()->whereIn('id', $withExtra)->whereNotNull('user_id')->pluck('user_id', 'id')->all();
+        $restricted = array_flip($this->noHonorarios->among(array_values(array_filter(array_intersect_key($userIds, array_flip($withExtra)))), now()));
         $statuses = [];
 
         foreach ($teacherIds as $id) {
