@@ -14,7 +14,7 @@ it('cada marca tiene el nombre, el tono y el icono de la asignación', function 
         ->and($mark->icon())->toBe($icon);
 })->with([
     'choque (HC-01)' => [RankingMark::Clash, 'Choque', StatusTone::Error, 'o-x-circle'],
-    'pasa su banda (HC-08)' => [RankingMark::NoHours, 'Pasa su banda', StatusTone::Warning, 'o-clock'],
+    'con horas extra (HC-08)' => [RankingMark::NoHours, 'Con horas extra', StatusTone::Warning, 'o-clock'],
     'no disponible (HC-09)' => [RankingMark::Unavailable, 'No disponible', StatusTone::Draft, 'o-no-symbol'],
 ]);
 

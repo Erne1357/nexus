@@ -22,7 +22,7 @@ enum RankingMark: string
     {
         return match ($this) {
             self::Clash => 'Choque',
-            self::NoHours => 'Pasa su banda',
+            self::NoHours => 'Con horas extra',
             self::Unavailable => 'No disponible',
             self::NoRoom => 'No le caben',
         };

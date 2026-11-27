@@ -52,3 +52,7 @@ La categoría de cada plaza se guarda en `teacher_positions.category` (la import
 - Varias plazas: se suman las horas de cada una (tomadas por familia y jornada).
 - Sin plazas en Nexus, o con plazas que dan 0 h (solo apoyo u honorarios), el objetivo sale de las horas del CSV de la selección: 40 → 22, 30 → 16, 20 → 12 y cualquier otro valor n → n. **(supuesto por confirmar)**
 - El escalón de SEL-06 sigue saliendo de las horas del CSV: no cambia.
+
+## Horas extra y honorarios (tarea 1.81, PL-04)
+
+Lo que pasa de las horas frente a grupo más 2 (art. 147) son **horas extra**. Se pagan como honorarios solo si el jefe de departamento las autoriza en Nexus (decisión del usuario, 27 de noviembre de 2026); sin autorización el docente firma el oficio de conformidad y no se le pagan. Las horas de la plaza más las extra no pueden pasar de **44 h** (TC de 40 h con hasta 4 h de honorarios), parámetro `staffing.max_hours_with_honorarios`; la plaza administrativa sigue con 42 h (PL-03). Quien tiene un nombramiento de jefe de departamento, subdirección o dirección no puede tener honorarios. El oficio de conformidad todavía no se construye. Reglas: PL-04 y HC-22 en `reglas-de-negocio.md`.
