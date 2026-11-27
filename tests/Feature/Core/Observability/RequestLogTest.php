@@ -2,10 +2,13 @@
 
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Observability\CanonicalLog;
+use App\Modules\Core\Observability\OperationMetrics;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
+use Laravel\Octane\CurrentApplication;
 
 /*
 | Fase 2b: toda petición lleva un X-Request-Id y deja una sola línea `request.done` con una lista blanca de claves,
@@ -50,6 +53,7 @@ it('genera uno nuevo si no viene o no es válido', function (string $sent) {
     expect(doneLines($calls)[0]['context']['request_id'])->toBe($id);
 })->with([
     'salto de línea' => ["a\nb"],
+    'salto de línea al final' => ["0193f0c2-aaaa\n"],
     '1 KB' => [str_repeat('x', 1024)],
     'sin cabecera' => [''],
 ]);
@@ -122,4 +126,41 @@ it('registra como error una respuesta 5xx', function () {
 
     $line = doneLines($calls)[0];
     expect($line['level'])->toBe('error')->and($line['context']['status'])->toBe(500);
+});
+
+it('mide también la llamada saliente que falla', function () {
+    Http::fake(fn () => throw new ConnectionException('timeout'));
+    Route::get('/_obs/http-fail', function () {
+        try {
+            Http::get('https://solver.test/health');
+        } catch (ConnectionException) {
+        }
+
+        return 'ok';
+    });
+    $calls = captureLog();
+
+    $this->get('/_obs/http-fail');
+
+    expect(doneLines($calls)[0]['context']['external_ms'])->toBeGreaterThan(0);
+});
+
+it('acumula en la app de la petición y no en la base del worker (Octane)', function () {
+    $base = app();
+    $sandbox = clone $base;
+    CurrentApplication::set($sandbox);
+
+    try {
+        $sandbox->make(OperationMetrics::class)->start();
+        DB::select('select 1');
+        Http::fake();
+        Http::get('https://solver.test/health');
+
+        $metrics = $sandbox->make(OperationMetrics::class);
+        expect($metrics->dbQueries())->toBe(1)
+            ->and($metrics->externalMs())->toBeGreaterThan(0)
+            ->and($base->make(OperationMetrics::class)->dbQueries())->toBe(0);
+    } finally {
+        CurrentApplication::set($base);
+    }
 });

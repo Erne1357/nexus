@@ -22,7 +22,7 @@ final class ObserveRequest
     public function handle(Request $request, Closure $next): Response
     {
         $sent = $request->headers->get('X-Request-Id');
-        $id = is_string($sent) && preg_match('/^[A-Za-z0-9-]{8,64}$/', $sent) === 1 ? $sent : (string) Str::uuid7();
+        $id = is_string($sent) && preg_match('/^[A-Za-z0-9-]{8,64}\z/', $sent) === 1 ? $sent : (string) Str::uuid7();
 
         Context::add('request_id', $id);
         // Que nada arrastre el módulo ni el componente de la petición anterior; los pone la etiquetadora de cada petición.

@@ -93,6 +93,7 @@ use App\Modules\Core\Support\QueueJobScope;
 use App\Modules\Core\View\Components\Drawer;
 use App\Modules\Core\View\DrawerIds;
 use Closure;
+use GuzzleHttp\Promise\Create;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Foundation\Application;
@@ -255,11 +256,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $schedule->job(new ReleaseHeldPositionMailsJob)->everyFifteenMinutes()->name('release-held-position-mails');
         });
 
-        // Suma al acumulador cada consulta y cada llamada HTTP saliente. Se resuelve en cada llamada y no se captura: con
-        // Octane el closure vive en el worker y el acumulador es de la petición.
-        DB::listen(fn (QueryExecuted $query) => $this->app->make(OperationMetrics::class)->addQuery($query->time));
+        // Suma al acumulador cada consulta y cada llamada HTTP saliente. Se resuelve con app() en cada llamada
+        // (Container::getInstance(), que Octane cambia por petición), nunca con $this->app: el provider guarda la app
+        // base del worker y el acumulador de la petición vive en su sandbox.
+        DB::listen(fn (QueryExecuted $query) => app(OperationMetrics::class)->addQuery($query->time));
         Http::globalMiddleware(fn (callable $handler): Closure => function ($request, $options) use ($handler) {
-            $metrics = $this->app->make(OperationMetrics::class);
+            $metrics = app(OperationMetrics::class);
             $startedAt = hrtime(true);
             $add = fn () => $metrics->addExternal((hrtime(true) - $startedAt) / 1e6);
 
@@ -273,7 +275,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 function ($reason) use ($add) {
                     $add();
 
-                    throw $reason;
+                    return Create::rejectionFor($reason);
                 },
             );
         });
