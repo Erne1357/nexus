@@ -136,7 +136,7 @@ it('el historial tiene 8 periodos del SII, una fila por grupo, y evaluaciones de
     expect($teachers->contains(fn (array $teacher) => collect($teacher['history'])->groupBy(fn (array $row) => "{$row['term']}|{$row['subject']}")->contains(fn ($rows) => $rows->count() > 1)))->toBeTrue();
 });
 
-it('no da perfil ni historial de materias de un departamento sin materias', function () {
+it('no da experiencia académica ni historial de materias de un departamento sin materias', function () {
     foreach (roster(60) as $teacher) {
         if ($teacher['adscriptions'][0]['dept'] === 2) {
             expect($teacher['profile'])->toBe([])->and($teacher['history'])->toBe([]);

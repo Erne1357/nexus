@@ -100,7 +100,7 @@ class Teacher extends Model
     }
 
     /**
-     * El perfil: las materias que el jefe declara que puede dar.
+     * La experiencia académica: las materias que el jefe declara que puede dar.
      *
      * @return HasMany<TeacherSubjectQualification, $this>
      */

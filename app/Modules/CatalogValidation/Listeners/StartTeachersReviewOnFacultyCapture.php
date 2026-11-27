@@ -18,7 +18,7 @@ use App\Modules\Faculty\Events\TeacherUpdated;
 use Illuminate\Support\Collection;
 
 /**
- * La primera captura del jefe de departamento sobre un docente de su departamento (perfil, disponibilidad, horas
+ * La primera captura del jefe de departamento sobre un docente de su departamento (experiencia académica, disponibilidad, horas
  * fuera del ITCJ, ficha, adscripción o plaza) pasa la revisión de docentes de pendiente a en revisión
  * (StartReview), como su primera corrección (CV-S4, extensión por confirmar).
  *

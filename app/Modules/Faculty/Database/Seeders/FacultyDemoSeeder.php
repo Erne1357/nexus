@@ -24,7 +24,7 @@ use RuntimeException;
 /**
  * Docentes demo y masivos para probar las pantallas del carril de Faculty: por cada campus de `$teachersPerCampus`,
  * ese número de docentes ficticios (TeacherRosterGenerator) con sus adscripciones, plazas, disponibilidad del
- * periodo actual, horas fuera del ITCJ, perfil, historial de 8 periodos y evaluaciones. Hay docentes de cada
+ * periodo actual, horas fuera del ITCJ, experiencia académica, historial de 8 periodos y evaluaciones. Hay docentes de cada
  * departamento que da materias en los planes del campus, de los cinco tipos de plaza (varias a la vez, vencidas y
  * futuras), sin plaza, con dos o tres departamentos, inactivos, borrados, sin correo ni grado y con nombres muy
  * largos. La adscripción es solo al departamento: el campus del docente es solo el de su RFC y su

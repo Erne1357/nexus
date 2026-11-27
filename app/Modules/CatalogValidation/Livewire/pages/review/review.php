@@ -1245,7 +1245,7 @@ new #[Title('Validación de catálogos')] class extends Component
             'claimFilters' => $isRooms && $this->showClaim ? app(RoomQuery::class)->unownedFilterOptions() : ['campuses' => [], 'buildings' => []],
             'roomFilters' => $isRooms ? $records->roomFilterOptions($review) : ['campuses' => [], 'buildings' => []],
             'departmentFilters' => $records->departmentFilterOptions($review),
-            'missingFilters' => [['id' => 'disponibilidad', 'name' => 'Sin disponibilidad'], ['id' => 'perfil', 'name' => 'Sin perfil'], ['id' => 'correo', 'name' => 'Sin correo institucional']],
+            'missingFilters' => [['id' => 'disponibilidad', 'name' => 'Sin disponibilidad'], ['id' => 'perfil', 'name' => 'Sin experiencia académica'], ['id' => 'correo', 'name' => 'Sin correo institucional']],
             'flagMap' => $records->openFlags($review, $ids),
             'editing' => $editing,
             'candidates' => $this->showAddTeacher && $review->catalog === Catalog::Teachers ? $this->candidates($review, $records) : null,

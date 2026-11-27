@@ -78,7 +78,7 @@
                             <td class="pe-0 text-right text-neutral">—</td>
                         </tr>
                         <tr><td class="ps-0">Veces impartida</td><td class="text-right font-mono">{{ $b['history_count'] }}</td><td class="pe-0 text-right font-mono">{{ number_format($b['history_points'], 1) }}</td></tr>
-                        <tr><td class="ps-0">Perfil en la materia</td><td class="text-right">{{ $b['qualification'] ?? 'Sin perfil' }}</td><td class="pe-0 text-right font-mono">{{ number_format($b['qualification_points'], 1) }}</td></tr>
+                        <tr><td class="ps-0">Experiencia académica en la materia</td><td class="text-right">{{ $b['qualification'] ?? 'Sin experiencia académica' }}</td><td class="pe-0 text-right font-mono">{{ number_format($b['qualification_points'], 1) }}</td></tr>
                         <tr><td class="ps-0">Evaluación docente</td><td @class(['text-right', 'font-mono' => $b['evaluation'] !== null, 'text-neutral' => $b['evaluation'] === null])>{{ $b['evaluation'] === null ? 'sin evaluación' : number_format($b['evaluation'], 1) }}</td><td class="pe-0 text-right font-mono">{{ number_format($b['evaluation_points'], 1) }}</td></tr>
                         <tr class="font-bold"><td class="ps-0">Puntaje</td><td></td><td class="pe-0 text-right font-mono">{{ number_format($b['score'], 1) }}</td></tr>
                     </tbody>

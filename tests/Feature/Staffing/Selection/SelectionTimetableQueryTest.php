@@ -9,7 +9,7 @@ use Tests\Support\Staffing\SelectionWorld;
 
 /*
 | SelectionTimetableQuery (tarea 1.33, diseño 6.4): el horario de la selección por día y hora, con lo suyo, sus choques
-| (HC-01), su perfil o historial y su turno; strips() lo junta en un renglón por hora (maqueta A). Nombres ficticios.
+| (HC-01), su experiencia académica o historial y su turno; strips() lo junta en un renglón por hora (maqueta A). Nombres ficticios.
 */
 
 beforeEach(function () {
@@ -52,7 +52,7 @@ it('marca lo suyo, sus horas y lo que le choca con lo que ya tiene (HC-01)', fun
         ->and(array_column($timetable['my_groups'], 'group_code'))->toBe(['A']);
 });
 
-it('la materia está en su perfil si la tiene calificada o en su historial', function () {
+it('la materia está en su experiencia académica si la tiene calificada o en su historial', function () {
     $qualified = $this->world->group('Q', [[1, '09:00', '10:00']]);
     $taught = $this->world->group('H', [[2, '09:00', '10:00']]);
     $other = $this->world->group('O', [[3, '09:00', '10:00']]);

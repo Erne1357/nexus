@@ -166,7 +166,7 @@ La migración repetible del SII (`imports:migrate-sii`, tarea 1.16) pasa la expo
 | `Core` | Auth (Fortify, username), usuarios, roles y alcances, campus y modalidad, periodos y etapas, parámetros, bitácora, notificaciones, layout y navegación | R1 |
 | `Academic` | Departamentos, jefes, carreras, planes de estudio, materias, seriación, especialidades | R1 |
 | `Facilities` | Edificios, salones, bloqueos, salones por defecto | R1 |
-| `Faculty` | Docentes, plazas, disponibilidad, horas externas, historial, perfil, evaluaciones | R1 |
+| `Faculty` | Docentes, plazas, disponibilidad, horas externas, historial, experiencia académica, evaluaciones | R1 |
 | `Students` | Alumnos, kardex, avance reticular | R1 |
 | `Communication` | Pantallas del Departamento de Comunicación y Difusión (su personal, avisos y atajos, fotos, solicitudes de credencial) y su área del menú; los datos viven en Core y Students (CO-01) | R1 |
 | `Imports` | Importador por archivos: plantillas, mapeos, staging, validación, aplicación | R1 |
