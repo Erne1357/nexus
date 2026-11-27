@@ -70,14 +70,14 @@ final class QuotaRules
     }
 
     /**
-     * Los cupos se editan con la misma regla que las sesiones (LoadEditability): grupo sin cancelar y carga propuesta,
+     * Los cupos se editan con la misma regla que las sesiones (LoadEditability, con el borrador incluido, 1.62): grupo sin cancelar y carga en borrador, propuesta,
      * en asignación docente o en ajuste; sin carga tampoco (supuesto por confirmar).
      *
      * @throws ValidationException
      */
     public function ensureEditable(Group $group): void
     {
-        $this->editability->ensure($group, 'cupos', 'quotas');
+        $this->editability->ensure($group, 'cupos', 'quotas', draft: true);
     }
 
     /**

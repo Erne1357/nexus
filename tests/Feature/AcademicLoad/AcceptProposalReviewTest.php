@@ -20,6 +20,9 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
@@ -346,4 +349,17 @@ it('si la carga no puede proponerse, el modelo recibido no queda aceptado en mem
 
     expect($this->part->status)->toBe(ProposalReviewStatus::Pending)
         ->and($this->part->decided_by)->toBeNull();
+});
+
+it('1.62, HC-14/HC-20: aceptar la parte con grupos del departamento ya con docente (elección previa, SEL-16) pasa la carga a propuesta sin tocar esas asignaciones', function () {
+    $teacher = Teacher::factory()->create();
+    $subject = Subject::factory()->create(['department_id' => $this->cb->id]);
+    $group = Group::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'campus_id' => $this->campus->id, 'department_id' => $this->cb->id, 'subject_id' => $subject->id, 'teacher_id' => $teacher->id, 'code' => 'A']);
+    $assignment = GroupTeacherAssignment::factory()->create(['group_id' => $group->id, 'teacher_id' => $teacher->id]);
+
+    acceptPart();
+
+    expect($this->load->fresh()->status)->toBe(LoadStatus::Proposed)
+        ->and($group->fresh()->teacher_id)->toBe($teacher->id)
+        ->and(GroupTeacherAssignment::query()->current()->where('group_id', $group->id)->sole()->is($assignment))->toBeTrue();
 });

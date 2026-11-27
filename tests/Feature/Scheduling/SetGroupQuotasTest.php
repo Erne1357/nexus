@@ -103,6 +103,13 @@ it('cambia lugares de la dueña aunque sea de otro departamento', function () {
     expect(seatsOf($group))->toBe([$foreignOwner->id => 30]);
 });
 
+it('con la carga en borrador sí edita cupos (1.62, confirmado el 26 de noviembre de 2026)', function () {
+    $this->load->update(['status' => LoadStatus::Draft]);
+
+    expect(setQuotasErrors([$this->owner->id => 25]))->toBe([])
+        ->and(seatsOf($this->group))->toBe([$this->owner->id => 25]);
+});
+
 it('la carrera dueña no se quita y lleva al menos un lugar', function () {
     expect(setQuotasErrors([$this->sameDept->id => 10]))->toHaveKey('quotas')
         ->and(setQuotasErrors([$this->owner->id => 0]))->toHaveKey('quotas.'.$this->owner->id)
@@ -160,7 +167,6 @@ it('no edita cupos de un grupo cancelado ni con la carga fuera de proposed, staf
         ->and(seatsOf($this->group))->toBe([$this->owner->id => 20]);
 })->with([
     'cancelado' => [null, 'cancelado'],
-    'borrador' => [LoadStatus::Draft, 'borrador'],
     'cerrada' => [LoadStatus::Closed, 'no se editan cupos.'],
     'publicada' => [LoadStatus::Published, 'no se editan cupos.'],
 ]);
