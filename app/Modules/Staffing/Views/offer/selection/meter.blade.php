@@ -14,7 +14,7 @@
     $band = LoadBand::classify($hours, $base);
     $text = match ($band) {
         'under' => 'Te faltan de '.($low - $hours).' a '.($high - $hours).' h',
-        'over' => 'Pasas tu margen por '.($hours - $high).' h',
+        'over' => 'Pasas tu margen por '.($hours - $high).' h · honorarios por autorizar',
         default => 'Dentro de tu margen',
     };
 @endphp

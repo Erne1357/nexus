@@ -180,7 +180,7 @@ it('PL-01 y HC-08: la categoría de la plaza cambia las horas frente a grupo de 
 
     Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id, 'tab' => 'carga'])
         ->assertSee('Frente a grupo: 24 h (22 a 26)')
-        ->assertSee('Pasa su banda')
+        ->assertSee('Con horas extra')
         ->assertSeeHtml('data-testid="load-notice-next"')
         ->assertSee('Pasa su banda de horas frente a grupo (24 h, de 22 a 26): lleva 30 h.');
 });

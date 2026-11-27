@@ -217,7 +217,7 @@ it('terminar mi carga fuera del margen pide la casilla y avisa del grupo sin sal
     $page = Livewire::actingAs($this->uno->user)->test('staffing::pages.offer')
         ->set('showFinish', true)
         ->assertSee('Este grupo queda sin salón; lo asigna la jefatura')
-        ->assertSee('Es responsabilidad del docente cubrir sus horas frente a grupo de acuerdo con su plaza')
+        ->assertSee('h extra quedan a consideración de tu jefe de departamento como honorarios')
         ->call('finish')
         ->assertHasErrors('acknowledged');
 
