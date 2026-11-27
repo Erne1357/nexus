@@ -119,6 +119,7 @@ final class StudentRecordQuery
             chains: $chains,
             kardex: $this->kardex($records),
             siiCodes: $siiCodes,
+            availableIds: array_map('strval', array_keys($available)),
             unplaced: array_map(fn (string $subjectId): array => [
                 'id' => $subjectId,
                 'code' => $subjects[$subjectId]->code,

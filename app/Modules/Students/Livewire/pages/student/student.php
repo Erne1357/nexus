@@ -9,6 +9,7 @@ use App\Modules\Students\Queries\StudentQuery;
 use App\Modules\Students\Queries\StudentRecordQuery;
 use App\Modules\Students\Support\StudentPhotoUrl;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -16,7 +17,7 @@ use Livewire\WithFileUploads;
 use Mary\Traits\Toast;
 
 /**
- * Ficha del alumno (tarea 1.6): sus datos y cifras, su retícula por semestre con el estado de cada materia como
+ * Ficha del alumno (tarea 1.6): sus datos y cifras, su resumen en tablero (1.67, pestaña por omisión), su retícula por semestre con el estado de cada materia como
  * lo nombra el SII y su kárdex por periodo. Solo lectura. Carga al alumno con StudentQuery (el id llega de la
  * ruta), autoriza `view` con StudentPolicy, arma la ficha con StudentRecordQuery y acomoda su retícula en la
  * cuadrícula de Core (SemesterGrid), con el tronco común arriba y una banda por especialidad. La pestaña «Credencial»
@@ -31,9 +32,9 @@ new #[Title('Ficha del alumno')] class extends Component
     #[Locked]
     public string $studentId;
 
-    /** 'reticula', 'kardex' o 'credencial'; va en la URL para volver a la misma pestaña, y otro valor muestra la retícula. */
+    /** 'resumen' (por omisión), 'reticula', 'kardex' o 'credencial'; va en la URL para volver a la misma pestaña, y otro valor muestra el resumen. */
     #[Url]
-    public mixed $tab = 'reticula';
+    public mixed $tab = 'resumen';
 
     public function mount(string $student, StudentQuery $students): void
     {
@@ -44,11 +45,21 @@ new #[Title('Ficha del alumno')] class extends Component
     }
 
     /**
-     * Una pestaña que no existe (un enlace viejo o mal escrito) muestra la retícula.
+     * Una pestaña que no existe (un enlace viejo o mal escrito) muestra el resumen.
      */
     public function updatedTab(): void
     {
-        $this->tab = is_string($this->tab) && in_array($this->tab, ['kardex', 'credencial'], true) ? $this->tab : 'reticula';
+        $this->tab = is_string($this->tab) && in_array($this->tab, ['reticula', 'kardex', 'credencial'], true) ? $this->tab : 'resumen';
+    }
+
+    /**
+     * Los enlaces del tablero «Resumen» (students::components.student-summary) abren otra pestaña de la ficha.
+     */
+    #[On('student-tab')]
+    public function openTab(string $tab): void
+    {
+        $this->tab = $tab;
+        $this->updatedTab();
     }
 
     public bool $showPhoto = false;

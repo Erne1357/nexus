@@ -19,6 +19,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Notifications\PersonMailAddresses;
+use App\Modules\Core\Support\HomePanels;
 use App\Modules\Core\Support\PhotoNormalizer;
 use App\Modules\Students\Console\SyncSiiSpecialtiesCommand;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
@@ -85,6 +86,9 @@ final class StudentsServiceProvider extends ModuleServiceProvider
 
             return $student === null ? null : StudentPhotoUrl::own($student);
         });
+
+        // AC-15 (1.67): el Resumen del alumno es el tablero de Students (Core no lo conoce: lo pinta con HomePanels).
+        $this->app->make(HomePanels::class)->register('alumno', 'students::components.student-summary');
 
         // CE-01: el correo institucional del alumno que no lo tiene en su usuario es el que sale de su número de control
         // (AC-13). Core no conoce a Students.

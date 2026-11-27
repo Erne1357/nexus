@@ -38,7 +38,7 @@ beforeEach(function () {
 });
 
 it('muestra los datos del alumno, sus cifras y su retícula con el estado de cada materia', function () {
-    Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id])
+    Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $this->student->id])
         ->assertSee('Daniela Ortiz')
         ->assertSee('24111234')
         ->assertSee('ISIC-2010-224')
@@ -50,14 +50,14 @@ it('muestra los datos del alumno, sus cifras y su retícula con el estado de cad
 });
 
 it('no lleva textos de ayuda: la retícula se explica con su leyenda y el puntero', function () {
-    Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id])
+    Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $this->student->id])
         ->assertDontSee('Puede seleccionar materias hasta el semestre')
         ->assertDontSee('Toca una materia')
         ->assertDontSee('Esc la quita');
 });
 
 it('los encabezados de semestre solo dicen el semestre y cuántas acreditó; el suyo lleva su fondo y lo dice a lectores de pantalla', function () {
-    $page = domOf(Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id]));
+    $page = domOf(Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $this->student->id]));
     $header = fn (int $semester) => $page->querySelector('section[data-semester="'.$semester.'"] [data-semester-header]');
 
     expect(textOf($header(1)))->toBe('Semestre 1, su semestre 1 de 1')
@@ -73,7 +73,7 @@ it('cada especialidad tiene una banda con su nombre y cuántas materias tiene, y
     placeInPlan($this->student->studyPlan, Subject::factory()->create(['code' => 'DAD-2401']), 2, $specialty);
     placeInPlan($this->student->studyPlan, Subject::factory()->create(['code' => 'DAD-2402']), 4, $specialty);
 
-    $page = domOf(Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id]));
+    $page = domOf(Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $this->student->id]));
 
     expect(textOf($page->querySelector('[data-band="'.$specialty->id.'"]')))->toBe('Especialidad Ciencia de Datos e Inteligencia Artificial Aplicada 2 materias')
         ->and(textOf($page->querySelector('section[data-semester="2"] [data-separator="'.$specialty->id.'"]')))->toContain('Ciencia de Datos e Inteligencia Artificial Aplicada')
@@ -81,7 +81,7 @@ it('cada especialidad tiene una banda con su nombre y cuántas materias tiene, y
 });
 
 it('cada cadena de seriación tiene su color en la franja de sus materias y en la leyenda, con su nombre', function () {
-    $page = domOf(Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id]));
+    $page = domOf(Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $this->student->id]));
     $tile = fn (string $code) => $page->querySelector('[data-subject="'.$code.'"]');
 
     expect(textOf($page->querySelector('[data-testid="chain-legend"] [data-chain="0"]')))->toBe('Cálculo Diferencial 2')
@@ -96,30 +96,30 @@ it('cada cadena de seriación tiene su color en la franja de sus materias y en l
 it('dice qué le falta a una materia que todavía no puede cursar', function () {
     KardexRecord::query()->delete();
 
-    Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id])
+    Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $this->student->id])
         ->assertSeeInOrder(['ACF-0902', 'Pide', 'ACF-0901']);
 });
 
 it('en la pestaña Kárdex, que va en la URL, muestra el historial por periodo', function () {
-    Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id])
+    Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $this->student->id])
         ->assertDontSee('Ago-Dic 2025');
 
     Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'kardex'])->test('students::pages.student', ['student' => $this->student->id])
         ->assertSeeInOrder(['20253', 'Ago-Dic 2025', 'ACF-0901', 'Cálculo Diferencial', '88', 'Aprobada', '1 · ordinaria']);
 });
 
-it('una pestaña que no existe en la URL muestra la retícula', function () {
+it('una pestaña que no existe en la URL muestra el resumen, la de por omisión (1.67)', function () {
     Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'otra'])->test('students::pages.student', ['student' => $this->student->id])
-        ->assertSet('tab', 'reticula')
-        ->assertSee('Cálculo Integral')
-        ->assertDontSee('Ago-Dic 2025');
+        ->assertSet('tab', 'resumen')
+        ->assertSeeHtml('data-testid="student-summary"')
+        ->assertDontSeeHtml('data-testid="student-grid"');
 });
 
 it('D18: debajo de la retícula lista las materias que esperan semestre: «Por validar» en un plan vivo y «Sin semestre en el SII» en uno histórico', function () {
     $waiting = Subject::factory()->create(['code' => 'ZZZ-1', 'name' => 'Materia sin semestre', 'credits' => 4]);
     StudyPlanSubjectPending::factory()->for($this->student->studyPlan)->for($waiting)->create();
     KardexRecord::factory()->for($this->student)->for($waiting)->create(['term_code' => '20253', 'grade' => 90]);
-    $list = fn () => domOf(Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id]))->querySelector('[data-testid="student-unplaced"]');
+    $list = fn () => domOf(Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $this->student->id]))->querySelector('[data-testid="student-unplaced"]');
 
     expect(textOf($list()))->toBe('Por validar ZZZ-1 Materia sin semestre 4 cr Acreditada');
 
@@ -133,7 +133,7 @@ it('D18: en una retícula histórica sin ningún semestre no pinta una cuadrícu
     StudyPlanSubjectPending::factory()->for($plan)->for(Subject::factory()->create(['code' => 'OLD-1', 'name' => 'Materia vieja', 'credits' => 8]))->create();
     $student = Student::factory()->for($plan)->create(['campus_id' => $this->campus->id, 'current_semester' => null]);
 
-    $page = domOf(Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $student->id]));
+    $page = domOf(Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'reticula'])->test('students::pages.student', ['student' => $student->id]));
 
     expect($page->querySelector('[data-testid="student-grid"]'))->toBeNull()
         ->and($page->querySelector('[data-testid="standing-legend"]'))->toBeNull()

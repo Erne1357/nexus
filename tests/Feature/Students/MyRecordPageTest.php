@@ -59,7 +59,7 @@ it('AC-15: «Mis datos» aparece en el menú del alumno, que no ve el calendario
         ->assertOk()
         ->assertSee('Mis datos')
         ->assertSee(route('students.my-record'))
-        ->assertSee(Role::Alumno->description())
+        ->assertSeeHtml('data-testid="student-summary"')
         ->assertDontSee(route('students.index'));
 
     $this->get(route('students.my-record'))->assertOk()->assertSee('Ana López');
