@@ -24,7 +24,7 @@ final class MyChangeRequestsQuery
 {
     /**
      * @return array{
-     *     requests: list<array{id: string, group_id: string, group_code: string, subject_name: string, campus_code: string, kind: ChangeRequestKind, proposal: string, status: ChangeRequestStatus, comment: ?string, requested_at: CarbonImmutable}>,
+     *     requests: list<array{id: string, group_id: string, group_code: string, subject_name: string, campus_code: string, kind: ChangeRequestKind, proposal: string, status: ChangeRequestStatus, comment: ?string, requested_at: CarbonImmutable, decided_at: ?CarbonImmutable, applied_at: ?CarbonImmutable}>,
      *     groups: array<string, array{open: ?ChangeRequestStatus, load: ?LoadStatus}>
      * }
      */
@@ -67,6 +67,8 @@ final class MyChangeRequestsQuery
                 'status' => $request->status,
                 'comment' => $request->decision_comment,
                 'requested_at' => $request->created_at,
+                'decided_at' => $request->decided_at,
+                'applied_at' => $request->applied_at,
             ])->values()->all(),
             'groups' => $groups->mapWithKeys(fn (Group $group): array => [$group->id => [
                 'open' => $open->get($group->id),

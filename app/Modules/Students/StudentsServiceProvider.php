@@ -2,6 +2,7 @@
 
 namespace App\Modules\Students;
 
+use App\Modules\Academic\Contracts\ActiveStudyPlans;
 use App\Modules\Academic\Events\CurriculumChanged;
 use App\Modules\Academic\Events\PlanCareerChanging;
 use App\Modules\Academic\Events\SubjectDeactivating;
@@ -32,6 +33,7 @@ use App\Modules\Students\Listeners\RecomputeProgressOnCurriculumChange;
 use App\Modules\Students\Listeners\TouchPhotoRequestsOnPhotoChange;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
+use App\Modules\Students\Queries\ActiveStudyPlansQuery;
 use App\Modules\Students\Rules\CredentialRequestSettings;
 use App\Modules\Students\Rules\InstitutionalEmail;
 use App\Modules\Students\Support\StudentPhotos;
@@ -50,6 +52,14 @@ use Illuminate\Support\Facades\RateLimiter;
  */
 final class StudentsServiceProvider extends ModuleServiceProvider
 {
+    public function register(): void
+    {
+        parent::register();
+
+        // SEL-19: las retículas activas de la lista de Materias del jefe son las que tienen un alumno activo.
+        $this->app->bind(ActiveStudyPlans::class, ActiveStudyPlansQuery::class);
+    }
+
     public function boot(): void
     {
         parent::boot();
@@ -88,7 +98,7 @@ final class StudentsServiceProvider extends ModuleServiceProvider
         });
 
         // AC-15 (1.67): el Resumen del alumno es el tablero de Students (Core no lo conoce: lo pinta con HomePanels).
-        $this->app->make(HomePanels::class)->register('alumno', 'students::components.student-summary');
+        $this->app->make(HomePanels::class)->register('alumno', 'students::components.student-summary', 'Tu avance, lo que cursas y lo que necesita tu atención.');
 
         // CE-01: el correo institucional del alumno que no lo tiene en su usuario es el que sale de su número de control
         // (AC-13). Core no conoce a Students.

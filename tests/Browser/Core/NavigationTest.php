@@ -182,6 +182,30 @@ it('cambia entre el tema claro y el oscuro desde la credencial', function () {
         ->assertScript('document.documentElement.dataset.theme', 'nexus');
 });
 
+it('el cambio de tema pasa por la transición de vista de la liebre', function () {
+    $page = signInFromBrowser('admin');
+    $page->script('window.__vt = 0; const start = document.startViewTransition.bind(document); document.startViewTransition = (update) => { window.__vt++; return start(update); };');
+
+    $page->click('@credential')
+        ->radio('nexus-theme', 'nexus-dark')
+        ->assertScript('document.documentElement.dataset.theme', 'nexus-dark')
+        ->assertScript('window.__vt > 0', true)
+        ->wait(1.5)
+        ->assertScript("document.documentElement.hasAttribute('data-theme-switch')", false)
+        ->assertVisible('@theme-toggle');
+});
+
+it('sin transiciones de vista el tema cambia igual y se recuerda', function () {
+    $page = signInFromBrowser('admin');
+    $page->script('document.startViewTransition = undefined;');
+
+    $page->click('@credential')
+        ->radio('nexus-theme', 'nexus-dark')
+        ->assertScript('document.documentElement.dataset.theme', 'nexus-dark')
+        ->refresh()
+        ->assertScript('document.documentElement.dataset.theme', 'nexus-dark');
+});
+
 it('MN-07: en el celular el menú no se abre solo en Inicio; abierto muestra las áreas como siempre', function () {
     signInFromBrowser('admin')
         ->resize(390, 844)

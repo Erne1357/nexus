@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Database\Seeders\ForecastEvaluationDemoSeeder;
 use App\Modules\AcademicLoad\Enums\ForecastEvaluationStatus;
 use App\Modules\AcademicLoad\Models\ForecastEvaluation;
+use App\Modules\AcademicLoad\Queries\ForecastEvaluationsQuery;
 use App\Modules\AcademicLoad\Queries\TermKardexQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -46,6 +47,14 @@ beforeEach(function () {
 
 it('descubre los periodos con historia del kárdex en vez de fijarlos', function () {
     expect(app(TermKardexQuery::class)->termCodes(modalityOf('PRES')))->toBe(['20261', '20253', '20251']);
+});
+
+it('un registro de kárdex sin periodo no cuenta como periodo (termCodes sin nulos) y evaluableTerms no truena', function () {
+    $student = Student::query()->firstOrFail();
+    KardexRecord::factory()->for($student)->for(Subject::query()->firstOrFail())->create(['term_code' => null]);
+
+    expect(app(TermKardexQuery::class)->termCodes(modalityOf('PRES')))->toBe(['20261', '20253', '20251'])
+        ->and(app(ForecastEvaluationsQuery::class)->evaluableTerms(modalityOf('PRES'))->pluck('code')->all())->toBe(['20261', '20253', '20251']);
 });
 
 it('evalúa el periodo con historia, por campus el más reciente, y deja una fallida y una en cola antigua', function () {

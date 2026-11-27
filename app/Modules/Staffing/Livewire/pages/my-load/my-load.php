@@ -13,6 +13,7 @@ use App\Modules\Staffing\Livewire\Concerns\ProposesStructuredChange;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Queries\MyChangeRequestsQuery;
 use App\Modules\Staffing\Queries\MyLoadQuery;
+use App\Modules\Staffing\Queries\MyLoadTerms;
 use App\Modules\Staffing\Rules\ChangeRequestRules;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -161,9 +162,10 @@ new #[Title('Mi carga')] class extends Component
         abort_unless($user !== null && $context->allows(StaffingPermission::MyLoadView, Target::ownedBy((string) $user->getKey())), 403);
 
         $teacher = Teacher::query()->where('user_id', $user->getKey())->where('is_active', true)->first();
-        $planning = $context->loadTerm();
-        $offer = $teacher !== null && $this->offersPlanning($context, $teacher, $query);
-        $term = $this->selectedTerm($context, $teacher, $query);
+        $terms = app(MyLoadTerms::class);
+        $planning = $terms->planning($context);
+        $offer = $teacher !== null && $terms->offersPlanning($context, $teacher);
+        $term = $terms->selected($context, $teacher, $this->period);
         $load = $term === null || $teacher === null ? null : $query->forTeacher($teacher, $term);
         $fromSii = ($load['source'] ?? 'nexus') === 'sii';
 
@@ -173,7 +175,7 @@ new #[Title('Mi carga')] class extends Component
         return [
             'term' => $term,
             'planning' => $offer ? $planning : null,
-            'inProgress' => $this->inProgressTerm($context),
+            'inProgress' => $terms->inProgress($context),
             'fromSii' => $fromSii,
             'teacher' => $teacher,
             'load' => $load,
@@ -187,52 +189,12 @@ new #[Title('Mi carga')] class extends Component
     }
 
     /**
-     * El periodo en curso (#755, confirmado el 20 de noviembre de 2026): el periodo de consulta de la credencial, que por
-     * omisión es el que contiene hoy por sus fechas y, entre semestres, el que acaba de terminar (TP-03, TP-04).
-     */
-    private function inProgressTerm(Actor $context): ?Term
-    {
-        return $context->viewTerm() ?? $context->loadTerm();
-    }
-
-    /**
-     * Si se ofrece el selector «Periodo» (supuesto por confirmar): la carga académica no está oculta para quien mira
-     * (`hiddenFrom`; el admin que ve lo oculto se rige por lo mismo), el periodo en planeación (el activo) no es el
-     * que está en curso y el docente ya tiene grupos de Nexus en él, asignados o publicados.
-     */
-    private function offersPlanning(Actor $context, Teacher $teacher, MyLoadQuery $query): bool
-    {
-        $planning = $context->loadTerm();
-        $inProgress = $this->inProgressTerm($context);
-
-        return $planning !== null
-            && $inProgress !== null
-            && ! app(AcademicLoadVisibility::class)->hiddenFrom($context)
-            && $planning->id !== $inProgress->id
-            && $query->hasNexusGroups($teacher, $planning);
-    }
-
-    /**
-     * El periodo que se ve: el que pide `$period` si es el de planeación y se ofrece; si no, el periodo en curso.
-     */
-    private function selectedTerm(Actor $context, ?Teacher $teacher, MyLoadQuery $query): ?Term
-    {
-        $planning = $context->loadTerm();
-
-        if ($teacher !== null && $this->period !== '' && $planning !== null && $this->period === $planning->id && $this->offersPlanning($context, $teacher, $query)) {
-            return $planning;
-        }
-
-        return $this->inProgressTerm($context);
-    }
-
-    /**
      * El periodo donde se pide un cambio: el que se ve, solo si es el activo para capturar carga. En el periodo en
      * curso que sale del SII (u otro que no se planea) no se pide: 403.
      */
     private function requestTerm(Actor $context, Teacher $teacher): ?Term
     {
-        $term = $this->selectedTerm($context, $teacher, app(MyLoadQuery::class));
+        $term = app(MyLoadTerms::class)->selected($context, $teacher, $this->period);
 
         abort_if($term !== null && $term->id !== $context->loadTerm()?->id, 403);
 

@@ -1721,17 +1721,18 @@ document.addEventListener('alpine:init', () => {
 });
 
 /*
-| AZ-S5: si el perfil activo de la sesión ya no es con el que se pintó la página (cambió en otra pestaña, o cambiaron
-| sus puestos: perdió el activo, se desactivó su campus o recibió el primero), el servidor responde 419 con
-| X-Nexus-Role-Changed (Core\Livewire\ActiveRoleHook). Aquí se ofrece recargar en español; cualquier otro 419 (sesión
-| o CSRF vencidos) sigue con el manejo de Livewire.
+| Todo 419 de Livewire (sesión, CSRF o perfil vencidos) se avisa con el diálogo de Nexus y se ofrece recargar; nunca el aviso
+| nativo en inglés de Livewire (ADR-0023). AZ-S5: si el perfil activo de la sesión ya no es con el que se pintó la
+| página (cambió en otra pestaña, o cambiaron sus puestos: perdió el activo, se desactivó su campus o recibió el
+| primero), el servidor responde 419 con X-Nexus-Role-Changed (Core\Livewire\ActiveRoleHook) y el aviso lo dice. Sin
+| esa cabecera (sesión o CSRF vencidos, o un proxy que la pierde) el aviso es el general de «La página venció».
 */
 document.addEventListener('livewire:init', () => {
     let asked = false;
 
     window.Livewire.interceptRequest(({ onError }) => {
         onError(({ response, preventDefault }) => {
-            if (response.status !== 419 || response.headers?.get('X-Nexus-Role-Changed') !== '1') {
+            if (response.status !== 419) {
                 return;
             }
 
@@ -1743,9 +1744,13 @@ document.addEventListener('livewire:init', () => {
 
             asked = true;
 
+            const roleChanged = response.headers?.get('X-Nexus-Role-Changed') === '1';
+
             window.nexusConfirm({
-                title: 'Tu perfil cambió',
-                message: 'Cambió en otra pestaña o por un cambio en tus puestos. Recarga la página para seguir con el perfil de ahora.',
+                title: roleChanged ? 'Tu perfil cambió' : 'La página venció',
+                message: roleChanged
+                    ? 'Cambió en otra pestaña o por un cambio en tus puestos. Recarga la página para seguir con el perfil de ahora.'
+                    : 'Tu sesión cambió o expiró, por ejemplo si entraste con otra cuenta o cambiaste de perfil en otra pestaña. Recarga la página para seguir.',
                 button: 'Recargar',
                 tone: 'primary',
                 run: () => window.location.reload(),
@@ -1783,6 +1788,43 @@ document.addEventListener('livewire:navigated', () => {
 | message, button, tone, run, onCancel})`.
 */
 window.nexusConfirm = (detail) => window.dispatchEvent(new CustomEvent('nexus-confirm', { detail }));
+
+/*
+| Cambio de tema con la liebre (DESIGN.md «Movimiento»). Envuelve el cambio de MaryUI (que aplica y recuerda el tema)
+| en una transición de vista; mientras dura, `<html data-theme-switch>` activa en resources/css/app.css la liebre como
+| máscara del tema nuevo. Sin la API o con movimiento reducido, aplica el cambio directo. Si ya corre una transición,
+| el cambio nuevo se aplica directo: el tema final es siempre el último elegido y nunca queda el atributo puesto.
+*/
+let themeTransition = null;
+
+window.nexusSwitchTheme = (apply) => {
+    if (typeof document.startViewTransition !== 'function' || themeTransition || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        apply();
+
+        return;
+    }
+
+    const root = document.documentElement;
+    root.dataset.themeSwitch = '';
+
+    let transition;
+
+    try {
+        transition = document.startViewTransition(apply);
+    } catch (error) {
+        delete root.dataset.themeSwitch;
+        apply();
+
+        return;
+    }
+
+    themeTransition = transition;
+    transition.ready.catch(() => {});
+    transition.finished.catch(() => {}).finally(() => {
+        delete root.dataset.themeSwitch;
+        themeTransition = null;
+    });
+};
 
 document.addEventListener('alpine:init', () => {
     window.Alpine.directive('confirm', (el, _directive, { cleanup }) => {

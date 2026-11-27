@@ -100,7 +100,7 @@
                 </div>
             @else
                 @php($columns = $board['columns'])
-                <div class="hidden overflow-x-auto lg:block" data-testid="progress-scroll">
+                <div class="relative hidden overflow-x-auto lg:block" data-testid="progress-scroll">
                     <table class="w-full min-w-[56rem] text-sm">
                         <caption class="sr-only">Estado de cada catálogo por departamento</caption>
                         <thead class="bg-base-200 text-start">

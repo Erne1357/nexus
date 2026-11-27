@@ -9,7 +9,7 @@
     departamentos no se muestran), y el
     motivo por el que «Desactivar/Activar» está deshabilitado, o null. No hay «Borrar»: un docente se da de baja.
 --}}
-<div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
+<div @class(['flex gap-1', 'justify-end whitespace-nowrap' => $inTable, '-ms-3' => ! $inTable])>
     <a
         href="{{ route('faculty.teachers.show', $teacher->id) }}"
         wire:navigate

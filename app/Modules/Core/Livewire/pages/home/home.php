@@ -35,7 +35,7 @@ use Livewire\Component;
 new #[Title('Resumen')] class extends Component
 {
     /**
-     * @return array{panel: ?string, name: string, blocks: list<array{title: string, description: string, account: array{username: string, email: ?string}|null, links: list<array{label: string, url: string, icon: string}>}>, cards: list<HomeCard>, calendar: array{timeline: StageTimeline, caption: string, termUrl: ?string}|null}
+     * @return array{panel: ?string, panelSubtitle: ?string, name: string, blocks: list<array{title: string, description: string, account: array{username: string, email: ?string}|null, links: list<array{label: string, url: string, icon: string}>}>, cards: list<HomeCard>, calendar: array{timeline: StageTimeline, caption: string, termUrl: ?string}|null}
      */
     public function with(Actor $context, TermCalendarQuery $calendar, RoleTitleQuery $titles, Navigation $navigation, HomePanels $panels): array
     {
@@ -53,6 +53,7 @@ new #[Title('Resumen')] class extends Component
 
         return [
             'panel' => $active === null ? null : $panels->for($active),
+            'panelSubtitle' => $active === null ? null : $panels->subtitleFor($active),
             'calendar' => $windows === [] ? null : [
                 'timeline' => StageTimeline::build($windows, [], today()->toImmutable()),
                 'caption' => $term->name,

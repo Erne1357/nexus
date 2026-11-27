@@ -35,7 +35,7 @@ use Mary\Traits\Toast;
  * SetSubjectRequiredSpace y `setSpace` de la policy; los mismos marcan si sus horas cuentan en la carga del docente
  * (PL-02, tarea 1.73), con SetSubjectTeacherHours y `setTeacherHours`, en su propio drawer. El jefe, que no ve el
  * catálogo completo, llega a esta pantalla solo con las materias de su departamento y esos dos controles: sin alta,
- * sin edición y sin desactivar.
+ * sin edición y sin desactivar, y solo las de retículas activas, planes con al menos un alumno activo (SEL-19).
  *
  * Los campos del formulario se llaman como las columnas, así los errores de las Actions caen en su
  * campo.
@@ -142,6 +142,7 @@ new #[Title('Materias')] class extends Component
                 },
                 space: $this->spaceFilter === '' ? null : $this->spaceFilter,
                 onlyDepartments: $onlyDepartments,
+                onlyActivePlans: ! $fullCatalog,
             ),
             'fullCatalog' => $fullCatalog,
             'spaces' => $spaces,
@@ -206,7 +207,7 @@ new #[Title('Materias')] class extends Component
      */
     public function editSpace(string $id, SubjectQuery $subjects): void
     {
-        $subject = $subjects->findOrFail($id);
+        $subject = $subjects->findInListOrFail($id, $this->onlyActivePlans());
         $this->authorize('setSpace', $subject);
 
         $this->spaceSubjectId = $subject->id;
@@ -219,7 +220,7 @@ new #[Title('Materias')] class extends Component
     {
         abort_if($this->spaceSubjectId === null, 404);
 
-        $subject = $subjects->findOrFail($this->spaceSubjectId);
+        $subject = $subjects->findInListOrFail($this->spaceSubjectId, $this->onlyActivePlans());
         $this->authorize('setSpace', $subject);
 
         $data = $this->validate(['spaceChoice' => ['required', Rule::enum(RequiredSpace::class)]], attributes: ['spaceChoice' => 'tipo de espacio']);
@@ -235,7 +236,7 @@ new #[Title('Materias')] class extends Component
      */
     public function editTeacherHours(string $id, SubjectQuery $subjects): void
     {
-        $subject = $subjects->findOrFail($id);
+        $subject = $subjects->findInListOrFail($id, $this->onlyActivePlans());
         $this->authorize('setTeacherHours', $subject);
 
         $this->hoursSubjectId = $subject->id;
@@ -248,7 +249,7 @@ new #[Title('Materias')] class extends Component
     {
         abort_if($this->hoursSubjectId === null, 404);
 
-        $subject = $subjects->findOrFail($this->hoursSubjectId);
+        $subject = $subjects->findInListOrFail($this->hoursSubjectId, $this->onlyActivePlans());
         $this->authorize('setTeacherHours', $subject);
 
         $subject = $setHours->handle($subject, $this->countsTeacherHours, Auth::user());
@@ -353,6 +354,15 @@ new #[Title('Materias')] class extends Component
         if ($this->spaceFilter !== '' && ! in_array($this->spaceFilter, array_column($spaces, 'id'), true)) {
             $this->spaceFilter = '';
         }
+    }
+
+    /**
+     * Si la lista es la del jefe de departamento, que solo ve las materias de retículas activas (SEL-19): quien no ve el
+     * catálogo completo.
+     */
+    private function onlyActivePlans(): bool
+    {
+        return ! Gate::allows('viewCatalog', Subject::class);
     }
 
     /**

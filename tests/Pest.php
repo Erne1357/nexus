@@ -33,6 +33,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Support\PrivacyNotice;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Students\Models\Student;
 use Database\Seeders\DemoSeeder;
 use Dom\Element;
 use Dom\HTMLDocument;
@@ -356,6 +357,19 @@ function fixedKeyOf(string $model, int $number): string
 function placeInPlan(StudyPlan $plan, Subject $subject, int $semester = 1, ?Specialty $specialty = null): StudyPlanSubject
 {
     return StudyPlanSubject::factory()->for($plan)->for($subject)->create(['semester' => $semester, 'specialty_id' => $specialty?->id]);
+}
+
+/**
+ * Pone la materia en la retícula de un plan con un alumno activo (SEL-19): la lista de Materias del jefe solo trae las
+ * de retículas activas. Devuelve el plan.
+ */
+function placeInActivePlan(Subject $subject): StudyPlan
+{
+    $plan = StudyPlan::factory()->create();
+    placeInPlan($plan, $subject);
+    Student::factory()->for($plan)->create(['career_id' => $plan->career_id, 'status' => 'activo']);
+
+    return $plan;
 }
 
 /**

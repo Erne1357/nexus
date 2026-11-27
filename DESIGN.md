@@ -249,15 +249,17 @@ La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php
    - paginación al pie, con el rango («Campus C1 a TNV · 1–5 de 5»);
    - **cabe en su caja** a 1440 y a 1024 px: lo que no cabe son columnas descriptivas largas, que se ocultan (`max-[1200px]:hidden`, y `max-[1535px]:hidden` en Materias y Planes, que tienen más). Si aun así no cabe, la caja se desplaza de lado, nunca la página.
 4. **Formulario en modal** (`x-modal` + `x-form`) para crear y editar. Página completa solo si el formulario no cabe o tiene pasos.
-5. **Avisos** con el `Toast` de MaryUI: título corto y el registro, escapado con `e()`.
+5. **Campos en vivo.** Un campo cuyo valor cambia algo que se ve antes de enviar (un botón, un resumen, un aviso) usa `wire:model.live`; el que solo se lee al enviar, `wire:model`.
+6. **Avisos** con el `Toast` de MaryUI: título corto y el registro, escapado con `e()`.
 
 #### Acciones de fila
 El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados del celular:
 - **Visible, solo lo frecuente:** «Editar» (y «Retícula» en Planes), en `btn-ghost btn-sm`. Lo demás se pliega en un botón **«Acciones»** (`btn-ghost btn-sm`, con `o-chevron-down`) que abre `<x-core::row-menu>`; entre 768 y 1199 px, en la tabla, los botones quedan solo con su icono (`o-ellipsis-horizontal` en «Acciones») y su nombre accesible (`aria-label="Acciones de <CLAVE>"`).
+- **El contenedor de los botones de una celda de acciones lleva `whitespace-nowrap`** (en la tabla): el `.btn` de daisyUI parte su texto por palabras y la tabla calcula el ancho mínimo de la celda con ese texto partido, pero el botón se pinta en un renglón y, con `justify-end`, lo que sobra se sale hacia la izquierda y se encima sobre la celda de al lado.
 - **Dentro del menú**, un `<x-core::row-menu-item>` por acción: Desactivar o Activar, Ofrecer en el campus, Borrar (en `text-error`). Conservan su `spinner` y su `data-testid`. La confirmación de Desactivar o Borrar va en un modal, nunca en el diálogo del navegador (ADR-0023). Los que todavía usan `wire:confirm` se reemplazan en #374.
 - **Lo deshabilitado se queda en el menú, deshabilitado, con su motivo escrito en un segundo renglón** del elemento («Borrar — Solo se borra una carrera sin planes de estudio.»). Nada se oculta por permiso y un tooltip no lo ve quien usa teclado o pantalla táctil.
 - **El menú no se corta:** es un `popover` del navegador, en la capa superior, así que la caja con `overflow` de la tabla ni el pie de la página lo cortan. Se abre debajo del botón y, si no cabe, arriba. Esc o un clic fuera lo cierran y el foco vuelve al botón; las flechas, Inicio y Fin recorren los elementos.
-- **Materias, «Tipo de espacio» y «Carga del docente» (SEL-17, PL-02):** el jefe del departamento de la materia, que no ve el catálogo completo, los tiene como sus dos únicos botones visibles (`o-map-pin` y `o-clock`, con su texto desde 1536 px); quien ve el catálogo, en «Acciones». Cada uno abre su `x-drawer` de 448 px con su explicación. «Carga del docente» es un solo `x-toggle`, «Sus horas cuentan en la carga del docente», con la nota de las tutorías; una materia que no cuenta lleva bajo su nombre «No cuenta en la carga del docente» con `o-clock` en 12 px `text-neutral`. Donde el docente ve un grupo de esa materia (su bloque en «Mi carga», también del horario del SII, y el drawer de la selección) y en «Carga por docente» se lee «0 h · no cuenta en tu carga» (o «· no cuenta»), en `text-neutral`. En la semana publicada de un docente, pantalla y PDF, la línea de horas sigue con las de clase y, si alguna materia no cuenta, agrega «· M cuentan en su carga».
+- **Materias, «Tipo de espacio» y «Carga del docente» (SEL-17, PL-02):** el jefe del departamento de la materia, que no ve el catálogo completo, los tiene como sus dos únicos botones visibles (`o-map-pin` y `o-clock`, con su texto desde 1800 px); quien ve el catálogo, en «Acciones». Cada uno abre su `x-drawer` de 448 px con su explicación. «Carga del docente» es un solo `x-toggle`, «Sus horas cuentan en la carga del docente», con la nota de las tutorías; una materia que no cuenta lleva bajo su nombre «No cuenta en la carga del docente» con `o-clock` en 12 px `text-neutral`. Donde el docente ve un grupo de esa materia (su bloque en «Mi carga», también del horario del SII, y el drawer de la selección) y en «Carga por docente» se lee «0 h · no cuenta en tu carga» (o «· no cuenta»), en `text-neutral`. En la semana publicada de un docente, pantalla y PDF, la línea de horas sigue con las de clase y, si alguna materia no cuenta, agrega «· M cuentan en su carga».
 
 ### Cómo se hace una pantalla nueva
 1. Copia la forma de Campus: el componente MFC, la Query, la Action y la Policy (skill `nexus-module`).
@@ -517,6 +519,16 @@ El «Resumen» del alumno (`/resumen`) y la pestaña «Resumen» de su ficha (pr
 - **Puede seleccionarla:** a lo más **6** materias en dos columnas (reprobadas con prioridad primero y luego por semestre y clave), con el total en el encabezado; si hay más, «Ver las N en la retícula». Nunca crece con el total: no hay desplazamiento infinito (pedido del usuario del 26 de noviembre de 2026).
 - **Credencial y acceso:** la credencial lleva la insignia «Credencial vigente» o «no vigente», las solicitudes abiertas con su estado, la cita con fecha, hora y lugar, y «Ver credencial»; «Tu acceso» (usuario, correo institucional, de dónde sale su contraseña y «Cambiar contraseña») solo la ve el alumno.
 - Los enlaces del tablero llevan a otra pestaña: el alumno, a `students.my-record?tab=…`; en la ficha, el componente avisa a la página con el evento `student-tab`.
+
+### Resumen del docente
+El «Resumen» del docente (`/resumen` con el perfil Docente; tarea 1.85, IN-03) es un **tablero** de solo lectura con la misma forma que el del alumno (maqueta C «Tablero como el del alumno», elegida por el usuario el 27 de noviembre de 2026, `.impeccable/mocks/decision/resumen-docente-2026-11/c-tablero.html`; los momentos de selección y publicada, `a2-seleccion.html` y `a3-publicada.html`). Es el componente `staffing::components.teacher-summary`, que Staffing registra con `HomePanels`.
+
+- **Orden:** ficha (iniciales en 3:4, nombre, insignia, departamento, plaza, grado e ingreso) → cuatro cifras → «Hoy» y «Atención» lado a lado desde 1200 px (`desktop:`) → «Tu semana» → el periodo en planeación a la izquierda y, a la derecha, experiencia académica, disponibilidad y «Tu acceso». Cada caja sale solo cuando aplica; entre semestres «Hoy» es una línea y la semana es la del periodo en planeación.
+- **Cifras:** una caja dividida en cuatro (dos por dos en celular), número en Mono 26 px y etiqueta 11.5 px en versalitas. La del periodo en planeación lleva `progress-success` contra el tope y, debajo, la franja de la banda; si pasa su banda, `warning` con `o-exclamation-triangle`.
+- **Hoy:** renglones con hora en Mono, materia y «clave · Grupo · Salón · Campus»; «Terminó» en neutro, «Ahora» y «Siguiente · en 3 h 50 min» en `info` (la siguiente con tinte `bg-info/10`), huecos y traslados como en Mi carga.
+- **Atención:** a lo más 5 renglones con icono, título y línea; vacía, `o-check-circle` y «Nada que atender».
+- **Tu semana:** columnas por día cuando su caja mide 56 rem o más (`@container`); antes, un día debajo de otro. La de hoy en `bg-base-200` con «Hoy».
+- **Experiencia:** las primeras 6 materias como etiquetas y «y N más» las despliega en el lugar. **Disponibilidad:** «Disponible en todo el horario.» o las excepciones por día.
 
 ### Retícula del plan (editor)
 El admin edita la retícula de un plan en `academic::pages.plan` (`/academic/plans/{plan}`). De tres maquetas, el usuario eligió la variante A, columnas por semestre con un panel lateral: «para cosas densas, haya drawers» (aprobado el 29 de octubre de 2026). Las maquetas están en `.impeccable/mocks/decision/reticula/`.
@@ -888,6 +900,8 @@ Radios contenidos: insignias 4 px, campos y botones 6 px, tablas y superficies 8
 ### Confirmar
 Nunca los diálogos del navegador (`confirm()`, `alert()`, `prompt()` ni `wire:confirm`; [ADR-0023](docs/decisiones/0023-sin-dialogos-nativos-del-navegador.md)). Lo que pide confirmar usa el diálogo de Core (`x-core::confirm-dialog`, uno por layout): el botón o el elemento de menú lleva `x-confirm="<consecuencia en una frase>"`, `data-confirm-title` («¿Desactivar el campus C2?»), `data-confirm-button` (el verbo: «Desactivar») y `data-confirm-tone` (`error` si borra o desactiva, `warning` si cambia algo que otros ven, `primary` lo demás). Es un `x-modal` de 448 px como máximo: el título en negrita, la consecuencia en texto secundario, «Cancelar» (`btn-ghost`) y el botón del tono. El foco abre en «Cancelar»; Esc o un clic fuera cancelan. En celular los botones van apilados a todo el ancho, de 44 px, con el de la acción arriba. Lo que necesita mucha información para decidir va en un `x-drawer`, no aquí. `x-confirm` va solo en botones y dentro de Alpine (un componente Livewire o un `x-data`): un enlace con `wire:navigate` navega antes del clic y no alcanza a confirmar (`row-menu-item` con `href` lo rechaza), y fuera de Alpine la directiva no corre y la acción se haría sin preguntar. El diálogo se anuncia como `alertdialog` con su título y su consecuencia.
 
+Un 419 de Livewire (sesión, CSRF o perfil vencidos) se avisa con el diálogo de Nexus y se ofrece recargar; nunca el `confirm()` de Livewire.
+
 ### Filtro segmentado
 El de referencia es el de Asignación docente ([`state-filter.blade.php`](app/Modules/Staffing/Views/assign/state-filter.blade.php)), y los demás filtros de una sola elección entre pocas opciones lo copian: un `join` de botones `btn` con `role="group"` y su `aria-label`, cada opción con `aria-pressed` y la elegida en `btn-primary`; la etiqueta y, si la hay, su cifra en Mono compacto. Nunca desborda su caja: en una caja angosta (debajo de 768 px, o la variante compacta en una columna lateral) son tres columnas iguales (`grid grid-cols-3`, `min-w-0`) de 44 px o más, con la etiqueta sobre la cifra; desde 768 px van en un renglón de 40 px.
 
@@ -958,8 +972,9 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 | Abrir (menú, credencial) | `cubic-bezier(.3, 1.06, .5, 1)`, rebote apenas perceptible | 0.55 s; elementos nuevos 0.32 s en cascada por columna y renglón, y ninguno espera más de 0.4 s |
 | Cerrar y regresar | `cubic-bezier(.22, 1, .36, 1)`, sin rebote | 0.42 s, todo junto y sin cascada; lo que se va se desvanece en 0.12 s a la vez |
 | Salto de la liebre al abrir | la misma de abrir | 0.5 s, 4 px |
+| Cambio de tema (Claro ↔ Oscuro) | `mask-size` por tramos casi geométricos: 0 → 14vmin en el primer 20 % (`cubic-bezier(.22, 1, .36, 1)`), después lineal entre 42vmin, 126vmin, 500vmax y 1400vmax | 1 s |
 
-- Solo se anima `transform`, `opacity` y `clip-path`.
+- Solo se anima `transform`, `opacity` y `clip-path`. Única excepción: el cambio de tema anima `mask-size` de la transición de vista (la liebre como máscara, centrada); con movimiento reducido o sin la API, cambia sin animar.
 - Con `prefers-reduced-motion`, todo cambia sin animar.
 - Lo que se mueve lleva el punto que el ojo sigue (el centro del icono, el principio del texto), no el borde de su caja, y lo que espera para moverse se queda en su lugar inicial mientras espera (`fill: 'backwards'`): nada brinca al empezar.
 - Nunca dos movimientos del menú encimados: lo que se pide mientras uno corre (Esc justo después de abrir) se hace al terminar. Esc cierra solo la capa de arriba: la credencial si está abierta sobre el menú; si no, el menú.
@@ -971,6 +986,7 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 - **Uso:** como máscara CSS, para que tome el color del lugar: blanca sobre el cuadro rojo.
 - **Animación:** se mueve completa. Las orejas se animarían por separado solo con un SVG que las tenga como piezas aparte.
 - Es la única marca: no hay otro logo en la banda.
+- **Cambio de tema (tarea 1.84):** la liebre crece desde el centro de la pantalla y descubre el tema nuevo (`nexusSwitchTheme`, `resources/js/app.js`; reglas `::view-transition-*` en `resources/css/app.css`). A 1400vmax su parte sólida (~33 px de radio en 512) pasa 1.5 veces la media diagonal en 390×844, 1440×1000 y 2560×1440: el último cuadro ya es la página nueva.
 - **Ícono de la pestaña (tarea 1.79):** la liebre blanca en el cuadro rojo Tec, con las esquinas apenas redondeadas, en `public/favicon.ico` (16, 32 y 48 px); `public/apple-touch-icon.png` (180 px) va a sangre, porque el celular redondea solo. Los enlaza `core::favicon` en el `<head>` de cada layout y se regeneran con `php .github/scripts/favicon-build.php` (en el contenedor) desde `liebre-512.png`.
 
 ### Pantalla de acceso

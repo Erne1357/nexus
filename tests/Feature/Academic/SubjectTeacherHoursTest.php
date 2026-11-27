@@ -21,6 +21,9 @@ beforeEach(function () {
     $this->tutoring = Subject::factory()->create(['code' => 'TUT-2024', 'name' => 'Tutorías', 'department_id' => $this->sis->id, 'theory_hours' => 1, 'practice_hours' => 0]);
     $this->circuits = Subject::factory()->create(['code' => 'AEF-1002', 'department_id' => $this->ele->id]);
 
+    placeInActivePlan($this->tutoring);
+    placeInActivePlan($this->circuits);
+
     $this->jefeSis = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
     $this->jefeEle = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create();
 });

@@ -62,6 +62,18 @@ final class TermQuery
     }
 
     /**
+     * El último periodo que ya terminó antes del día `$day` (1.85): el de mayor `ends_on` menor que `$day`, de cualquier
+     * tipo; null si ninguno ha terminado. Sirve al «terminó el …» de entre semestres.
+     */
+    public function lastEnded(CarbonInterface $day): ?Term
+    {
+        return Term::query()
+            ->whereDate('ends_on', '<', $day)
+            ->orderByDesc('ends_on')
+            ->first();
+    }
+
+    /**
      * El código más reciente que existe (el mayor, que sigue el orden cronológico del SII); null si no hay periodos.
      */
     public function latestCode(): ?string
