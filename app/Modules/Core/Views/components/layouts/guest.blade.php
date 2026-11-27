@@ -1,4 +1,4 @@
-@props(['title' => null, 'bare' => false])
+@props(['title' => null, 'pageTitle' => null, 'bare' => false])
 
 {{-- Layout mínimo para las pantallas de acceso (login y cambio de contraseña). El layout de la aplicación es resources/views/layouts/app.blade.php.
      Con `bare`, la pantalla ocupa todo el ancho y va siempre en claro (el login G, tarea 1.17); sin él, el contenido va centrado. --}}
@@ -8,7 +8,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-        <title>{{ $title ? $title.' · '.config('app.name') : config('app.name') }}</title>
+        <title>{{ $pageTitle ?? ($title ? $title.' · '.config('app.name') : config('app.name')) }}</title>
 
         @fonts
         @vite(['resources/css/app.css', 'resources/js/app.js'])
