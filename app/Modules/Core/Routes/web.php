@@ -43,7 +43,7 @@ Route::middleware('throttle:60,1')->group(function () {
 });
 
 /*
-| El aviso de privacidad del TecNM (LG-03, tarea 1.65): página pública, sin sesión, con el mismo tope holgado que la
+| El aviso de privacidad del TecNM (AC-23, tarea 1.65): página pública, sin sesión, con el mismo tope holgado que la
 | consulta de lo publicado (240 por minuto por usuario con sesión o por IP sin ella), porque los alumnos de un campus
 | comparten IP. EnsurePasswordIsChanged la deja ver a quien todavía debe cambiar su contraseña.
 */

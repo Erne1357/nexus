@@ -5,7 +5,7 @@ namespace App\Modules\Core\Support;
 use Illuminate\Support\Carbon;
 
 /**
- * El aviso de privacidad del Tecnológico Nacional de México que muestra Nexus (LG-03, tarea 1.65): el simplificado y el
+ * El aviso de privacidad del Tecnológico Nacional de México que muestra Nexus (AC-23, tarea 1.65): el simplificado y el
  * integral de 2026, copiados tal cual en `core::privacy-notice.simplified` y `core::privacy-notice.integral`. Se llega a
  * ellos desde cdjuarez.tecnm.mx/alumnos › «Protección de Datos Personales», que lleva a la página del TecNM con los PDF.
  *

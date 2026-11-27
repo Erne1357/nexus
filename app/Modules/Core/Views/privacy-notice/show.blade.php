@@ -1,5 +1,5 @@
 {{--
-    El aviso de privacidad (LG-03, tarea 1.65; DESIGN.md, «Aviso de privacidad»): página pública con los dos avisos del
+    El aviso de privacidad (AC-23, tarea 1.65; DESIGN.md, «Aviso de privacidad»): página pública con los dos avisos del
     TecNM tal cual, primero el simplificado y después el integral, cada uno en su sección con ancla (#simplificado,
     #integral). Desde 1200 px, a la derecha y fija al desplazarse, la columna con los dos enlaces de la página, la fuente
     y los PDF oficiales; abajo de ese ancho, esa columna va antes de los avisos. Los textos viven en

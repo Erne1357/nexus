@@ -1,5 +1,5 @@
 {{--
-    El aviso de privacidad INTEGRAL del TecNM (LG-03, tarea 1.65), tal cual el PDF oficial de 2026
+    El aviso de privacidad INTEGRAL del TecNM (AC-23, tarea 1.65), tal cual el PDF oficial de 2026
     (Core\Support\PrivacyNotice::INTEGRAL_PDF_URL), sin el encabezado ni el pie que se repiten en cada página. No se
     corrige ni se resume: si el TecNM publica otro, se copia completo. Los tamaños van en `em`, como en
     core::privacy-notice.simplified. Sus atributos van en el `<article>`.

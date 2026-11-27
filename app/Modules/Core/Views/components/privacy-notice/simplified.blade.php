@@ -1,5 +1,5 @@
 {{--
-    El aviso de privacidad SIMPLIFICADO del TecNM (LG-03, tarea 1.65), tal cual el PDF oficial de 2026
+    El aviso de privacidad SIMPLIFICADO del TecNM (AC-23, tarea 1.65), tal cual el PDF oficial de 2026
     (Core\Support\PrivacyNotice::SIMPLIFIED_PDF_URL), sin el encabezado ni el pie que se repiten en cada página. No se
     corrige ni se resume: si el TecNM publica otro, se copia completo. Los tamaños van en `em`, así que toma el tamaño de
     letra de donde se pone: la página pública (core::privacy-notice.show) y el recuadro de la pantalla de cambio de

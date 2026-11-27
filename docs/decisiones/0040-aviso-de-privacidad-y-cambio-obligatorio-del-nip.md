@@ -5,7 +5,7 @@
 ## Contexto
 Desde la tarea 1.16 el alumno entra a Nexus con su número de control y su NIP del SII (AC-10). El NIP solo tiene 10,000 combinaciones y el SII lo guardaba en texto plano, y cambiarlo por una contraseña propia era opcional (AC-12). El 26 de noviembre de 2026 el usuario pidió: «Que todos los alumnos al entrar con su NIP del SII estén obligados a cambiar su contraseña ahí mismo. Y al cambiarla tengan que aceptar el acuerdo de privacidad de los datos». Respondió además que se acepta el aviso **simplificado** del TecNM de 2026, con enlace al integral.
 
-El aviso es del Tecnológico Nacional de México (cdjuarez.tecnm.mx/alumnos › «Protección de Datos Personales»); Nexus lo copia tal cual en la página pública `/aviso-de-privacidad` (LG-03, tarea 1.65), en componentes Blade reutilizables.
+El aviso es del Tecnológico Nacional de México (cdjuarez.tecnm.mx/alumnos › «Protección de Datos Personales»); Nexus lo copia tal cual en la página pública `/aviso-de-privacidad` (AC-23, tarea 1.65), en componentes Blade reutilizables.
 
 ## Decisión
 - **Cambio obligatorio sin migrar datos.** Quien tiene `password_origin = sii_nip` debe cambiar su contraseña antes de usar Nexus, igual que quien tiene `must_change_password` (`AccessRequirements::mustChangePassword()`, que leen `EnsurePasswordIsChanged`, la pantalla de cambio, la respuesta del login y `PasswordUpdateResponse`). No se marca a nadie en la base: el origen ya lo dice, y una nueva corrida de la migración del SII sigue dejando `must_change_password = false`.
