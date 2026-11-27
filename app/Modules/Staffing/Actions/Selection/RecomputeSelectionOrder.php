@@ -8,6 +8,7 @@ use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\PriorChoice;
 use App\Modules\Staffing\Models\Selection;
+use App\Modules\Staffing\Queries\AdministrativePostsQuery;
 use App\Modules\Staffing\Rules\SelectionOrder;
 use App\Modules\Staffing\Rules\SelectionSlots;
 use App\Modules\Staffing\Rules\TeacherNameMatcher;
@@ -15,7 +16,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Recalcula `position` y `slot_index` de la cola de una selección (SEL-07, SEL-10) y, si ya tiene fecha de inicio, la
+ * Recalcula `position` y `slot_index` de la cola de una selección (SEL-07, SEL-10; los docentes con puesto administrativo, primero) y, si ya tiene fecha de inicio, la
  * hora de cada turno (SEL-08) y el fin de la primera ronda. SEL-16: quien tiene elección previa en el periodo y la
  * modalidad de la selección queda `done` con `prior_choice_at`, sin lugar ni turno, y no entra al orden ni a los turnos
  * (conserva su renglón del CSV, con sus criterios, si lo trae). Lo llaman las Actions que cambian la cola o la ventana,
@@ -107,7 +108,14 @@ final class RecomputeSelectionOrder
             ->whereNull('prior_choice_at')
             ->get();
 
+        // SEL-07: los docentes con puesto administrativo vigente al inicio de la selección (o hoy, sin fecha) van primero.
+        $administrative = (new AdministrativePostsQuery)->forTeachers(
+            $entries->pluck('teacher_id')->filter()->values()->all(),
+            $selection->starts_at ?? CarbonImmutable::now(),
+        );
+
         $ranked = collect(SelectionOrder::rank($entries->map(fn ($entry): array => [
+            'admin' => isset($administrative[$entry->teacher_id]),
             'key' => (string) $entry->getKey(),
             'source' => $entry->source->value,
             'tier' => $entry->tier,
