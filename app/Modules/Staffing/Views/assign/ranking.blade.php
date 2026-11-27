@@ -26,7 +26,7 @@
                         <span role="columnheader">Docente</span>
                         <span role="columnheader" class="text-right">Base</span>
                         <span role="columnheader" class="text-right">Veces</span>
-                        <span role="columnheader">Perfil</span>
+                        <span role="columnheader">Experiencia</span>
                         <span role="columnheader" class="text-right">Eval.</span>
                         <span role="columnheader" class="text-right">Puntaje</span>
                         <span role="columnheader" class="text-right">Quedan</span>

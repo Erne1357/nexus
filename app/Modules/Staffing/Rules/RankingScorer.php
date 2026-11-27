@@ -6,7 +6,7 @@ use App\Modules\Faculty\Enums\QualificationLevel;
 
 /**
  * Ordena a los candidatos de un grupo (reglas-de-negocio.md, «Ranking docente (desempate)»). Puntaje = grupos
- * impartidos × peso + peso del perfil (preferente o apto, no ambos) + evaluación × peso; sin evaluación son 0
+ * impartidos × peso + peso de la experiencia académica (preferente o apto, no ambos) + evaluación × peso; sin evaluación son 0
  * puntos. Orden: los marcados (sin horas, choque, no disponible) después de todos; horas base de mayor a menor;
  * puntaje de mayor a menor; posición del periodo anterior (los que no tienen, al final); nombre sin importar
  * mayúsculas ni acentos; id del docente. Determinista. Puro.

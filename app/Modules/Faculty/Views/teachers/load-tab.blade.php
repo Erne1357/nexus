@@ -5,6 +5,8 @@
     siguiente periodo, un estado vacío. `$weekly` sale de TeacherWeeklyLoad. Se incluye con @include desde la ficha.
 --}}
 @php
+    // Color de cada departamento (tokens chain-N de DESIGN.md); solo el punto y el borde, el texto va en base-content.
+    $dots = [1 => 'bg-chain-1', 'bg-chain-2', 'bg-chain-3', 'bg-chain-4', 'bg-chain-5', 'bg-chain-6', 'bg-chain-7', 'bg-chain-8', 'bg-chain-9', 'bg-chain-10', 'bg-chain-11', 'bg-chain-12'];
     $periods = [
         'current' => ['week' => $weekly['current'], 'badge' => 'En curso'],
         'next' => ['week' => $weekly['next'], 'badge' => null],
@@ -52,7 +54,62 @@
                 </div>
             </header>
 
-            <x-core::week-grid :days="$week['days']" :label="'Semana de '.$week['term']" />
+            @php
+                $departments = collect($week['departments']);
+                $home = $departments->where('home', true);
+                $others = $departments->where('home', false);
+            @endphp
+            @if ($departments->isEmpty())
+                <x-core::week-grid :days="$week['days']" :label="'Semana de '.$week['term']" />
+            @else
+                <div class="grid gap-4 xl:grid-cols-[1.1fr_1fr]" data-testid="load-departments-{{ $key }}">
+                    <div class="space-y-4">
+                        @foreach ([['label' => null, 'items' => $home], ['label' => 'En otros departamentos', 'items' => $others]] as $block)
+                            @continue ($block['items']->isEmpty())
+                            @if ($block['label'])
+                                <h3 class="pt-1 text-xs font-medium uppercase tracking-widest text-neutral" data-testid="load-others-{{ $key }}">{{ $block['label'] }} · {{ $block['items']->sum('hours') }} h</h3>
+                            @endif
+                            @foreach ($block['items'] as $department)
+                                <section class="overflow-hidden rounded-box border border-base-300" data-testid="load-department" data-department="{{ $department['name'] }}">
+                                    <header class="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+                                        <div>
+                                            <span class="inline-block h-2.5 w-2.5 rounded-sm {{ $dots[$department['tone']] }}" aria-hidden="true"></span>
+                                            <span class="font-bold">{{ $department['home'] ? 'En '.$department['name'] : $department['name'] }}</span>
+                                            @if ($department['home'])
+                                                <span class="badge badge-success badge-soft badge-sm">Su departamento</span>
+                                            @else
+                                                <span class="badge badge-info badge-soft badge-sm">Otro departamento</span>
+                                                <p class="text-sm text-neutral">{{ $department['head'] ? 'Jefe: '.$department['head'] : 'Sin jefe vigente' }}</p>
+                                            @endif
+                                        </div>
+                                        <span class="font-mono font-semibold tabular-nums">{{ $department['hours'] }} h · {{ count($department['groups']) }} {{ count($department['groups']) === 1 ? 'grupo' : 'grupos' }}</span>
+                                    </header>
+                                    @if ($department['groups'] === [])
+                                        <p class="border-t border-base-300 px-3 py-2.5 text-sm text-neutral">Sin grupos en este periodo.</p>
+                                    @else
+                                        <ul class="divide-y divide-base-300 border-t border-base-300">
+                                            @foreach ($department['groups'] as $group)
+                                                <li class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+                                                    <div><span class="font-semibold">{{ $group['subject_name'] }}</span> <span class="font-mono text-neutral">{{ $group['subject_code'] }} · {{ $group['code'] }}</span></div>
+                                                    <span class="font-mono font-semibold tabular-nums">{{ $group['hours'] }} h</span>
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    @endif
+                                </section>
+                            @endforeach
+                        @endforeach
+                    </div>
+                    <div class="space-y-2">
+                        <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Departamentos" data-testid="load-legend-{{ $key }}">
+                            @foreach ($departments as $department)
+                                <li><span class="inline-block h-2.5 w-2.5 rounded-sm {{ $dots[$department['tone']] }}" aria-hidden="true"></span> {{ $department['name'] }}</li>
+                            @endforeach
+                        </ul>
+                        <x-core::week-grid :days="$week['days']" :label="'Semana de '.$week['term']" />
+                    </div>
+                </div>
+            @endif
 
             @if (! $nexus && $key === 'current')
                 <p class="mt-3 border-t border-base-300 pt-3 text-xs text-neutral">Los salones y horarios vienen de la última importación del SII.</p>

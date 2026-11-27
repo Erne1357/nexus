@@ -184,13 +184,13 @@ it('CV-S2: rechaza corregir una revisión validada', function () {
         ->and($career->fresh()->name)->not->toBe('Otro');
 });
 
-it('CV1: de un docente solo corrige el correo institucional', function () {
+it('CV17: de un docente no cambia el RFC; el nombre y el correo institucional sí', function () {
     $review = cvReviewOf(Catalog::Teachers);
-    $teacher = Teacher::factory()->adscribedTo($this->department)->create(['name' => 'Ana']);
+    $teacher = Teacher::factory()->adscribedTo($this->department)->create(['name' => 'Ana', 'rfc' => 'AAAA800101AA1']);
 
     cvCorrect($review, $teacher, ['name' => 'Otro', 'institutional_email' => 'ana@cdjuarez.tecnm.mx', 'rfc' => 'XXXX000000XX0']);
 
-    expect($teacher->fresh())->name->toBe('Ana')->institutional_email->toBe('ana@cdjuarez.tecnm.mx');
+    expect($teacher->fresh())->name->toBe('Otro')->institutional_email->toBe('ana@cdjuarez.tecnm.mx')->rfc->toBe('AAAA800101AA1');
 });
 
 it('si el módulo dueño rechaza la corrección, no queda nada', function () {

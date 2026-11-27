@@ -10,19 +10,19 @@ use RuntimeException;
 
 /**
  * Variedad en la captura de los docentes activos del último periodo abierto, para la pantalla de validación: de los
- * que FacultyDemoSeeder sembró, unos quedan sin disponibilidad, unos sin perfil (sin materias calificadas) y unos con
+ * que FacultyDemoSeeder sembró, unos quedan sin disponibilidad, unos sin experiencia académica (sin materias calificadas) y unos con
  * horas fuera del ITCJ (el resto, sin ellas). Quién cae en cada grupo y cuántas horas externas lleva salen de un hash
  * del RFC, no del UUID (que trae bits al azar), así que es lo mismo en cada corrida y no cambia al sembrar más docentes.
  * Lo que quita lo borra de forma lógica (`deleted_at`). Idempotente. Sin periodos abiertos, no hace nada. No corre
  * en producción.
  *
- * Porcentajes: `demo` 20 % sin disponibilidad, 10 % sin perfil y 25 % con horas externas; `massive` 25, 15 y 30.
+ * Porcentajes: `demo` 20 % sin disponibilidad, 10 % sin experiencia académica y 25 % con horas externas; `massive` 25, 15 y 30.
  * A quien debe tener disponibilidad y no la tiene se le pone un bloque preferente, para que el porcentaje sea el pedido.
  *
  * Con `$complete` (demo por puntos, lleva al punto 3, docs/arquitectura/testing.md) hace lo contrario, como el jefe que
- * termina la captura antes de validar: a cada docente activo sin disponibilidad en el periodo o sin perfil le devuelve
+ * termina la captura antes de validar: a cada docente activo sin disponibilidad en el periodo o sin experiencia académica le devuelve
  * lo último que se le quitó, y a quien aun así queda sin disponibilidad le pone un bloque preferente. Quien nunca tuvo
- * perfil (un alta sin materias calificadas) se queda sin él: no hace falta para ser candidato, solo suma al ranking. Las
+ * experiencia académica (un alta sin materias calificadas) se queda sin él: no hace falta para ser candidato, solo suma al ranking. Las
  * horas externas no se tocan: no tenerlas también es una captura completa.
  */
 class TeacherCaptureDemoSeeder extends Seeder
@@ -102,11 +102,11 @@ class TeacherCaptureDemoSeeder extends Seeder
             ]);
         });
 
-        $this->command?->info(sprintf('Captura docente (%s): %d sin disponibilidad, %d sin perfil, %d con horas externas, %.1f s.', $profile, count($withoutAvailability), count($withoutProfile), count($withExternal), (hrtime(true) - $started) / 1e9));
+        $this->command?->info(sprintf('Captura docente (%s): %d sin disponibilidad, %d sin experiencia académica, %d con horas externas, %.1f s.', $profile, count($withoutAvailability), count($withoutProfile), count($withExternal), (hrtime(true) - $started) / 1e9));
     }
 
     /**
-     * Devuelve a cada docente activo sin disponibilidad en el periodo o sin perfil las filas que se le borraron al último
+     * Devuelve a cada docente activo sin disponibilidad en el periodo o sin experiencia académica las filas que se le borraron al último
      * (las de su `deleted_at` más reciente), y a quien sigue sin disponibilidad le pone un bloque preferente.
      */
     private function complete(string $termId): void
@@ -128,7 +128,7 @@ class TeacherCaptureDemoSeeder extends Seeder
             ]);
         });
 
-        $this->command?->info(sprintf('Captura docente completa: %d bloques de disponibilidad y %d materias del perfil devueltos, %.1f s.',
+        $this->command?->info(sprintf('Captura docente completa: %d bloques de disponibilidad y %d materias de la experiencia académica devueltos, %.1f s.',
             $restored['teacher_availability'], $restored['teacher_subject_qualifications'], (hrtime(true) - $started) / 1e9));
     }
 

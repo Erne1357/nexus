@@ -6,7 +6,6 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -20,9 +19,10 @@ use App\Modules\Solver\Enums\SolverRunStatus;
 use App\Modules\Solver\Models\SolverRun;
 
 /*
-| Corridas del motor en el navegador (tarea 6.10, variante C): el jefe entra por el menú, lanza la carga de su
-| departamento con el motor de prueba (la cola es síncrona: vuelve lista), revisa la semana con los cambios y la acepta
-| desde el modal con el resumen; el horario queda escrito. A 1280 y a 390 px, sin desplazar la página de lado ni errores.
+| Corridas del motor en el navegador (tarea 6.10, variante C): el admin entra, lanza la carga del departamento con el motor
+| de prueba (la cola es síncrona: vuelve lista), revisa la semana con los cambios y la acepta desde el modal con el resumen;
+| el horario queda escrito. A 1280 y a 390 px, sin desplazar la página de lado ni errores. Hasta la tarea 1.56 lo hacía el
+| jefe: desde entonces el motor no se muestra ni se abre para el jefe ni el JPD por ahora (MN-06), y lo corre el admin.
 | El motor de prueba se elige en el drawer: el predeterminado es la heurística, y con este escenario (la docente no tiene
 | horas que le queden) reporta HC-08 en los tres grupos, así que al aceptar se quedarían como están (ApplyPlan).
 */
@@ -46,13 +46,13 @@ beforeEach(function () {
         ]));
     GroupSession::factory()->for($this->groups['SCD-1015'])->inRoom($room)->on(3, '12:00', '13:00')->create();
 
-    User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $campus->id, 'department_id' => $sc->id])->create(['username' => '19110005']);
+    User::factory()->admin()->create(['username' => '19110005']);
 });
 
 /**
- * Entra como el jefe y abre «Corridas del motor» desde el menú.
+ * Entra como el admin y abre «Corridas del motor».
  */
-function openRunsAsHead(int $width)
+function openRunsAsAdmin(int $width)
 {
     return visit('/login')
         ->resize($width, 900)
@@ -65,8 +65,8 @@ function openRunsAsHead(int $width)
         ->assertSee('Todavía no hay corridas de esta carga.');
 }
 
-it('a 1280 px el jefe lanza con el motor de prueba, revisa la semana y acepta la corrida', function () {
-    $page = openRunsAsHead(1280)
+it('a 1280 px el admin lanza con el motor de prueba, revisa la semana y acepta la corrida', function () {
+    $page = openRunsAsAdmin(1280)
         ->click('@launch-open')
         ->assertSeeIn('@launch-drawer', 'Lanzar una corrida')
         ->assertSeeIn('@launch-weights', 'SC-01')
@@ -91,8 +91,8 @@ it('a 1280 px el jefe lanza con el motor de prueba, revisa la semana y acepta la
         ->and($this->groups['SCD-1016']->sessions()->count())->toBeGreaterThan(0);
 });
 
-it('a 390 px la semana es la lista de un día y el jefe acepta sin desplazar la página de lado', function () {
-    openRunsAsHead(390)
+it('a 390 px la semana es la lista de un día y el admin acepta sin desplazar la página de lado', function () {
+    openRunsAsAdmin(390)
         ->click('@launch-open')
         ->click('Motor de prueba')
         ->click('@launch-submit')

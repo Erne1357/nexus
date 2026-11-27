@@ -23,7 +23,7 @@ use Illuminate\Support\Collection;
  * - El admin y la Subdirección (una para todo el Tec), a todos los docentes, también a los que no tienen departamento.
  * - El jefe de departamento de D (de todo el Tec) y el jefe de proyecto docente de D, a los docentes con una
  *   adscripción sin borrar a D, aunque su principal sea otra: ver, editar sus datos, plazas, disponibilidad, horas
- *   fuera del ITCJ, quitarlos de D y su perfil, este solo en las materias que imparte un departamento que cubre.
+ *   fuera del ITCJ, quitarlos de D y su experiencia académica, este solo en las materias que imparte un departamento que cubre.
  * - La baja (desactivar o reactivar; desactiva su usuario y termina sus jefaturas), solo el admin y la Subdirección.
  *   Desde el 12 de noviembre de 2026, quitar a un docente de su última adscripción también lo da de baja (CV8), y a
  *   quien ocupa un puesto solo lo quitan o lo reactivan el admin y la Subdirección (CV-S8, CV-S9).
@@ -108,7 +108,7 @@ final class TeacherPolicy
     }
 
     /**
-     * Su perfil en una materia: cubre al docente y la materia es de un departamento que cubre.
+     * Su experiencia académica en una materia: cubre al docente y la materia es de un departamento que cubre.
      */
     public function manageQualification(User $user, Teacher $teacher, Subject $subject): bool
     {

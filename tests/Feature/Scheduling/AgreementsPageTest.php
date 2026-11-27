@@ -691,6 +691,8 @@ describe('otros puestos', function () {
 });
 
 it('la ruta pide entrar y muestra la pantalla a quien ve acuerdos', function () {
+    // El jefe la abre con la carga de su departamento en una etapa de horarios (MN-06).
+    AcademicLoad::factory()->for($this->term)->create(['department_id' => $this->sc->id]);
     $this->get(route('scheduling.agreements'))->assertRedirect();
     $this->actingAs($this->jefeSc)->get(route('scheduling.agreements'))->assertOk()->assertSee('Acuerdos');
 });

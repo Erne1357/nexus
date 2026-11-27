@@ -20,7 +20,7 @@ use Illuminate\Database\Query\Builder;
  * Los alcances de un docente son los departamentos donde es candidato (adscripciones vigentes y departamentos de las
  * materias donde es `preferente`) en cada modalidad con grupos no cancelados de ellos en el periodo, más los alcances
  * donde todavía aparece en el ranking: así se recalcula también donde dejó de ser candidato (perdió la adscripción
- * o el perfil). Sin periodo, cuentan los periodos con alguna carga en `proposed`, `staffing` o `adjusting`.
+ * o la experiencia académica). Sin periodo, cuentan los periodos con alguna carga en `proposed`, `staffing` o `adjusting`.
  */
 final class QueueRankings
 {
