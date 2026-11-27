@@ -248,9 +248,9 @@ final class ExportDemoFiles extends Command
                 ->join('teachers as t', 't.id', '=', 'p.teacher_id')
                 ->whereNull('p.deleted_at')->whereNull('t.deleted_at')
                 ->orderBy('t.rfc')->orderBy('p.kind')->orderBy('p.valid_from')
-                ->get(['t.rfc', 'p.kind', 'p.base_hours', 'p.valid_from', 'p.valid_to'])
+                ->get(['t.rfc', 'p.kind', 'p.base_hours', 'p.category', 'p.valid_from', 'p.valid_to'])
                 ->map(fn (object $r): array => [
-                    $r->rfc, PositionKind::from($r->kind)->label(), $r->base_hours,
+                    $r->rfc, PositionKind::from($r->kind)->label(), $r->base_hours, $r->category,
                     $r->valid_from === null ? null : date('d/m/Y', strtotime($r->valid_from)),
                     $r->valid_to === null ? null : date('d/m/Y', strtotime($r->valid_to)),
                 ]),
