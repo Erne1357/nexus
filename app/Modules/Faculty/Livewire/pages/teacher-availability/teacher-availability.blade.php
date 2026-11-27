@@ -10,7 +10,7 @@
     elegirlo.
 --}}
 <div class="space-y-5">
-    {{-- Desde la validación (`?desde=validacion`), «Regresar» vuelve a ella y no a la ficha (1.24.3). --}
+    {{-- Desde la validación (`?desde=validacion`), «Regresar» vuelve a ella y no a la ficha (1.24.3). --}}
     <x-core::back-link :validation="$this->validationReturnUrl()" :href="route('faculty.teachers.show', ['teacher' => $teacher->id, 'tab' => 'disponibilidad'])" :label="$teacher->name" />
 
     @if ($term === null)

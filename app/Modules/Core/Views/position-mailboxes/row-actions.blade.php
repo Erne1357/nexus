@@ -9,7 +9,7 @@
     $name = $mailbox->email;
 @endphp
 
-<div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
+<div @class(['flex gap-1', 'justify-end whitespace-nowrap' => $inTable, '-ms-3' => ! $inTable])>
     @can('update', $mailbox)
         <x-button icon="o-pencil-square" wire:click="edit('{{ $mailbox->id }}')" aria-label="Editar el buzón {{ $name }}" :data-testid="$inTable ? 'edit-mailbox' : null" class="btn-ghost btn-sm" spinner="edit('{{ $mailbox->id }}')">
             <span @class(['max-[1200px]:hidden' => $inTable])>{{ $mailbox->is_active ? 'Editar' : 'Editar y activar' }}</span>

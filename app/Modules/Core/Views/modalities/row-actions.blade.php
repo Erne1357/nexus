@@ -3,7 +3,7 @@
     como las del campus (DESIGN.md, "Acciones de fila"): «Editar» visible y «Activar» o «Desactivar» plegado en
     «Acciones». Lo que el rol no permite se muestra deshabilitado, en el menú, con su motivo escrito.
 --}}
-<div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
+<div @class(['flex gap-1', 'justify-end whitespace-nowrap' => $inTable, '-ms-3' => ! $inTable])>
     <x-button
         icon="o-pencil-square"
         wire:click="edit('{{ $modality->id }}')"

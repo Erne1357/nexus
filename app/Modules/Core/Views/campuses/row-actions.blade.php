@@ -5,7 +5,7 @@
     y «Editar» lleva el data-testid del browser test; en el celular siempre llevan su texto y no repiten
     el data-testid. Lo que el rol no permite se muestra deshabilitado, en el menú, con su motivo escrito.
 --}}
-<div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
+<div @class(['flex gap-1', 'justify-end whitespace-nowrap' => $inTable, '-ms-3' => ! $inTable])>
     @can('update', $campus)
         <x-button
             icon="o-pencil-square"

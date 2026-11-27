@@ -6,7 +6,7 @@
     browser test; en el celular siempre llevan su texto y no repiten el data-testid. No hay «Borrar»: un
     salón no se borra, se desactiva.
 --}}
-<div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
+<div @class(['flex gap-1', 'justify-end whitespace-nowrap' => $inTable, '-ms-3' => ! $inTable])>
     <x-button
         icon="o-pencil-square"
         wire:click="edit('{{ $room->id }}')"
