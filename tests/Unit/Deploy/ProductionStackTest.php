@@ -222,3 +222,35 @@ it('la imagen prod lleva el release por build-arg', function () {
     expect($prod)->toContain('ARG NEXUS_RELEASE')
         ->and($prod)->toContain('ENV NEXUS_RELEASE=$NEXUS_RELEASE');
 });
+
+it('escribe los registros de producción en JSON', function (string $service) {
+    expect(deployServices('compose.prod.yaml')[$service]['environment']['LOG_STDERR_FORMATTER'])
+        ->toBe('Monolog\Formatter\JsonFormatter');
+})->with(['app-blue', 'app-green', 'queue', 'scheduler', 'migrate']);
+
+it('pone un X-Request-Id propio en cada petición y lo deja en el registro de Caddy', function () {
+    $caddyfile = file_get_contents(dirname(__DIR__, 3).'/docker/caddy/Caddyfile');
+
+    expect($caddyfile)->toContain('request_header X-Request-Id {http.request.uuid}')
+        ->and($caddyfile)->toContain('log_append request_id {http.request.uuid}');
+});
+
+it('no guarda la query, el Referer ni el Location en el registro de Caddy', function () {
+    $caddyfile = file_get_contents(dirname(__DIR__, 3).'/docker/caddy/Caddyfile');
+
+    expect($caddyfile)->toMatch('/request>uri regexp \S+ ""/')
+        ->and($caddyfile)->toContain('\?.*')
+        ->and($caddyfile)->toContain('request>headers>Referer delete')
+        ->and($caddyfile)->toContain('resp_headers>Location delete');
+});
+
+it('expone las métricas de Caddy solo por la red interna y nunca la API admin', function () {
+    $caddyfile = file_get_contents(dirname(__DIR__, 3).'/docker/caddy/Caddyfile');
+
+    // Sin `metrics` en el bloque global Caddy no emite las métricas HTTP; el bloque global es el primero y cierra en `}`.
+    expect($caddyfile)->toMatch('/^\{\R(?:(?!^\}).)*^\tmetrics\s*$/ms')
+        ->and($caddyfile)->toMatch('/^:9180 \{\s+metrics\s+\}/m')
+        ->and($caddyfile)->not->toMatch('/^\s*admin\b/m')
+        ->and(deployServices('compose.prod.yaml')['caddy']['ports'])
+        ->toBe(['${HTTP_PORT:-80}:80', '${HTTPS_PORT:-443}:443', '${HTTPS_PORT:-443}:443/udp']);
+});

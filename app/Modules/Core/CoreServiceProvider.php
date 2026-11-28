@@ -81,6 +81,8 @@ use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Notifications\AccessInvitation;
 use App\Modules\Core\Notifications\PersonalMailExceptions;
 use App\Modules\Core\Notifications\PersonMailAddresses;
+use App\Modules\Core\Observability\LogJobOutcome;
+use App\Modules\Core\Observability\OperationMetrics;
 use App\Modules\Core\Policies\ActivityPolicy;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\UnitAdscriptions;
@@ -91,9 +93,12 @@ use App\Modules\Core\Support\HomePanels;
 use App\Modules\Core\Support\QueueJobScope;
 use App\Modules\Core\View\Components\Drawer;
 use App\Modules\Core\View\DrawerIds;
+use Closure;
+use GuzzleHttp\Promise\Create;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Notifications\Events\NotificationSending;
@@ -101,15 +106,22 @@ use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobReleasedAfterException;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Context;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Livewire\ComponentHookRegistry;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
+use Throwable;
+
+use function Livewire\on;
 
 final class CoreServiceProvider extends ModuleServiceProvider
 {
@@ -174,6 +186,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         // `scoped`: si lo que corre es un trabajo del worker de la cola (tarea 1.29); el worker la olvida entre trabajos.
         $this->app->scoped(QueueJobScope::class);
+
+        // `scoped`: contadores de consultas y de llamadas salientes de la petición en curso (la línea `request.done`).
+        $this->app->scoped(OperationMetrics::class);
 
         // `scoped` por lo mismo: lee una vez por petición qué perfiles inician sesión (AC-21).
         $this->app->scoped(RoleAccess::class);
@@ -247,6 +262,39 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $schedule->job(new ReleaseHeldPositionMailsJob)->everyFifteenMinutes()->name('release-held-position-mails');
         });
 
+        // Suma al acumulador cada consulta y cada llamada HTTP saliente. Se resuelve con app() en cada llamada
+        // (Container::getInstance(), que Octane cambia por petición), nunca con $this->app: el provider guarda la app
+        // base del worker y el acumulador de la petición vive en su sandbox.
+        DB::listen(fn (QueryExecuted $query) => app(OperationMetrics::class)->addQuery($query->time));
+        Http::globalMiddleware(fn (callable $handler): Closure => function ($request, $options) use ($handler) {
+            $metrics = app(OperationMetrics::class);
+            $startedAt = hrtime(true);
+            $add = fn () => $metrics->addExternal((hrtime(true) - $startedAt) / 1e6);
+
+            // También cuando falla: un timeout es justo la llamada lenta que hay que contar. Un handler (o un fake) puede
+            // lanzar de forma síncrona en vez de devolver una promesa rechazada.
+            try {
+                $promise = $handler($request, $options);
+            } catch (Throwable $e) {
+                $add();
+
+                throw $e;
+            }
+
+            return $promise->then(
+                function ($response) use ($add) {
+                    $add();
+
+                    return $response;
+                },
+                function ($reason) use ($add) {
+                    $add();
+
+                    return Create::rejectionFor($reason);
+                },
+            );
+        });
+
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
         Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetAcademicLoadVisibility::class);
         Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetRoleAccess::class);
@@ -263,6 +311,24 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // MN-05: el bloqueo de la carga oculta (va en el grupo `web`, bootstrap/app.php) también se revisa en cada acción de
         // Livewire, con la ruta de la página que pintó el componente.
         Livewire::addPersistentMiddleware([EnsureAcademicLoadIsVisible::class]);
+
+        // `hydrate` etiqueta la petición de Livewire con el componente solo si nadie lo hizo ya (un `hydrate` posterior,
+        // de otro componente, no borra el `.método` de un `call` anterior); `call` siempre la afina con el método. El
+        // módulo es el prefijo del nombre (`<modulo>::pages.<pantalla>`); Context es una fachada, así que resuelve en la
+        // app de la petición (Octane). Livewire dispara `call` antes de comprobar que el método exista: el nombre es
+        // entrada del cliente y solo entra al log si parece un identificador.
+        $tag = static function ($component, ?string $method = null): void {
+            if ($method === null && Context::has('livewire')) {
+                return;
+            }
+
+            $name = $component->getName();
+            $safe = $method !== null && preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,63}\z/', $method) === 1;
+            Context::add('livewire', $safe ? $name.'.'.$method : $name);
+            Context::add('module', str_contains($name, '::') ? strstr($name, '::', true) : 'core');
+        };
+        on('hydrate', fn ($component) => $tag($component));
+        on('call', fn ($component, string $method) => $tag($component, $method));
         Event::listen(MessageSent::class, LogSentMail::class);
         Event::listen(JobFailed::class, LogFailedQueuedMail::class);
 
@@ -278,6 +344,13 @@ final class CoreServiceProvider extends ModuleServiceProvider
             }
         });
         Event::listen([JobProcessed::class, JobExceptionOccurred::class, JobFailed::class], fn (): mixed => $this->app->make(QueueJobScope::class)->end());
+
+        // Una línea canónica por job. El framework hidrata el Context del request despachador antes de estos listeners
+        // (ContextServiceProvider se registra en Application::registerBaseServiceProviders); aquí se sobrescribe el módulo.
+        Event::listen(JobProcessing::class, [LogJobOutcome::class, 'processing']);
+        Event::listen(JobProcessed::class, [LogJobOutcome::class, 'processed']);
+        Event::listen(JobFailed::class, [LogJobOutcome::class, 'failed']);
+        Event::listen(JobReleasedAfterException::class, [LogJobOutcome::class, 'retry']);
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.

@@ -6,6 +6,7 @@ use App\Modules\Core\Http\Middleware\EnsurePasswordIsChanged;
 use App\Modules\Core\Http\Middleware\EnsurePrivacyNoticeAccepted;
 use App\Modules\Core\Http\Middleware\EnsureUserIsActive;
 use App\Modules\Core\Http\Middleware\NormalizeSidebarState;
+use App\Modules\Core\Http\Middleware\ObserveRequest;
 use App\Modules\Core\Http\Middleware\SetSecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -22,6 +23,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // La app solo es accesible a través de nginx dentro de la red de Docker.
         $middleware->trustProxies(at: '*');
+
+        // Primero de la pila: su duración cubre todo lo demás y el X-Request-Id sale también en los errores.
+        $middleware->prepend(ObserveRequest::class);
 
         // Cabeceras de seguridad en toda respuesta, también sin sesión y en errores (tarea 4.8).
         $middleware->append(SetSecurityHeaders::class);
