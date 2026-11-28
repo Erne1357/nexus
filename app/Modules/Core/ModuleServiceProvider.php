@@ -5,6 +5,7 @@ namespace App\Modules\Core;
 use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoStep;
+use App\Modules\Core\Http\Middleware\TagModule;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Settings\SettingDefinition;
 use Illuminate\Notifications\Notification;
@@ -54,7 +55,7 @@ abstract class ModuleServiceProvider extends ServiceProvider
         $alias = $this->moduleAlias();
 
         if (is_file($routes = $this->modulePath('Routes/web.php'))) {
-            Route::middleware('web')->group(fn () => $this->loadRoutesFrom($routes));
+            Route::middleware(['web', TagModule::class.':'.$alias])->group(fn () => $this->loadRoutesFrom($routes));
         }
 
         if (is_dir($migrations = $this->modulePath('Database/Migrations'))) {

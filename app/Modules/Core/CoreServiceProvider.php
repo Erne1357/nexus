@@ -107,6 +107,7 @@ use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
@@ -117,6 +118,8 @@ use Livewire\ComponentHookRegistry;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 use Throwable;
+
+use function Livewire\on;
 
 final class CoreServiceProvider extends ModuleServiceProvider
 {
@@ -306,6 +309,14 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // MN-05: el bloqueo de la carga oculta (va en el grupo `web`, bootstrap/app.php) también se revisa en cada acción de
         // Livewire, con la ruta de la página que pintó el componente.
         Livewire::addPersistentMiddleware([EnsureAcademicLoadIsVisible::class]);
+
+        // Una petición de Livewire puede llamar a varios componentes: en el log se queda el último. El módulo es el
+        // prefijo del nombre (`staffing::pages.assign`); Context es una fachada, así que resuelve en la app de la petición (Octane).
+        on('call', function ($component, string $method): void {
+            $name = $component->getName();
+            Context::add('livewire', $name.'.'.$method);
+            Context::add('module', str_contains($name, '::') ? strstr($name, '::', true) : 'core');
+        });
         Event::listen(MessageSent::class, LogSentMail::class);
         Event::listen(JobFailed::class, LogFailedQueuedMail::class);
 
