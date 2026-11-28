@@ -1,8 +1,12 @@
 <?php
 
+use App\Modules\Core\Http\Middleware\TagModule;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Observability\CanonicalLog;
 use App\Modules\Core\Observability\OperationMetrics;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -167,3 +171,32 @@ it('acumula en la app de la petición y no en la base del worker (Octane)', func
         CurrentApplication::set($base);
     }
 });
+
+it('un job sync no corta ni re-etiqueta la línea de la petición', function () {
+    Route::middleware(TagModule::class.':staffing')->get('/_obs/sync-job', function () {
+        DB::select('select 1');
+        SyncProbeJob::dispatch();
+        DB::select('select 1');
+
+        return 'ok';
+    });
+    $calls = captureLog();
+
+    $this->get('/_obs/sync-job')->assertOk();
+
+    $context = doneLines($calls)[0]['context'];
+    expect($context['db_queries'])->toBe(3)
+        ->and($context['module'])->toBe('staffing')
+        ->and($context['duration_ms'])->toBeGreaterThanOrEqual($context['db_ms'] + $context['external_ms'])
+        ->and(array_filter($calls->getArrayCopy(), fn (array $c): bool => str_starts_with($c['message'], 'job.')))->toBeEmpty();
+});
+
+class SyncProbeJob implements ShouldQueue
+{
+    use Dispatchable, Queueable;
+
+    public function handle(): void
+    {
+        DB::select('select 1');
+    }
+}

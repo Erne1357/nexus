@@ -332,6 +332,8 @@ it('en una petición web, con el ritmo lleno, falla en el acto sin llamar a Micr
 it('sabe que corre en un trabajo de la cola por JobProcessing de una conexión que no es sync, y lo olvida al terminar', function () {
     $job = Mockery::mock(Job::class);
     $job->allows('payload')->andReturn([]);
+    // El listener de la línea canónica del job (LogJobOutcome) también atiende estos eventos y lee el contrato Job.
+    $job->allows(['resolveName' => 'App\Jobs\Prueba', 'getQueue' => 'default', 'attempts' => 1, 'isReleased' => false, 'hasFailed' => false]);
     $scope = fn (): bool => app(QueueJobScope::class)->inWorkerJob();
 
     expect($scope())->toBeFalse();

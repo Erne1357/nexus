@@ -10,7 +10,8 @@ use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Una línea por petición (`request.done`) y una por job (`job.done` | `job.failed`).
+ * Una línea por petición (`request.done`) y una por intento de job (`job.done` | `job.released` | `job.retry` |
+ * `job.failed`).
  *
  * Regla: sin datos personales, solo ids. Ni la URI con valores, ni la query, ni nombres, ni correos: la ruta sale por
  * su nombre o su plantilla, y las claves son las de estas listas y ninguna más.
@@ -62,7 +63,7 @@ final class CanonicalLog
     }
 
     /**
-     * una clase de `<Modulo>\Jobs` → el alias kebab del módulo; cualquier otra clase → `core`. Misma regla kebab que
+     * cualquier clase bajo `App\Modules\<Modulo>\…` → el alias kebab del módulo; cualquier otra clase → `core`. Misma regla kebab que
      * ModuleServiceProvider::moduleAlias() (que es protegido y de instancia, por eso no se llama de aquí).
      */
     public static function moduleOf(string $class): string
@@ -72,7 +73,7 @@ final class CanonicalLog
 
     /**
      * `queue_wait_ms` sale del `createdAt` del payload, que Laravel guarda en segundos: resolución de 1 s, y `null` si
-     * el payload no lo trae.
+     * el payload no lo trae. En un reintento incluye el retraso o backoff que esperó el job.
      */
     public function job(Job $job, string $outcome): void
     {
@@ -80,7 +81,8 @@ final class CanonicalLog
         $createdAt = $job->payload()['createdAt'] ?? null;
         $duration = round($metrics->elapsedMs(), 2);
 
-        Log::log($outcome === 'failed' ? 'error' : self::levelFor(200, $duration), 'job.'.$outcome, [
+        // El nivel sale solo del resultado: la regla de más de 1 s es de las peticiones, un job lento no es una alerta.
+        Log::log(['failed' => 'error', 'retry' => 'warning'][$outcome] ?? 'info', 'job.'.$outcome, [
             'request_id' => Context::get('request_id'),
             'job' => $job->resolveName(),
             'queue' => $job->getQueue(),

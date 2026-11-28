@@ -106,6 +106,7 @@ use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobReleasedAfterException;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Context;
@@ -311,12 +312,19 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // Livewire, con la ruta de la página que pintó el componente.
         Livewire::addPersistentMiddleware([EnsureAcademicLoadIsVisible::class]);
 
-        // `hydrate` etiqueta toda petición de Livewire, también la que solo actualiza propiedades; `call` la afina con el
-        // método. Con varios componentes en la petición se queda el último. El módulo es el prefijo del nombre
-        // (`<modulo>::pages.<pantalla>`); Context es una fachada, así que resuelve en la app de la petición (Octane).
+        // `hydrate` etiqueta la petición de Livewire con el componente solo si nadie lo hizo ya (un `hydrate` posterior,
+        // de otro componente, no borra el `.método` de un `call` anterior); `call` siempre la afina con el método. El
+        // módulo es el prefijo del nombre (`<modulo>::pages.<pantalla>`); Context es una fachada, así que resuelve en la
+        // app de la petición (Octane). Livewire dispara `call` antes de comprobar que el método exista: el nombre es
+        // entrada del cliente y solo entra al log si parece un identificador.
         $tag = static function ($component, ?string $method = null): void {
+            if ($method === null && Context::has('livewire')) {
+                return;
+            }
+
             $name = $component->getName();
-            Context::add('livewire', $method === null ? $name : $name.'.'.$method);
+            $safe = $method !== null && preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,63}\z/', $method) === 1;
+            Context::add('livewire', $safe ? $name.'.'.$method : $name);
             Context::add('module', str_contains($name, '::') ? strstr($name, '::', true) : 'core');
         };
         on('hydrate', fn ($component) => $tag($component));
@@ -342,6 +350,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Event::listen(JobProcessing::class, [LogJobOutcome::class, 'processing']);
         Event::listen(JobProcessed::class, [LogJobOutcome::class, 'processed']);
         Event::listen(JobFailed::class, [LogJobOutcome::class, 'failed']);
+        Event::listen(JobReleasedAfterException::class, [LogJobOutcome::class, 'retry']);
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.
