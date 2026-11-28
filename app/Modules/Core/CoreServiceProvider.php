@@ -310,13 +310,16 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // Livewire, con la ruta de la página que pintó el componente.
         Livewire::addPersistentMiddleware([EnsureAcademicLoadIsVisible::class]);
 
-        // Una petición de Livewire puede llamar a varios componentes: en el log se queda el último. El módulo es el
-        // prefijo del nombre (`staffing::pages.assign`); Context es una fachada, así que resuelve en la app de la petición (Octane).
-        on('call', function ($component, string $method): void {
+        // `hydrate` etiqueta toda petición de Livewire, también la que solo actualiza propiedades; `call` la afina con el
+        // método. Con varios componentes en la petición se queda el último. El módulo es el prefijo del nombre
+        // (`staffing::pages.assign`); Context es una fachada, así que resuelve en la app de la petición (Octane).
+        $tag = static function ($component, ?string $method = null): void {
             $name = $component->getName();
-            Context::add('livewire', $name.'.'.$method);
+            Context::add('livewire', $method === null ? $name : $name.'.'.$method);
             Context::add('module', str_contains($name, '::') ? strstr($name, '::', true) : 'core');
-        });
+        };
+        on('hydrate', fn ($component) => $tag($component));
+        on('call', fn ($component, string $method) => $tag($component, $method));
         Event::listen(MessageSent::class, LogSentMail::class);
         Event::listen(JobFailed::class, LogFailedQueuedMail::class);
 

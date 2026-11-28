@@ -62,3 +62,15 @@ it('etiqueta la llamada de Livewire con su componente', function () {
     expect(Context::get('livewire'))->toBe('staffing::pages.assign.setTab')
         ->and(Context::get('module'))->toBe('staffing');
 });
+
+it('etiqueta con su componente una actualización de Livewire sin método', function () {
+    $world = AssignmentWorld::create();
+    onCampusPage($world->campus);
+    $page = Livewire::actingAs(User::factory()->admin()->create())->test('staffing::pages.assign');
+    Context::forget(['module', 'livewire']);
+
+    $page->set('tab', 'historial');
+
+    expect(Context::get('livewire'))->toBe('staffing::pages.assign')
+        ->and(Context::get('module'))->toBe('staffing');
+});
