@@ -20,7 +20,7 @@ El 2026-10-27 se acordó:
 | Secretos | Un `.env` en el servidor con permisos `600`, fuera de git, a partir de `.env.production.example`. |
 | Migraciones | ~~Las corre el contenedor `app` al arrancar (`RUN_MIGRATIONS=true`); `queue` espera a que `app` esté sano.~~ Reemplazada por el [ADR-0033](0033-despliegue-continuo.md): las corre el servicio `migrate`, de un solo uso, antes de arrancar el color nuevo, y deben ser expand/contract. |
 | Respaldos | Servicio `backup` con `pg_dump -Fc` diario hacia `BACKUP_DIR`: 14 diarios y 8 semanales. |
-| Registros | Laravel escribe a `stderr`; Docker rota 5 archivos de 10 MB por servicio. |
+| Registros | ~~Laravel escribe a `stderr`; Docker rota 5 archivos de 10 MB por servicio.~~ Reemplazada por el [ADR-0041](0041-registros-estructurados-y-trazabilidad.md): los registros salen en JSON con un `request_id` por petición; la rotación de Docker sigue igual. |
 
 ### HTTPS: Caddy
 - **Renovación sin piezas extra.** Caddy obtiene el certificado al arrancar y lo renueva solo; no hay cron, ni contenedor de certbot, ni recarga del proxy. Con nginx + certbot hay que coordinar dos procesos y el arranque inicial necesita un certificado ficticio para que nginx pueda levantar.

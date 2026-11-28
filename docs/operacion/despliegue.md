@@ -421,6 +421,12 @@ nexus compose exec app-blue php artisan queue:retry all
 docker system df                           # espacio usado por Docker
 ```
 
+Para seguir una petición, toma su id de la cabecera de respuesta `X-Request-Id` (las herramientas de desarrollo del navegador la muestran) y búscalo en los logs; la línea `request.done` trae ruta, módulo, estado y tiempos, y los jobs que encoló llevan el mismo `request_id`:
+
+```bash
+nexus compose logs app-blue queue caddy | grep '"request_id":"<id>"'
+```
+
 Cambiar una variable del `.env` se aplica volviendo a desplegar el release activo (`nexus deploy --sha <sha activo> --force`): arranca el otro color con el `.env` nuevo, sin caída. Dos casos especiales:
 
 - **`DB_PASSWORD`:** PostgreSQL solo lee la contraseña inicial al crear el volumen. Primero cámbiala en la base y luego en `.env`, y vuelve a desplegar:
