@@ -247,8 +247,10 @@ it('no guarda la query, el Referer ni el Location en el registro de Caddy', func
 it('expone las métricas de Caddy solo por la red interna y nunca la API admin', function () {
     $caddyfile = file_get_contents(dirname(__DIR__, 3).'/docker/caddy/Caddyfile');
 
-    expect($caddyfile)->toMatch('/^:9180 \{\s+metrics\s+\}/m')
-        ->and($caddyfile)->not->toMatch('/^\s*admin\s+(0\.0\.0\.0|:2019)/m')
+    // Sin `metrics` en el bloque global Caddy no emite las métricas HTTP; el bloque global es el primero y cierra en `}`.
+    expect($caddyfile)->toMatch('/^\{\R(?:(?!^\}).)*^\tmetrics\s*$/ms')
+        ->and($caddyfile)->toMatch('/^:9180 \{\s+metrics\s+\}/m')
+        ->and($caddyfile)->not->toMatch('/^\s*admin\b/m')
         ->and(deployServices('compose.prod.yaml')['caddy']['ports'])
         ->toBe(['${HTTP_PORT:-80}:80', '${HTTPS_PORT:-443}:443', '${HTTPS_PORT:-443}:443/udp']);
 });
