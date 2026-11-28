@@ -81,6 +81,7 @@ use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Notifications\AccessInvitation;
 use App\Modules\Core\Notifications\PersonalMailExceptions;
 use App\Modules\Core\Notifications\PersonMailAddresses;
+use App\Modules\Core\Observability\LogJobOutcome;
 use App\Modules\Core\Observability\OperationMetrics;
 use App\Modules\Core\Policies\ActivityPolicy;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
@@ -335,6 +336,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
             }
         });
         Event::listen([JobProcessed::class, JobExceptionOccurred::class, JobFailed::class], fn (): mixed => $this->app->make(QueueJobScope::class)->end());
+
+        // Una línea canónica por job. El framework hidrata el Context del request despachador antes de estos listeners
+        // (ContextServiceProvider se registra en Application::registerBaseServiceProviders); aquí se sobrescribe el módulo.
+        Event::listen(JobProcessing::class, [LogJobOutcome::class, 'processing']);
+        Event::listen(JobProcessed::class, [LogJobOutcome::class, 'processed']);
+        Event::listen(JobFailed::class, [LogJobOutcome::class, 'failed']);
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.

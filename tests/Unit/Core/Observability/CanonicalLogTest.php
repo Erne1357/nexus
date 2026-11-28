@@ -18,3 +18,8 @@ it('fija la lista blanca de la línea por petición y por job', function () {
         'request_id', 'job', 'queue', 'attempt', 'queue_wait_ms', 'duration_ms', 'db_ms', 'module', 'outcome',
     ]);
 });
+
+it('saca el módulo del namespace de la clase, en kebab, y cae a core fuera de los módulos', function () {
+    expect(CanonicalLog::moduleOf('App\Modules\AcademicLoad\Jobs\Foo'))->toBe('academic-load')
+        ->and(CanonicalLog::moduleOf('Tests\Foo'))->toBe('core');
+});

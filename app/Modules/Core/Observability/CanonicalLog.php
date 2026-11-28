@@ -6,6 +6,7 @@ use Illuminate\Contracts\Queue\Job;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -60,9 +61,35 @@ final class CanonicalLog
         ]);
     }
 
-    /** La implementa la tarea de jobs; la firma queda fijada aquí. */
+    /**
+     * `App\Modules\AcademicLoad\Jobs\X` → `academic-load`; cualquier otra clase → `core`. Misma regla kebab que
+     * ModuleServiceProvider::moduleAlias() (que es protegido y de instancia, por eso no se llama de aquí).
+     */
+    public static function moduleOf(string $class): string
+    {
+        return str_starts_with($class, 'App\\Modules\\') ? Str::kebab(explode('\\', $class)[2]) : 'core';
+    }
+
+    /**
+     * `queue_wait_ms` sale del `createdAt` del payload, que Laravel guarda en segundos: resolución de 1 s, y `null` si
+     * el payload no lo trae.
+     */
     public function job(Job $job, string $outcome): void
     {
-        // Se completa en la tarea 5 (job.done / job.failed).
+        $metrics = app(OperationMetrics::class);
+        $createdAt = $job->payload()['createdAt'] ?? null;
+        $duration = round($metrics->elapsedMs(), 2);
+
+        Log::log($outcome === 'failed' ? 'error' : self::levelFor(200, $duration), 'job.'.$outcome, [
+            'request_id' => Context::get('request_id'),
+            'job' => $job->resolveName(),
+            'queue' => $job->getQueue(),
+            'attempt' => $job->attempts(),
+            'queue_wait_ms' => $createdAt === null ? null : (int) round((now()->getTimestamp() - $createdAt) * 1000),
+            'duration_ms' => $duration,
+            'db_ms' => round($metrics->dbMs(), 2),
+            'module' => Context::get('module', 'core'),
+            'outcome' => $outcome,
+        ]);
     }
 }
