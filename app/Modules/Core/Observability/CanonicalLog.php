@@ -62,7 +62,7 @@ final class CanonicalLog
     }
 
     /**
-     * `App\Modules\AcademicLoad\Jobs\X` → `academic-load`; cualquier otra clase → `core`. Misma regla kebab que
+     * una clase de `<Modulo>\Jobs` → el alias kebab del módulo; cualquier otra clase → `core`. Misma regla kebab que
      * ModuleServiceProvider::moduleAlias() (que es protegido y de instancia, por eso no se llama de aquí).
      */
     public static function moduleOf(string $class): string
