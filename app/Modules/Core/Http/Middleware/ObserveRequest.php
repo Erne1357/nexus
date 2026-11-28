@@ -14,6 +14,9 @@ use Symfony\Component\HttpFoundation\Response;
  * Primer middleware global: fija el `request_id` (el de Caddy si es válido, uno nuevo si no), arranca el acumulador y
  * al terminar escribe la línea canónica. Las sondas no escriben línea.
  *
+ * `duration_ms` llega hasta que la respuesta está lista: en un `StreamedResponse` (descargas) no incluye el envío del
+ * cuerpo, aunque las consultas que haga sí cuentan en `db_ms`.
+ *
  * El valor entrante solo se acepta si casa con una lista cerrada de caracteres: lo demás (saltos de línea, 1 KB de
  * texto, comillas) se descarta y nunca llega al log ni a la respuesta.
  */

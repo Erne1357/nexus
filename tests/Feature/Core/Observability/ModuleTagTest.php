@@ -74,3 +74,39 @@ it('etiqueta con su componente una actualización de Livewire sin método', func
     expect(Context::get('livewire'))->toBe('staffing::pages.assign')
         ->and(Context::get('module'))->toBe('staffing');
 });
+
+it('etiqueta con su módulo la respuesta que corta el grupo web, como el 302 de un invitado', function () {
+    $calls = spyLog();
+
+    $this->get(route('staffing.assign'))->assertRedirect();
+
+    expect(moduleLines($calls)[0]['context']['module'])->toBe('staffing');
+});
+
+it('no deja que un hydrate posterior borre el método de un call anterior', function () {
+    $world = AssignmentWorld::create();
+    onCampusPage($world->campus);
+    $page = Livewire::actingAs(User::factory()->admin()->create())->test('staffing::pages.assign')->call('setTab', 'ranking');
+
+    $page->set('tab', 'historial');
+
+    expect(Context::get('livewire'))->toBe('staffing::pages.assign.setTab');
+});
+
+it('no pone en el log un método de Livewire que no parece un identificador', function (string $method) {
+    $world = AssignmentWorld::create();
+    onCampusPage($world->campus);
+    $page = Livewire::actingAs(User::factory()->admin()->create())->test('staffing::pages.assign');
+    Context::forget(['module', 'livewire']);
+
+    try {
+        $page->call($method);
+    } catch (Throwable) {
+        // El método no existe: Livewire lo rechaza después de disparar `call`, que es lo que se comprueba.
+    }
+
+    expect(Context::get('livewire'))->toBe('staffing::pages.assign');
+})->with([
+    'salto de línea' => ["setTab\n"],
+    'kilobyte de texto' => [fn () => str_repeat('a', 1024)],
+]);

@@ -55,7 +55,7 @@ abstract class ModuleServiceProvider extends ServiceProvider
         $alias = $this->moduleAlias();
 
         if (is_file($routes = $this->modulePath('Routes/web.php'))) {
-            Route::middleware(['web', TagModule::class.':'.$alias])->group(fn () => $this->loadRoutesFrom($routes));
+            Route::middleware([TagModule::class.':'.$alias, 'web'])->group(fn () => $this->loadRoutesFrom($routes));
         }
 
         if (is_dir($migrations = $this->modulePath('Database/Migrations'))) {
