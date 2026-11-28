@@ -421,10 +421,11 @@ nexus compose exec app-blue php artisan queue:retry all
 docker system df                           # espacio usado por Docker
 ```
 
-Para seguir una petición, toma su id de la cabecera de respuesta `X-Request-Id` (las herramientas de desarrollo del navegador la muestran) y búscalo en los logs; la línea `request.done` trae ruta, módulo, estado y tiempos, y los jobs que encoló llevan el mismo `request_id`:
+Para seguir una petición, toma su id de la cabecera de respuesta `X-Request-Id` (las herramientas de desarrollo del navegador la muestran) y búscalo en los logs; la línea `request.done` trae ruta, módulo, estado y tiempos, y los jobs que encoló llevan el mismo `request_id`. Primero mira el color activo con `nexus status`: la línea `request.done` está en ese color (`app-blue` o `app-green`) y los jobs, en `queue`:
 
 ```bash
-nexus compose logs app-blue queue caddy | grep '"request_id":"<id>"'
+nexus compose logs app-blue queue caddy | grep '"request_id":"<id>"'   # si el activo es blue
+nexus compose logs app-green queue caddy | grep '"request_id":"<id>"'  # si el activo es green
 ```
 
 Cambiar una variable del `.env` se aplica volviendo a desplegar el release activo (`nexus deploy --sha <sha activo> --force`): arranca el otro color con el `.env` nuevo, sin caída. Dos casos especiales:
